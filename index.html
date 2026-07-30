@@ -345,6 +345,7 @@
       <div style="font-weight:700;font-size:17px" id="listBuildPrompt"></div>
       <div class="pill" id="listBuildMeta"></div>
     </div>
+    <div id="listShareHook" class="hidden" style="margin-top:10px;padding:11px 13px;border-radius:10px;background:rgba(249,115,22,.12);border:1px solid var(--accent);font-size:14px;font-weight:600">🔥 Someone shared their take! Drop yours, then hit Compare to see where you agree</div>
     <div class="linkbox" style="margin-top:12px">
       <div style="position:relative;flex:1">
         <input id="listAddInput" placeholder="Add a player (or anything)…" autocomplete="off" />
@@ -431,6 +432,7 @@
       <button class="ghost" id="tierRespin" style="flex:0 0 auto;padding:6px 12px">🎲 Re-spin</button>
     </div>
     <div class="note">Tap a tier letter on each item to place it.</div>
+    <div id="tierShareHook" class="hidden" style="margin-top:10px;padding:11px 13px;border-radius:10px;background:rgba(249,115,22,.12);border:1px solid var(--accent);font-size:14px;font-weight:600">🔥 Someone shared their take! Drop yours, then hit Compare to see where you agree</div>
     <div id="tierBoardRows" style="margin-top:12px"></div>
     <div class="row" style="margin-top:14px">
       <button id="tierSaveBtn">Save</button>
@@ -500,6 +502,17 @@ function clientId(){
   return id;
 }
 function switchIdentity(){ store.set("mp_client_id",""); clientId(); }
+// Ask for a display name once, on the first save. Skippable — never an account.
+function ensureName(){
+  let n = ($("playerName").value || store.get("mp_name","")).trim();
+  if(n) return n;
+  if(!store.get("tc_asked_name","")){
+    store.set("tc_asked_name","1");
+    const v = (prompt("What should we call you? (optional — just for the compare)","")||"").trim();
+    if(v){ store.set("mp_name", v); $("playerName").value = v; return v; }
+  }
+  return "You";
+}
 let TAKE_N = 1;
 function addTake(kind){
   TAKE_N++;
@@ -922,6 +935,7 @@ async function openBuilder(){
   $("listBuildMeta").textContent=`${ENTRY_ICON[LIST.entry_type]||""} ${LIST.entry_type} · ${LIST.ranked?"ranked":"unordered"} · up to ${LIST.max_items}`;
   $("listAddInput").placeholder=ENTRY_PH[LIST.entry_type]||"Add…";
   $("listShareRow").classList.add("hidden"); $("listBuildErr").textContent="";
+  $("listShareHook").classList.toggle("hidden", !window.FROM_SHARE);
   $("listAddInput").value=""; $("listNote").value="";
   renderListItems(); await loadListPool(); $("listAddInput").focus();
 }
@@ -976,7 +990,7 @@ function renderListItems(){
        <button class="ghost" data-a="rm" data-i="${i}" style="padding:2px 8px">✕</button></div></div>`).join("");
   Array.from(box.querySelectorAll("button")).forEach(b=>b.onclick=()=>{ const i=+b.dataset.i,a=b.dataset.a; if(a==="up")moveItem(i,-1); else if(a==="down")moveItem(i,1); else removeItem(i); });
 }
-async function saveList(){ return api("list_save",{ topic_id:LIST.topic_id, items:LIST.items, client_id:clientId(), label:$("playerName").value.trim()||"You" }); }
+async function saveList(){ return api("list_save",{ topic_id:LIST.topic_id, items:LIST.items, client_id:clientId(), label:ensureName() }); }
 $("listSaveBtn").onclick=async()=>{
   if(!LIST.items.length){ $("listBuildErr").textContent="Add at least one pick."; return; }
   const r=await saveList();
@@ -1068,6 +1082,7 @@ function openTierBoard(){
   $("tierBoardPrompt").textContent=(TIER.isDaily?"🗓️ Daily — ":"")+TIER.prompt;
   $("tierRespin").style.display=TIER.is_creator?"":"none";
   $("tierShareRow").classList.add("hidden"); $("tierBoardErr").textContent="";
+  $("tierShareHook").classList.toggle("hidden", !(window.FROM_SHARE && !TIER.is_creator));
   renderTierBoard();
 }
 function renderTierBoard(){
@@ -1090,7 +1105,7 @@ function tierChip(it){
   return `<div class="chip"><span>${it.label}</span><span class="tbtns">${btns}</span></div>`;
 }
 async function saveTier(){
-  const r=await api("tier_save",{ topic_id:TIER.topic_id, assignments:TIER.assign, client_id:clientId(), label:$("playerName").value.trim()||"You" });
+  const r=await api("tier_save",{ topic_id:TIER.topic_id, assignments:TIER.assign, client_id:clientId(), label:ensureName() });
   if(r.ok && TIER.isDaily) bumpStreak(TIER.date);
   return r;
 }
@@ -1257,6 +1272,7 @@ loadSheets();
 const urlToken = new URLSearchParams(location.search).get("ch");
 const urlList = new URLSearchParams(location.search).get("list");
 const urlTier = new URLSearchParams(location.search).get("tier");
+window.FROM_SHARE = !!(urlTier || urlList);
 if(urlTier){ $("playerName").value = store.get("mp_name",""); openTierTopic(urlTier,"board"); }
 else if(urlList){ $("playerName").value = store.get("mp_name",""); openListTopic(urlList,"build"); }
 else if(urlToken){ $("playerName").value = store.get("mp_name",""); openChallenge(urlToken); }
