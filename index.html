@@ -1,0 +1,1277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Taking Court — rank it, defend it</title>
+<meta name="description" content="Taking Court: draw a set, sort it into tiers, and defend your take. A daily hoops debate you can settle with friends — no account needed." />
+<link rel="manifest" href="manifest.webmanifest" />
+<meta name="theme-color" content="#0b1020" />
+<link rel="icon" href="icons/favicon.png" sizes="32x32" />
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Taking Court" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta property="og:title" content="Taking Court" />
+<meta property="og:description" content="Rank it, defend it. The daily hoops debate." />
+<meta property="og:type" content="website" />
+<meta property="og:image" content="icons/og.png" />
+<meta name="twitter:card" content="summary_large_image" />
+<style>
+  :root{
+    --bg:#0b1020; --panel:#131a2e; --panel2:#1b2440; --line:#2a3556;
+    --ink:#eef2ff; --muted:#95a2c8; --accent:#f97316; --accent2:#38bdf8;
+    --good:#22c55e; --bad:#ef4444; --gold:#fbbf24;
+    --radius:14px; --font:"Segoe UI",system-ui,-apple-system,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1200px 600px at 50% -10%,#182140,var(--bg));
+    color:var(--ink);font-family:var(--font);min-height:100vh}
+  .wrap{max-width:760px;margin:0 auto;padding:24px 18px 60px}
+  h1{font-size:26px;margin:0;letter-spacing:.3px}
+  h1 .b{color:var(--accent)}
+  .sub{color:var(--muted);font-size:13px;margin-top:4px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:18px;margin-top:16px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+  label{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px;text-transform:uppercase;letter-spacing:.5px}
+  input,select,button,textarea{font-family:var(--font);font-size:15px}
+  input,select{width:100%;padding:11px 12px;background:var(--panel2);border:1px solid var(--line);
+    color:var(--ink);border-radius:10px;outline:none}
+  input:focus,select:focus{border-color:var(--accent2)}
+  button{cursor:pointer;border:none;border-radius:10px;padding:11px 16px;font-weight:600;color:#0b1020;
+    background:var(--accent);transition:transform .05s ease,filter .15s ease}
+  button:hover{filter:brightness(1.07)} button:active{transform:translateY(1px)}
+  button.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+  button.sky{background:var(--accent2)} button:disabled{opacity:.45;cursor:not-allowed}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .row > *{flex:1}
+  .pill{display:inline-flex;align-items:center;gap:6px;background:var(--panel2);border:1px solid var(--line);
+    border-radius:999px;padding:5px 12px;font-size:12px;color:var(--muted);flex:0 0 auto}
+  .hidden{display:none}
+  .head{display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .timer{font-variant-numeric:tabular-nums;font-size:30px;font-weight:700;letter-spacing:1px}
+  .strikes{display:flex;gap:8px;align-items:center}
+  .strike{width:22px;height:22px;border-radius:50%;border:2px solid var(--line);display:grid;place-items:center;font-size:13px;font-weight:800}
+  .strike.on{border-color:var(--bad);color:var(--bad);background:rgba(239,68,68,.12)}
+  .slots{display:grid;grid-template-columns:1fr;gap:8px;margin-top:14px}
+  .slot{display:flex;align-items:center;gap:12px;background:var(--panel2);border:1px solid var(--line);
+    border-radius:10px;padding:11px 12px;min-height:48px}
+  .slot .n{width:26px;height:26px;border-radius:7px;background:#0e1730;display:grid;place-items:center;
+    font-weight:700;color:var(--muted);flex:0 0 auto}
+  .slot.filled{border-color:var(--good);background:rgba(34,197,94,.10)}
+  .slot.filled .n{background:var(--good);color:#04210f}
+  .slot .name{font-weight:600}
+  .slot .ctx{margin-left:auto;color:var(--muted);font-size:13px}
+  .slot.revealed{border-color:var(--accent);background:rgba(249,115,102,.08);opacity:.9}
+  .slot.revealed .n{background:var(--accent);color:#2a1200}
+  .feed{margin-top:10px;font-size:13px;color:var(--muted);min-height:20px}
+  .feed .c{color:var(--good)} .feed .x{color:var(--bad)} .feed .d{color:var(--gold)}
+  .acdrop{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:30;background:var(--panel2);
+    border:1px solid var(--line);border-radius:10px;overflow:hidden;max-height:244px;overflow-y:auto;
+    box-shadow:0 12px 30px rgba(0,0,0,.4)}
+  .acitem{padding:9px 12px;font-size:14px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.04);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .acitem:last-child{border-bottom:none}
+  .acitem.active,.acitem:hover{background:var(--accent2);color:#04121f}
+  .acitem b{color:var(--accent)}
+  .acitem.active b,.acitem:hover b{color:#0b1020}
+  .rar{display:inline-block;font-size:11px;font-weight:800;padding:1px 8px;border-radius:999px;margin-left:8px;vertical-align:middle;letter-spacing:.3px}
+  .rar.common{background:#2a3556;color:#aab6d8}
+  .rar.uncommon{background:rgba(34,197,94,.18);color:#4ade80}
+  .rar.rare{background:rgba(56,189,248,.18);color:#7dd3fc}
+  .rar.deep_cut{background:rgba(249,115,22,.22);color:#fb923c}
+  .tierrow{display:flex;gap:8px;align-items:stretch;margin-bottom:8px}
+  .tierlabel{flex:0 0 48px;display:grid;place-items:center;border-radius:8px;font-weight:900;font-size:18px}
+  .tierzone{flex:1;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px;display:flex;flex-wrap:wrap;gap:6px;min-height:46px;align-items:center}
+  .chip{display:inline-flex;align-items:center;gap:6px;background:#0e1730;border:1px solid var(--line);border-radius:8px;padding:4px 6px 4px 10px;font-size:13px}
+  .tbtns{display:flex;gap:2px}
+  .tbtn{padding:1px 6px;border-radius:5px;font-size:11px;font-weight:800;background:#243056;color:var(--muted);border:none;cursor:pointer}
+  .tbtn.on{background:var(--accent);color:#0b1020}
+  .banner{border-radius:12px;padding:16px;text-align:center;font-weight:700;font-size:20px}
+  .banner.win{background:linear-gradient(90deg,rgba(251,191,36,.2),rgba(249,115,102,.2));border:1px solid var(--gold);color:var(--gold)}
+  .banner.lose{background:rgba(239,68,68,.12);border:1px solid var(--bad);color:#fca5a5}
+  .banner.draw{background:var(--panel2);border:1px solid var(--line);color:var(--ink)}
+  .banner.wait{background:var(--panel2);border:1px dashed var(--line);color:var(--muted);font-size:15px}
+  table{width:100%;border-collapse:collapse;margin-top:12px;font-size:14px}
+  th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line)}
+  th{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+  td.you{color:var(--accent2);font-weight:700}
+  .mono{font-family:ui-monospace,Menlo,Consolas,monospace}
+  .linkbox{display:flex;gap:8px;margin-top:8px}
+  .linkbox input{font-size:13px}
+  .note{font-size:12px;color:var(--muted);margin-top:8px;line-height:1.5}
+  .idbar{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:14px;
+    font-size:12px;color:var(--muted)}
+  .err{color:#fca5a5;font-size:13px;margin-top:8px;min-height:18px}
+  details{margin-top:12px} summary{cursor:pointer;color:var(--muted);font-size:12px}
+  .cfg input{font-size:12px}
+  /* --- mobile-first / PWA polish --- */
+  .wrap{padding-left:max(18px,env(safe-area-inset-left));padding-right:max(18px,env(safe-area-inset-right));
+    padding-bottom:max(60px,calc(40px + env(safe-area-inset-bottom)))}
+  @media (max-width:520px){
+    .wrap{padding-top:16px} h1{font-size:23px}
+    .row{gap:8px} .row > *{flex:1 1 100%}
+    button{min-height:46px} input,select{min-height:46px;font-size:16px}
+  }
+  /* --- first-run welcome --- */
+  #welcome{position:fixed;inset:0;z-index:100;display:none;flex-direction:column;justify-content:center;
+    align-items:center;text-align:center;background:radial-gradient(1200px 600px at 50% -10%,#182140,var(--bg));
+    padding:32px max(20px,env(safe-area-inset-left)) calc(32px + env(safe-area-inset-bottom))}
+  #welcome.show{display:flex}
+  #welcome .logo{width:92px;height:92px;border-radius:22px;margin-bottom:8px;box-shadow:0 12px 34px rgba(0,0,0,.4)}
+  #welcome h2{font-size:30px;margin:0;letter-spacing:.3px}
+  #welcome h2 .b{color:var(--accent)}
+  #welcome p{color:var(--muted);max-width:340px;font-size:15px;line-height:1.5;margin:8px 0 2px}
+  #welcome .steps{display:flex;gap:12px;margin:16px 0 22px;flex-wrap:wrap;justify-content:center;max-width:380px}
+  #welcome .step{flex:1 1 100px;min-width:96px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 8px}
+  #welcome .step .e{font-size:22px}
+  #welcome .step .t{font-size:12px;color:var(--muted);margin-top:5px}
+  #welcome .cta{width:100%;max-width:340px;font-size:17px;padding:15px;background:linear-gradient(90deg,var(--accent),var(--gold))}
+  #welcome .skip{margin-top:12px;background:transparent;color:var(--muted);border:none;font-size:13px}
+</style>
+</head>
+<body>
+<div id="welcome">
+  <img class="logo" src="icons/icon-192.png" alt="Taking Court" />
+  <h2>Taking <span class="b">Court</span></h2>
+  <p>Draw a set, sort it into tiers, and defend your take. A quick daily hoops debate you can settle with the group.</p>
+  <div class="steps">
+    <div class="step"><div class="e">🎲</div><div class="t">Draw a set</div></div>
+    <div class="step"><div class="e">🪜</div><div class="t">Sort S→F</div></div>
+    <div class="step"><div class="e">🔥</div><div class="t">See the room</div></div>
+  </div>
+  <button class="cta" id="welcomePlay">🗓️ Play today's Daily</button>
+  <button class="skip" id="welcomeSkip">Just looking around →</button>
+</div>
+<div class="wrap">
+  <div class="head">
+    <div>
+      <h1>Taking <span class="b">Court</span></h1>
+      <div class="sub">Rank it. Defend it. Settle it with the group.</div>
+    </div>
+    <div class="pill" id="modePill">duel</div>
+  </div>
+
+  <!-- ===================== LOBBY ===================== -->
+  <div id="lobby" class="card">
+    <button id="dailyBtn" style="width:100%;font-size:16px;padding:14px;margin-bottom:14px;background:linear-gradient(90deg,var(--accent),var(--gold))">🗓️ Play today's Daily <span id="dailyStreak"></span></button>
+    <div class="row">
+      <div>
+        <label>Your name</label>
+        <input id="playerName" placeholder="e.g. Alice" />
+      </div>
+      <div>
+        <label>Opponent</label>
+        <select id="opponent">
+          <option value="human">A friend (share link)</option>
+          <option value="computer">The computer</option>
+        </select>
+      </div>
+    </div>
+    <div class="row" id="oppRow">
+      <div id="modeWrap">
+        <label>Mode</label>
+        <select id="mode">
+          <option value="duel">1v1 Duel</option>
+          <option value="competition">Private competition (group)</option>
+        </select>
+      </div>
+      <div id="diffWrap" class="hidden">
+        <label>Difficulty</label>
+        <select id="difficulty">
+          <option value="easy">Rookie (easy)</option>
+          <option value="medium" selected>Starter (medium)</option>
+          <option value="hard">All-Star (hard)</option>
+        </select>
+      </div>
+    </div>
+    <label>Category</label>
+    <select id="sheet"><option>Loading categories…</option></select>
+    <div class="row" style="margin-top:14px">
+      <button id="createBtn">Create challenge</button>
+      <button class="ghost" id="randomBtn" style="flex:0 0 auto">🎲 Random</button>
+    </div>
+    <div class="err" id="lobbyErr"></div>
+    <div class="row" style="margin-top:12px">
+      <button class="ghost" id="lbBtn">🏆 Leaderboard</button>
+      <button class="ghost" id="listsBtn">📝 Lists</button>
+      <button class="ghost" id="tierBtn">🪜 Tier Lists</button>
+    </div>
+
+    <details>
+      <summary>Or join with a challenge link / token</summary>
+      <div class="linkbox">
+        <input id="joinToken" placeholder="Paste share link or token" />
+        <button class="sky" id="joinBtn" style="flex:0 0 auto">Open</button>
+      </div>
+    </details>
+
+  </div>
+
+  <!-- ===================== SHARE ===================== -->
+  <div id="share" class="card hidden">
+    <div style="font-weight:700;font-size:16px">Challenge created 🎉</div>
+    <div class="note">Send this link to your opponent. Your result stays hidden until they finish — no peeking advantage.</div>
+    <div class="linkbox">
+      <input id="shareUrl" readonly />
+      <button class="sky" id="copyBtn" style="flex:0 0 auto">Copy</button>
+    </div>
+    <div class="row" style="margin-top:14px">
+      <button id="playNowBtn">Reveal category &amp; play now</button>
+      <button class="ghost" id="backLobby" style="flex:0 0 auto">Back</button>
+    </div>
+  </div>
+
+  <!-- ===================== PREVIEW (joiner) ===================== -->
+  <div id="preview" class="card hidden">
+    <div class="pill" id="previewMode">duel</div>
+    <div style="font-weight:700;font-size:17px;margin-top:10px" id="previewPrompt"></div>
+    <div class="note" id="previewMeta"></div>
+    <div class="row" style="margin-top:14px">
+      <button id="revealBtn">Reveal &amp; start my timer</button>
+      <button class="ghost" id="previewBack" style="flex:0 0 auto">Back</button>
+    </div>
+    <div class="note">The clock starts on the server the moment you reveal. You can't stop it from the browser.</div>
+    <div class="err" id="previewErr"></div>
+  </div>
+
+  <!-- ===================== PLAY ===================== -->
+  <div id="play" class="card hidden">
+    <div class="head">
+      <div>
+        <div class="pill" id="playCat">…</div>
+        <div style="font-weight:700;font-size:16px;margin-top:8px" id="playPrompt"></div>
+      </div>
+      <div style="text-align:right">
+        <div class="timer" id="timer">0:00.0</div>
+        <div class="strikes" id="strikeRow" style="justify-content:flex-end;margin-top:6px"></div>
+      </div>
+    </div>
+    <div class="slots" id="slots"></div>
+    <div class="linkbox" style="margin-top:14px">
+      <div style="position:relative;flex:1">
+        <input id="guessInput" placeholder="Start typing a name…" autocomplete="off" />
+        <div id="acDrop" class="acdrop hidden"></div>
+      </div>
+      <button id="guessBtn" style="flex:0 0 auto">Guess</button>
+    </div>
+    <div class="feed" id="feed"></div>
+  </div>
+
+  <!-- ===================== RESULTS ===================== -->
+  <div id="results" class="card hidden">
+    <div id="winnerBanner" class="banner draw">…</div>
+    <div id="board"></div>
+    <div id="revealHdr" style="margin-top:16px;font-weight:700">The full Top 8</div>
+    <div class="slots" id="answerList"></div>
+    <div class="row" style="margin-top:16px">
+      <button id="rematchBtn">Rematch (same category)</button>
+      <button class="ghost" id="lbBtn2" style="flex:0 0 auto">🏆 Leaderboard</button>
+      <button class="ghost" id="refreshBtn" style="flex:0 0 auto">Refresh</button>
+      <button class="ghost" id="homeBtn" style="flex:0 0 auto">Home</button>
+    </div>
+    <div class="err" id="resultsErr"></div>
+  </div>
+
+  <!-- ===================== LEADERBOARD ===================== -->
+  <div id="leaderboard" class="card hidden">
+    <div class="head">
+      <div style="font-weight:700;font-size:18px">🏆 Leaderboard</div>
+      <button class="ghost" id="lbHome" style="flex:0 0 auto;padding:6px 12px">Home</button>
+    </div>
+    <div class="note">Ranked by completion, then fastest time. Only finished runs appear.</div>
+    <label>Category</label>
+    <select id="lbCat"><option value="">All categories</option></select>
+    <div class="row" style="margin-top:10px">
+      <label class="pill" style="cursor:pointer"><input type="checkbox" id="lbBots" style="width:auto;margin-right:6px" /> Include computer</label>
+    </div>
+    <div id="lbBoard"><div class="note">Loading…</div></div>
+    <div class="err" id="lbErr"></div>
+  </div>
+
+  <!-- ===================== LISTS HOME ===================== -->
+  <div id="listsHome" class="card hidden">
+    <div class="head">
+      <div style="font-weight:700;font-size:18px">📝 Lists — make your own</div>
+      <button class="ghost" id="listsHomeBack" style="flex:0 0 auto;padding:6px 12px">Home</button>
+    </div>
+    <div class="note">Subjective lists — no right answer. Make one, share the topic, and see how friends' picks compare.</div>
+    <div class="row">
+      <div><label>New list title</label>
+        <input id="listTitle" placeholder="e.g. Favorite Spurs players · Best NBA franchises · Greatest Finals moments" /></div>
+      <div style="flex:0 0 auto"><label>About</label>
+        <select id="listEntryType">
+          <option value="player">Players</option>
+          <option value="team">Teams</option>
+          <option value="coach">Coaches</option>
+          <option value="moment">Moments / anything</option>
+        </select></div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button id="listCreateBtn">Create list</button>
+      <label class="pill" style="flex:0 0 auto;cursor:pointer"><input type="checkbox" id="listRanked" checked style="width:auto;margin-right:6px" /> Ranked</label>
+      <label class="pill" style="flex:0 0 auto;cursor:pointer"><input type="checkbox" id="listDiscoverable" checked style="width:auto;margin-right:6px" /> Discoverable</label>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button class="ghost" id="listBrowseBtn">🔎 Browse public lists</button>
+    </div>
+    <details style="margin-top:8px"><summary>Open a shared list link</summary>
+      <div class="linkbox"><input id="listJoin" placeholder="Paste list link or token" /><button class="sky" id="listJoinBtn" style="flex:0 0 auto">Open</button></div>
+    </details>
+    <div style="font-weight:700;margin-top:16px">My lists</div>
+    <div id="myLists" class="note">Loading…</div>
+    <div class="err" id="listsErr"></div>
+  </div>
+
+  <!-- ===================== LIST BROWSE ===================== -->
+  <div id="listBrowse" class="card hidden">
+    <div class="head">
+      <div style="font-weight:700;font-size:18px">🔎 Browse public lists</div>
+      <button class="ghost" id="listBrowseBack" style="flex:0 0 auto;padding:6px 12px">Back</button>
+    </div>
+    <div class="note">Topics people have made. Open one to add your list or see the consensus.</div>
+    <div id="browseList"><div class="note">Loading…</div></div>
+    <div class="err" id="browseErr"></div>
+  </div>
+
+  <!-- ===================== LIST BUILDER ===================== -->
+  <div id="listBuild" class="card hidden">
+    <div class="head">
+      <div style="font-weight:700;font-size:17px" id="listBuildPrompt"></div>
+      <div class="pill" id="listBuildMeta"></div>
+    </div>
+    <div class="linkbox" style="margin-top:12px">
+      <div style="position:relative;flex:1">
+        <input id="listAddInput" placeholder="Add a player (or anything)…" autocomplete="off" />
+        <div id="listAddDrop" class="acdrop hidden"></div>
+      </div>
+      <button id="listAddBtn" style="flex:0 0 auto">Add</button>
+    </div>
+    <input id="listNote" placeholder="Optional note for the next pick — why?" style="margin-top:8px;font-size:13px" />
+    <div class="slots" id="listItems" style="margin-top:12px"></div>
+    <div class="row" style="margin-top:14px">
+      <button id="listSaveBtn">Save list</button>
+      <button class="ghost" id="listCompareBtn" style="flex:0 0 auto">Compare</button>
+      <button class="ghost" id="listBuildBack" style="flex:0 0 auto">Back</button>
+    </div>
+    <div class="linkbox hidden" id="listShareRow"><input id="listShareUrl" readonly /><button class="sky" id="listCopyBtn" style="flex:0 0 auto">Copy</button></div>
+    <div class="err" id="listBuildErr"></div>
+  </div>
+
+  <!-- ===================== LIST COMPARE ===================== -->
+  <div id="listCompare" class="card hidden">
+    <div class="head">
+      <div style="font-weight:700;font-size:17px" id="listComparePrompt"></div>
+      <button class="ghost" id="listCompareBack" style="flex:0 0 auto;padding:6px 12px">Home</button>
+    </div>
+    <div style="font-weight:700;margin-top:8px">Consensus <span class="note" id="listCompareCount"></span></div>
+    <div id="listConsensus"></div>
+    <div style="font-weight:700;margin-top:16px">Everyone's lists</div>
+    <div id="listAllLists"></div>
+    <div class="row" style="margin-top:14px">
+      <button id="listMyEntry">Make / edit my list</button>
+      <button class="ghost" id="listAddTake" style="flex:0 0 auto">➕ Add another take</button>
+      <button class="ghost" id="listCompareRefresh" style="flex:0 0 auto">Refresh</button>
+    </div>
+    <div class="note" style="margin-top:6px">Friends join by opening the share link. To add another take yourself, use ➕.</div>
+    <div class="err" id="listCompareErr"></div>
+  </div>
+
+  <!-- ===================== TIER HOME ===================== -->
+  <div id="tierHome" class="card hidden">
+    <div class="head">
+      <div style="font-weight:700;font-size:18px">🪜 Tier Lists</div>
+      <button class="ghost" id="tierHomeBack" style="flex:0 0 auto;padding:6px 12px">Home</button>
+    </div>
+    <div class="note">Spin a random set from a pool, sort it into S–F, and compare with friends.</div>
+    <div class="row">
+      <div><label>New tier list title</label>
+        <input id="tierTitle" placeholder="e.g. 1-on-1 tier list · Championship teams tier list" /></div>
+      <div style="flex:0 0 auto"><label>Pool</label>
+        <select id="tierPool">
+          <option value="star_players">Star players</option>
+          <option value="all_teams">All 30 teams</option>
+          <option value="champion_teams">Championship franchises</option>
+          <option value="notable_coaches">Notable coaches</option>
+        </select></div>
+      <div style="flex:0 0 auto" id="tierEraWrap"><label>Era</label>
+        <select id="tierEra">
+          <option value="">All‑time</option>
+          <option value="1980">1980s</option>
+          <option value="1990">1990s</option>
+          <option value="2000">2000s</option>
+          <option value="2010">2010s</option>
+          <option value="2020">2020s</option>
+        </select></div>
+      <div style="flex:0 0 auto"><label>Spin size</label>
+        <select id="tierDraw"><option>6</option><option selected>10</option><option>12</option><option>16</option></select></div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button id="tierCreateBtn">🎲 Spin &amp; create</button>
+      <label class="pill" style="flex:0 0 auto;cursor:pointer"><input type="checkbox" id="tierDiscoverable" checked style="width:auto;margin-right:6px" /> Discoverable</label>
+    </div>
+    <div class="row" style="margin-top:10px"><button class="ghost" id="tierBrowseBtn">🔎 Browse tier lists</button></div>
+    <details style="margin-top:8px"><summary>Open a shared tier link</summary>
+      <div class="linkbox"><input id="tierJoin" placeholder="Paste tier link or token" /><button class="sky" id="tierJoinBtn" style="flex:0 0 auto">Open</button></div>
+    </details>
+    <div style="font-weight:700;margin-top:16px">My tier lists</div>
+    <div id="myTiers" class="note">Loading…</div>
+    <div class="err" id="tierErr"></div>
+  </div>
+
+  <!-- ===================== TIER BOARD ===================== -->
+  <div id="tierBoard" class="card hidden">
+    <div class="head">
+      <div style="font-weight:700;font-size:17px" id="tierBoardPrompt"></div>
+      <button class="ghost" id="tierRespin" style="flex:0 0 auto;padding:6px 12px">🎲 Re-spin</button>
+    </div>
+    <div class="note">Tap a tier letter on each item to place it.</div>
+    <div id="tierBoardRows" style="margin-top:12px"></div>
+    <div class="row" style="margin-top:14px">
+      <button id="tierSaveBtn">Save</button>
+      <button class="ghost" id="tierCompareBtn" style="flex:0 0 auto">Compare</button>
+      <button class="ghost" id="tierShareBtn" style="flex:0 0 auto">📸 Share</button>
+      <button class="ghost" id="tierBoardBack" style="flex:0 0 auto">Back</button>
+    </div>
+    <div class="linkbox hidden" id="tierShareRow"><input id="tierShareUrl" readonly /><button class="sky" id="tierCopyBtn" style="flex:0 0 auto">Copy</button></div>
+    <div class="err" id="tierBoardErr"></div>
+  </div>
+
+  <!-- ===================== TIER COMPARE ===================== -->
+  <div id="tierCompare" class="card hidden">
+    <div class="head">
+      <div style="font-weight:700;font-size:17px" id="tierComparePrompt"></div>
+      <button class="ghost" id="tierCompareBack" style="flex:0 0 auto;padding:6px 12px">Home</button>
+    </div>
+    <div id="tierHotTakes"></div>
+    <div style="font-weight:700;margin-top:16px">Consensus <span class="note" id="tierCompareCount"></span></div>
+    <div class="note" style="margin-top:2px">Each item's average tier across everyone.</div>
+    <div class="slots" id="tierConsensus"></div>
+    <div style="font-weight:700;margin-top:16px">Everyone's boards</div>
+    <div id="tierAllLists"></div>
+    <div class="row" style="margin-top:14px">
+      <button id="tierMyEntry">Edit my board</button>
+      <button class="ghost" id="tierAddTake" style="flex:0 0 auto">➕ Add another take</button>
+      <button class="ghost" id="tierShareBtn2" style="flex:0 0 auto">📸 Share</button>
+      <button class="ghost" id="tierCompareRefresh" style="flex:0 0 auto">Refresh</button>
+    </div>
+    <div class="note" style="margin-top:6px">Friends join by opening the share link. To add another take yourself, use ➕.</div>
+    <div class="err" id="tierCompareErr"></div>
+  </div>
+
+  <!-- ===================== TIER BROWSE ===================== -->
+  <div id="tierBrowse" class="card hidden">
+    <div class="head">
+      <div style="font-weight:700;font-size:18px">🔎 Browse tier lists</div>
+      <button class="ghost" id="tierBrowseBack" style="flex:0 0 auto;padding:6px 12px">Back</button>
+    </div>
+    <div class="note">Open one to tier the same set and see the group consensus.</div>
+    <div id="tierBrowseList"><div class="note">Loading…</div></div>
+    <div class="err" id="tierBrowseErr"></div>
+  </div>
+
+  <div class="note" style="margin-top:22px;text-align:center;opacity:.55">Taking Court · pickup hoops debates · no account needed</div>
+</div>
+
+<script>
+// ------------------------------------------------------------------ config
+// Public client values. The anon key is safe to expose — every table is RLS
+// deny-all and all scoring, timing and validation happen server-side.
+const CFG = {
+  url: "https://ubadgdkajflkmmbmgeov.supabase.co/functions/v1/mp",
+  key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InViYWRnZGthamZsa21tYm1nZW92Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcxMjI2ODcsImV4cCI6MjA4MjY5ODY4N30.UO0NElvPUxvUkJ1EpRuHP0gy80LFEnOJfAOZ3GhdHgI"
+};
+const $ = id => document.getElementById(id);
+const store = {
+  get:(k,d)=>{try{return localStorage.getItem(k)??d}catch{return d}},
+  set:(k,v)=>{try{localStorage.setItem(k,v)}catch{}}
+};
+function cfg(){ return CFG; }
+
+// identity (per browser; switchable so you can test both sides locally)
+function clientId(){
+  let id = store.get("mp_client_id","");
+  if(!id){ id = "c_"+Math.random().toString(36).slice(2)+Date.now().toString(36); store.set("mp_client_id",id); }
+  return id;
+}
+function switchIdentity(){ store.set("mp_client_id",""); clientId(); }
+let TAKE_N = 1;
+function addTake(kind){
+  TAKE_N++;
+  const n = prompt("Save this take under a name:", "Player "+TAKE_N);
+  if(n===null) return;
+  store.set("mp_name", n); $("playerName").value = n;
+  switchIdentity();
+  if(kind==="tier") openTierTopic(TIER.share_token,"board"); else openListTopic(LIST.share_token,"build");
+}
+
+async function api(action, payload={}){
+  const c = cfg();
+  const res = await fetch(c.url, {
+    method:"POST",
+    headers:{ "Content-Type":"application/json", "Authorization":"Bearer "+c.key },
+    body: JSON.stringify({ action, ...payload })
+  });
+  let data; try{ data = await res.json(); }catch{ data = {ok:false,error:"bad_response ("+res.status+")"}; }
+  return data;
+}
+
+// ------------------------------------------------------------------ state
+let ST = { challenge_id:null, share_token:null, attempt_id:null, attempt_token:null,
+           answer_target:8, strike_limit:3, mode:"duel", prompt:"", startedMs:null,
+           filled:{}, strikes:0, correct:0, finished:false, sheet_id:null };
+let timerInt=null;
+
+function show(id){ ["lobby","share","preview","play","results","leaderboard","listsHome","listBuild","listCompare","listBrowse","tierHome","tierBoard","tierCompare","tierBrowse"].forEach(s=>$(s).classList.toggle("hidden", s!==id)); }
+function toast(msg){ $("lobbyErr").style.color="var(--muted)"; $("lobbyErr").textContent=msg; }
+function fmt(ms){ if(ms==null) return "—"; const s=ms/1000; const m=Math.floor(s/60);
+  const r=(s-m*60); return m+":"+r.toFixed(1).padStart(4,"0"); }
+
+// ------------------------------------------------------------------ lobby
+let SHEETS = [];
+async function loadSheets(){
+  const r = await api("sheets");
+  const sel = $("sheet"); sel.innerHTML="";
+  const lb = $("lbCat");
+  if(!r.ok){ sel.innerHTML="<option>Could not load</option>"; return; }
+  SHEETS = r.sheets;
+  const groups={top8:[],roster:[]};
+  r.sheets.forEach(s=>groups[s.kind==="roster"?"roster":"top8"].push(s));
+  const addGroup=(label,arr)=>{
+    if(!arr.length) return;
+    const og=document.createElement("optgroup"); og.label=label;
+    arr.forEach(s=>{ const o=document.createElement("option"); o.value=s.id; o.dataset.kind=s.kind||"top8";
+      o.textContent=`${s.prompt} (${s.difficulty})`; og.appendChild(o); });
+    sel.appendChild(og);
+  };
+  addGroup("Top 8 lists", groups.top8);
+  addGroup("Roster — name as many", groups.roster);
+  r.sheets.forEach(s=>{ const o2=document.createElement("option"); o2.value=s.id; o2.textContent=`${s.prompt} (${s.difficulty})`; lb.appendChild(o2); });
+}
+$("mode").onchange = e => $("modePill").textContent = e.target.value;
+$("opponent").onchange = e => {
+  const vsComp = e.target.value==="computer";
+  $("diffWrap").classList.toggle("hidden", !vsComp);
+  $("modeWrap").classList.toggle("hidden", vsComp);   // computer = 1v1 vs bot
+  $("createBtn").textContent = vsComp ? "Play vs computer" : "Create challenge";
+  $("modePill").textContent = vsComp ? "vs computer" : $("mode").value;
+};
+
+$("createBtn").onclick = ()=>{ const o=$("sheet").selectedOptions[0]; createChallenge(o?o.value:null, o?o.dataset.kind:null); };
+$("randomBtn").onclick = ()=>{ const s=SHEETS[Math.floor(Math.random()*SHEETS.length)]; createChallenge(s?s.id:null, s?s.kind:null); };
+
+async function createChallenge(sheet_id, kind){
+  $("lobbyErr").style.color="var(--bad)"; $("lobbyErr").textContent="";
+  const vsComp = $("opponent").value==="computer";
+  const r = await api("create",{
+    mode: vsComp ? "duel" : $("mode").value,
+    sheet_id,
+    kind: kind || undefined,
+    client_id: clientId(),
+    label: $("playerName").value.trim() || "Player A",
+    vs: vsComp ? "computer" : undefined,
+    bot_difficulty: vsComp ? $("difficulty").value : undefined
+  });
+  if(!r.ok){ $("lobbyErr").textContent = "Error: "+r.error; return; }
+  ST = {...ST, challenge_id:r.challenge_id, share_token:r.share_token, attempt_id:r.attempt_id,
+        attempt_token:r.attempt_token, answer_target:r.answer_target, strike_limit:r.strike_limit,
+        mode:r.mode, kind:r.kind||kind||"top8", isRoster:(r.kind||kind)==="roster",
+        prompt:r.prompt, sheet_id:sheet_id, finished:false, filled:{}, strikes:0, correct:0, startedMs:null,
+        vsBot:vsComp, botLabel:r.bot_label };
+  if(vsComp){ startPlay(); return; }   // bot already waiting — go straight to the board
+  const link = location.origin+location.pathname+"?ch="+r.share_token;
+  $("shareUrl").value = link;
+  show("share");
+}
+
+$("copyBtn").onclick = ()=>{ $("shareUrl").select(); navigator.clipboard?.writeText($("shareUrl").value);
+  $("copyBtn").textContent="Copied!"; setTimeout(()=>$("copyBtn").textContent="Copy",1200); };
+$("backLobby").onclick = ()=>show("lobby");
+$("playNowBtn").onclick = ()=>startPlay();
+
+// join by pasted link/token
+$("joinBtn").onclick = ()=>{
+  let v=$("joinToken").value.trim(); if(!v) return;
+  const m=v.match(/[?&]ch=([^&\s]+)/); const token=m?m[1]:v;
+  openChallenge(token);
+};
+
+// ------------------------------------------------------------------ preview / join
+async function openChallenge(token){
+  const r = await api("open",{ share_token:token, client_id:clientId() });
+  if(!r.ok){ $("lobbyErr").style.color="var(--bad)"; $("lobbyErr").textContent="Error: "+r.error; show("lobby"); return; }
+  const c=r.challenge;
+  ST = {...ST, challenge_id:c.id, share_token:c.share_token, answer_target:c.answer_target,
+        strike_limit:c.strike_limit, mode:c.mode, kind:c.kind||"top8", isRoster:c.kind==="roster",
+        vsBot:false, prompt:c.prompt, finished:false, filled:{}, strikes:0, correct:0, startedMs:null };
+  $("previewMode").textContent=c.kind==="roster"?"roster":c.mode;
+  $("previewPrompt").textContent=c.prompt;
+  $("previewMeta").textContent=`Name ${c.answer_target} · ${c.strike_limit} strikes · `+
+    `${c.participant_count} player(s) in so far`+(c.expired?" · EXPIRED":"");
+  $("previewErr").textContent="";
+  // already finished? go straight to results
+  if(r.your_attempt && r.your_attempt.status!=="in_progress"){
+    ST.attempt_id=r.your_attempt.id; // token unknown on reopen; will need resume store
+    const saved=JSON.parse(store.get("mp_att_"+c.id,"null"));
+    if(saved){ ST.attempt_id=saved.attempt_id; ST.attempt_token=saved.attempt_token; showResults(); return; }
+  }
+  show("preview");
+}
+$("previewBack").onclick=()=>show("lobby");
+$("revealBtn").onclick=()=>startPlay();
+
+// ------------------------------------------------------------------ start + play
+async function startPlay(){
+  const r = await api("start",{
+    challenge_id: ST.challenge_id, share_token: ST.share_token,
+    client_id: clientId(), label: $("playerName").value.trim() || undefined
+  });
+  const errBox = $("preview").classList.contains("hidden") ? $("lobbyErr") : $("previewErr");
+  if(!r.ok){ errBox.style.color="var(--bad)"; errBox.textContent="Error: "+r.error; return; }
+  ST.attempt_id=r.attempt_id; ST.attempt_token=r.attempt_token; ST.mode=r.mode;
+  if(r.kind){ ST.kind=r.kind; ST.isRoster=r.kind==="roster"; }
+  ST.answer_target=r.answer_target; ST.strike_limit=r.strike_limit; ST.prompt=r.prompt;
+  ST.startedMs = r.started_at ? new Date(r.started_at).getTime() : Date.now();
+  ST.filled = r.filled_slots||{}; ST.strikes=r.strikes||0;
+  ST.correct = Object.keys(ST.filled).length;
+  store.set("mp_att_"+ST.challenge_id, JSON.stringify({attempt_id:ST.attempt_id,attempt_token:ST.attempt_token}));
+  ST.finished=false;
+  buildBoard(); renderPlay(); show("play");
+  feed("");                         // clear any result line from a previous game
+  $("guessInput").value=""; acHide();
+  loadSuggestPool();
+  $("guessInput").focus();
+  startTimer();
+}
+function startTimer(){ clearInterval(timerInt); timerInt=setInterval(()=>{
+  if(ST.finished){clearInterval(timerInt);return;}
+  $("timer").textContent = fmt(Date.now()-ST.startedMs);
+},100); }
+
+const RARITY_LABELS={common:"Common",uncommon:"Uncommon",rare:"Rare",deep_cut:"Deep cut"};
+function buildBoard(){
+  $("playCat").textContent = ST.vsBot ? ("vs Computer"+(ST.botLabel?` (${ST.botLabel})`:"")) : (ST.isRoster ? "Roster" : (ST.mode==="duel"?"1v1 Duel":"Competition"));
+  $("playPrompt").textContent = ST.prompt;
+  const slots=$("slots"); slots.innerHTML="";
+  for(let i=1;i<=ST.answer_target;i++){
+    const d=document.createElement("div"); d.className="slot"; d.id="slot"+i;
+    d.innerHTML=`<div class="n">${i}</div><div class="name">— — —</div><div class="ctx"></div>`;
+    slots.appendChild(d);
+  }
+  const sr=$("strikeRow"); sr.innerHTML="";
+  for(let i=0;i<ST.strike_limit;i++){ const s=document.createElement("div"); s.className="strike"; s.id="strk"+i; s.textContent="✕"; sr.appendChild(s); }
+}
+function renderPlay(){
+  Object.entries(ST.filled).forEach(([slot,info])=>{
+    const el=$("slot"+slot); if(!el) return; el.classList.add("filled");
+    if(info.rarity_tier){
+      el.querySelector(".name").innerHTML = info.name + rarBadge({rarity_tier:info.rarity_tier, rarity_label:RARITY_LABELS[info.rarity_tier]||info.rarity_tier});
+    } else {
+      el.querySelector(".name").textContent=info.name;
+    }
+  });
+  for(let i=0;i<ST.strike_limit;i++) $("strk"+i).classList.toggle("on", i<ST.strikes);
+}
+
+async function submitGuess(){
+  const g=$("guessInput").value.trim(); if(!g||ST.finished) return;
+  $("guessInput").value=""; acHide();
+  const r = await api("guess",{ attempt_id:ST.attempt_id, attempt_token:ST.attempt_token, guess:g });
+  if(!r.ok){ feed(`<span class="x">${g} → ${r.error}</span>`); return; }
+  ST.filled=r.filled_slots||ST.filled; ST.strikes=r.strikes; ST.correct=r.correct_count;
+  if(r.result==="correct"){
+    const el=$("slot"+r.slot); el.classList.add("filled");
+    if(r.rarity){                                   // roster: show rarity (+ pick-rate)
+      el.querySelector(".name").innerHTML = r.display_name + rarBadge(r.rarity);
+      el.querySelector(".ctx").textContent = "";
+      feed(`<span class="c">✔ ${g} → ${r.display_name}</span> ${rarBadge(r.rarity)}`);
+    } else {                                         // top8: show the stat
+      el.querySelector(".name").textContent=r.display_name;
+      el.querySelector(".ctx").textContent=r.context_label||"";
+      feed(`<span class="c">✔ ${g} → #${r.slot} ${r.display_name} (${r.context_label||""})</span>`);
+    }
+  }
+  else if(r.result==="duplicate"){ feed(`<span class="d">• ${g} → already on the board</span>`); }
+  else {
+    let ctx="";
+    if(r.guess_info){
+      const gi=r.guess_info;
+      const val = gi.unit==="PPG" ? Number(gi.value).toFixed(1) : Number(gi.value).toLocaleString();
+      ctx = ` — ${val} ${gi.unit}, #${gi.rank} all-time`;
+    }
+    feed(`<span class="x">✕ ${g}${ctx} · strike ${r.strikes}/${ST.strike_limit}</span>`);
+  }
+  for(let i=0;i<ST.strike_limit;i++) $("strk"+i).classList.toggle("on", i<ST.strikes);
+  if(r.finished){ ST.finished=true; clearInterval(timerInt);
+    $("timer").textContent=fmt(r.elapsed_ms);
+    const win = ST.isRoster ? `🏆 Named all ${ST.answer_target} in ${fmt(r.elapsed_ms)}!` : `🏆 Perfect sheet in ${fmt(r.elapsed_ms)}!`;
+    feed(r.status==="completed"? `<span class="c">${win}</span>`
+        :`<span class="x">Eliminated — ${r.correct_count}/${ST.answer_target} in ${fmt(r.ranking_time_ms)}</span>`);
+    setTimeout(showResults, 900);
+  }
+}
+function rarBadge(rar){
+  if(!rar) return "";
+  const emoji = rar.rarity_tier==="deep_cut"?"🔥 ":rar.rarity_tier==="rare"?"💎 ":"";
+  const pct = (rar.pick_pct!=null)?` · ${rar.pick_pct}%`:"";
+  return `<span class="rar ${rar.rarity_tier}">${emoji}${rar.rarity_label}${pct}</span>`;
+}
+function feed(html){ $("feed").innerHTML = html; }
+
+// ------------------------------------------------------------------ autocomplete
+let POOL=[];        // [{v, label, key}]  key = normalized search string
+let acItems=[];     // current filtered items
+let acIdx=-1;       // highlighted index
+function normStr(s){ return (s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9 ]/g,""); }
+
+async function loadSuggestPool(){
+  POOL=[]; acHide();
+  const r=await api("suggest",{ challenge_id:ST.challenge_id, share_token:ST.share_token });
+  if(!r||!r.ok||!r.items) return;
+  POOL = r.type==="arena"
+    ? r.items.map(it=>({v:it.v, label:it.l, key:normStr(it.l)}))
+    : r.items.map(n=>({v:n, label:n, key:normStr(n)}));
+}
+function acFilter(q){
+  const nq=normStr(q).trim(); if(!nq) return [];
+  const starts=[], contains=[];
+  for(const it of POOL){
+    const i=it.key.indexOf(nq);
+    if(i===0) starts.push(it);
+    else if(i>0) contains.push(it);
+    if(starts.length>=8) break;
+  }
+  return starts.concat(contains).slice(0,8);
+}
+function acRender(items, q){
+  acItems=items; acIdx=-1;
+  const drop=$("acDrop");
+  if(!items.length){ acHide(); return; }
+  const ql=q.trim().toLowerCase();
+  drop.innerHTML=items.map((it,i)=>{
+    let h=it.label;
+    const p=it.label.toLowerCase().indexOf(ql);
+    if(ql && p>=0) h=it.label.slice(0,p)+"<b>"+it.label.slice(p,p+ql.length)+"</b>"+it.label.slice(p+ql.length);
+    return `<div class="acitem" data-i="${i}">${h}</div>`;
+  }).join("");
+  drop.classList.remove("hidden");
+  Array.from(drop.children).forEach(el=>{ el.onmousedown=ev=>{ ev.preventDefault(); acPick(+el.dataset.i); }; });
+}
+function acHide(){ const d=$("acDrop"); if(d){ d.classList.add("hidden"); d.innerHTML=""; } acItems=[]; acIdx=-1; }
+function acMove(d){
+  if(!acItems.length) return;
+  acIdx=(acIdx+d+acItems.length)%acItems.length;
+  Array.from($("acDrop").children).forEach((el,i)=>el.classList.toggle("active", i===acIdx));
+  const el=$("acDrop").children[acIdx]; if(el) el.scrollIntoView({block:"nearest"});
+}
+function acPick(i){ const it=acItems[i]; if(!it) return; $("guessInput").value=it.v; acHide(); submitGuess(); }
+
+$("guessBtn").onclick=submitGuess;
+$("guessInput").addEventListener("input",e=>acRender(acFilter(e.target.value), e.target.value));
+$("guessInput").addEventListener("keydown",e=>{
+  const open=!$("acDrop").classList.contains("hidden");
+  if(e.key==="ArrowDown"){ if(open){ e.preventDefault(); acMove(1); } }
+  else if(e.key==="ArrowUp"){ if(open){ e.preventDefault(); acMove(-1); } }
+  else if(e.key==="Enter"){ if(open && acIdx>=0){ e.preventDefault(); acPick(acIdx); } else { acHide(); submitGuess(); } }
+  else if(e.key==="Escape"){ acHide(); }
+});
+$("guessInput").addEventListener("blur",()=>setTimeout(acHide,120));
+
+// ------------------------------------------------------------------ results
+async function showResults(){
+  show("results");
+  const r = await api("results",{ challenge_id:ST.challenge_id, attempt_id:ST.attempt_id, attempt_token:ST.attempt_token });
+  const errB=$("resultsErr"); errB.textContent="";
+  if(!r.ok){
+    if(r.error==="finish_first"){ $("winnerBanner").className="banner wait";
+      $("winnerBanner").textContent="Finish your own attempt before results unlock."; return; }
+    errB.textContent="Error: "+r.error; return;
+  }
+  // winner banner
+  const wb=$("winnerBanner");
+  const me = r.participants.find(p=>p.is_you);
+  if(r.winner.type==="pending"){ wb.className="banner wait";
+    wb.textContent="Your run is locked in. Waiting for the other player to finish…"; }
+  else if(r.winner.type==="draw"){ wb.className="banner draw"; wb.textContent="Dead heat — it's a draw!"; }
+  else if(r.winner.type==="attempt"){
+    const won = me && r.winner.attempt_id===me.attempt_id;
+    wb.className="banner "+(won?"win":"lose");
+    const w=r.participants.find(p=>p.attempt_id===r.winner.attempt_id);
+    wb.textContent = won ? "🏆 You win!" : `${w?w.player_label:"Opponent"} wins`;
+  } else { wb.className="banner draw"; wb.textContent="Results"; }
+
+  // board table
+  const rows = r.participants.map(p=>{
+    if(p.hidden) return `<tr><td>${p.player_label}</td><td colspan="4" style="color:var(--muted)">⏳ still playing — hidden</td></tr>`;
+    const status = p.completed?`<span style="color:var(--good)">✔ Perfect</span>`
+      : (p.status==="eliminated"?`<span style="color:var(--bad)">✕ Out</span>`
+      : (p.status==="expired"?"⌛ Expired":"…"));
+    return `<tr>
+      <td class="${p.is_you?'you':''}">#${p.rank||"-"} ${p.player_label}${p.is_you?" (you)":""}</td>
+      <td>${status}</td>
+      <td>${p.correct_count}/${r.answer_target}</td>
+      <td>${p.strikes}/${p.strike_limit}</td>
+      <td class="mono">${p.completed?fmt(p.elapsed_ms):fmt(p.ranking_time_ms)}</td>
+    </tr>`;
+  }).join("");
+  $("board").innerHTML = `<table><thead><tr><th>Player</th><th>Result</th><th>Correct</th><th>Strikes</th><th>Time</th></tr></thead><tbody>${rows}</tbody></table>`;
+
+  // revealed answers
+  const roster = (r.kind==="roster") || ST.isRoster;
+  $("revealHdr").textContent = roster ? "Notable players you could have named" : "The full Top 8";
+  const tierByLabel = {"Common":"common","Uncommon":"uncommon","Rare":"rare","Deep cut":"deep_cut"};
+  const al=$("answerList"); al.innerHTML="";
+  (r.revealed_answers||[]).forEach(a=>{
+    const d=document.createElement("div"); d.className="slot revealed";
+    const ctx = roster && tierByLabel[a.context_label]
+      ? rarBadge({rarity_tier:tierByLabel[a.context_label], rarity_label:a.context_label})
+      : `<span class="ctx">${a.context_label||""}</span>`;
+    d.innerHTML=`<div class="n">${a.slot}</div><div class="name">${a.display_name}</div>${ctx}`;
+    al.appendChild(d);
+  });
+}
+$("refreshBtn").onclick=showResults;
+$("homeBtn").onclick=()=>{ show("lobby"); };
+$("rematchBtn").onclick=async()=>{
+  // rematch: fresh challenge on the same category, same opponent type
+  const r=await api("create",{ mode:ST.vsBot?"duel":ST.mode, sheet_id:ST.sheet_id, kind:ST.kind||undefined, client_id:clientId(),
+    label:$("playerName").value.trim()||"Player A",
+    vs:ST.vsBot?"computer":undefined, bot_difficulty:ST.vsBot?($("difficulty").value):undefined });
+  if(!r.ok){ $("resultsErr").textContent="Error: "+r.error; return; }
+  ST={...ST, challenge_id:r.challenge_id, share_token:r.share_token, attempt_id:r.attempt_id,
+      attempt_token:r.attempt_token, kind:r.kind||ST.kind, isRoster:(r.kind||ST.kind)==="roster", botLabel:r.bot_label,
+      finished:false, filled:{}, strikes:0, correct:0, startedMs:null};
+  if(ST.vsBot){ startPlay(); return; }
+  $("shareUrl").value=location.origin+location.pathname+"?ch="+r.share_token; show("share");
+};
+
+// ------------------------------------------------------------------ leaderboard
+async function showLeaderboard(){
+  show("leaderboard");
+  const sheet_id = $("lbCat").value || undefined;
+  const include_bots = $("lbBots").checked;
+  $("lbErr").textContent="";
+  const r = await api("leaderboard",{ sheet_id, include_bots, client_id:clientId(), limit:25 });
+  if(!r.ok){ $("lbErr").textContent="Error: "+r.error; $("lbBoard").innerHTML=""; return; }
+  if(!r.entries.length){ $("lbBoard").innerHTML=`<div class="note" style="margin-top:12px">No finished runs yet — play a game to get on the board.</div>`; return; }
+  const showCat = !sheet_id;
+  const rows = r.entries.map(e=>{
+    const medal = e.rank===1?"🥇":e.rank===2?"🥈":e.rank===3?"🥉":("#"+e.rank);
+    const res = e.completed?`<span style="color:var(--good)">✔ ${e.correct_count}/${e.answer_target}</span>`
+      : `<span style="color:var(--muted)">${e.correct_count}/${e.answer_target}</span>`;
+    return `<tr>
+      <td>${medal}</td>
+      <td class="${e.is_you?'you':''}">${e.player_label}${e.is_you?" (you)":""}${e.is_bot?' <span class="pill" style="padding:1px 7px">bot</span>':""}</td>
+      <td>${res}</td>
+      <td class="mono">${fmt(e.time_ms)}</td>
+      ${showCat?`<td style="color:var(--muted);font-size:12px">${(e.category||"").replace(/^Name the 8 /,'').replace(/ \(NBA regular season\)\.?$/,'')}</td>`:""}
+    </tr>`;
+  }).join("");
+  $("lbBoard").innerHTML = `<table><thead><tr><th></th><th>Player</th><th>Result</th><th>Time</th>${showCat?"<th>Category</th>":""}</tr></thead><tbody>${rows}</tbody></table>`;
+}
+$("lbBtn").onclick = showLeaderboard;
+$("lbBtn2").onclick = showLeaderboard;
+$("lbHome").onclick = ()=>show("lobby");
+$("lbCat").onchange = showLeaderboard;
+$("lbBots").onchange = showLeaderboard;
+
+// ------------------------------------------------------------------ lists (subjective)
+let LIST = { topic_id:null, share_token:null, prompt:"", ranked:true, max_items:10, entry_type:"player", items:[] };
+let LIST_POOL = []; let LIST_POOL_TYPE = null;
+const ENTRY_ICON = { player:"🏀", team:"🏟️", coach:"📋", moment:"✨" };
+const ENTRY_PH = { player:"Add a player…", team:"Add a team…", coach:"Add a coach…", moment:"Add a moment or anything…" };
+
+$("listsBtn").onclick = openListsHome;
+$("listsHomeBack").onclick = ()=>show("lobby");
+async function openListsHome(){ show("listsHome"); $("listsErr").textContent=""; await loadMyLists(); }
+async function loadMyLists(){
+  const box=$("myLists"); box.innerHTML="Loading…";
+  const r=await api("list_mine",{ client_id:clientId() });
+  if(!r.ok){ box.textContent="Could not load."; return; }
+  if(!r.lists.length){ box.innerHTML=`<div class="note">No lists yet — create one above.</div>`; return; }
+  box.innerHTML = r.lists.map(l=>`<div class="slot" style="cursor:pointer" data-t="${l.share_token}">
+     <div class="n">${ENTRY_ICON[l.entry_type]||"🏀"}</div>
+     <div class="name">${l.prompt}</div><div class="ctx">${l.item_count} pick${l.item_count===1?"":"s"}</div></div>`).join("");
+  Array.from(box.children).forEach(el=>el.onclick=()=>openListTopic(el.dataset.t,"build"));
+}
+$("listCreateBtn").onclick = async ()=>{
+  const prompt=$("listTitle").value.trim();
+  if(!prompt){ $("listsErr").textContent="Give your list a title."; return; }
+  const r=await api("list_create",{ prompt, ranked:$("listRanked").checked, entry_type:$("listEntryType").value,
+    visibility:$("listDiscoverable").checked?"public":"unlisted", client_id:clientId(), label:$("playerName").value.trim()||"You" });
+  if(!r.ok){ $("listsErr").textContent="Error: "+r.error; return; }
+  LIST={ topic_id:r.topic_id, share_token:r.share_token, prompt:r.prompt, ranked:r.ranked, max_items:r.max_items, entry_type:r.entry_type||"player", items:[] };
+  $("listTitle").value=""; openBuilder();
+};
+$("listJoinBtn").onclick = ()=>{ let v=$("listJoin").value.trim(); if(!v) return; const m=v.match(/[?&]list=([^&\s]+)/); openListTopic(m?m[1]:v,"build"); };
+async function openListTopic(token, dest){
+  const r=await api("list_open",{ share_token:token, client_id:clientId() });
+  if(!r.ok){ $("listsErr").textContent="Error: "+r.error; show("listsHome"); return; }
+  LIST={ topic_id:r.topic.id, share_token:r.topic.share_token, prompt:r.topic.prompt, ranked:r.topic.ranked, max_items:r.topic.max_items, entry_type:r.topic.entry_type||"player",
+         items:(r.your_list&&r.your_list.items)? r.your_list.items.map(it=>({label:it.label,note:it.note||null,player_key:it.player_key||null})):[] };
+  if(dest==="compare") showListCompare(); else openBuilder();
+}
+async function openBuilder(){
+  show("listBuild");
+  $("listBuildPrompt").textContent=LIST.prompt;
+  $("listBuildMeta").textContent=`${ENTRY_ICON[LIST.entry_type]||""} ${LIST.entry_type} · ${LIST.ranked?"ranked":"unordered"} · up to ${LIST.max_items}`;
+  $("listAddInput").placeholder=ENTRY_PH[LIST.entry_type]||"Add…";
+  $("listShareRow").classList.add("hidden"); $("listBuildErr").textContent="";
+  $("listAddInput").value=""; $("listNote").value="";
+  renderListItems(); await loadListPool(); $("listAddInput").focus();
+}
+async function loadListPool(){
+  const et=LIST.entry_type||"player";
+  if(LIST_POOL_TYPE===et) return;
+  LIST_POOL_TYPE=et; LIST_POOL=[];
+  if(et==="coach"||et==="moment") return;                 // free text, no autocomplete
+  const r=await api("suggest",{pool: et==="team"?"teams":"players"});
+  if(r.ok&&r.items) LIST_POOL=r.items.map(x=> typeof x==="string"?x:x.v);
+}
+function addListItem(){
+  const label=$("listAddInput").value.trim(); if(!label) return;
+  if(LIST.items.length>=LIST.max_items){ $("listBuildErr").textContent="That's the max ("+LIST.max_items+")."; return; }
+  if(LIST.items.some(it=>normStr(it.label)===normStr(label))){ $("listBuildErr").textContent="Already on your list."; return; }
+  const note=$("listNote").value.trim();
+  LIST.items.push({label, note:note||null});
+  $("listAddInput").value=""; $("listNote").value=""; $("listBuildErr").textContent="";
+  $("listAddDrop").classList.add("hidden"); renderListItems(); $("listAddInput").focus();
+}
+$("listAddBtn").onclick=addListItem;
+$("listAddInput").addEventListener("input",e=>listAcRender(e.target.value));
+$("listAddInput").addEventListener("keydown",e=>{
+  if(e.key==="Enter"){ e.preventDefault();
+    const first=$("listAddDrop").classList.contains("hidden")?null:$("listAddDrop").querySelector(".acitem");
+    if(first) $("listAddInput").value=first.dataset.n;
+    addListItem();
+  } else if(e.key==="Escape"){ $("listAddDrop").classList.add("hidden"); }
+});
+$("listAddInput").addEventListener("blur",()=>setTimeout(()=>$("listAddDrop").classList.add("hidden"),150));
+function listAcRender(q){
+  const drop=$("listAddDrop"); const nq=q.trim().toLowerCase();
+  if(!nq||!LIST_POOL.length){ drop.classList.add("hidden"); return; }
+  const s=[],c=[];
+  for(const n of LIST_POOL){ const i=n.toLowerCase().indexOf(nq); if(i===0){ if(s.length<8)s.push(n); } else if(i>0){ if(c.length<8)c.push(n); } if(s.length>=8)break; }
+  const items=s.concat(c).slice(0,8);
+  if(!items.length){ drop.classList.add("hidden"); return; }
+  drop.innerHTML=items.map(n=>`<div class="acitem" data-n="${n.replace(/"/g,'&quot;')}">${n}</div>`).join("");
+  drop.classList.remove("hidden");
+  Array.from(drop.children).forEach(el=>el.onmousedown=ev=>{ ev.preventDefault(); $("listAddInput").value=el.dataset.n; drop.classList.add("hidden"); addListItem(); });
+}
+function moveItem(i,d){ const j=i+d; if(j<0||j>=LIST.items.length) return; const t=LIST.items[i]; LIST.items[i]=LIST.items[j]; LIST.items[j]=t; renderListItems(); }
+function removeItem(i){ LIST.items.splice(i,1); renderListItems(); }
+function renderListItems(){
+  const box=$("listItems");
+  if(!LIST.items.length){ box.innerHTML=`<div class="note">No picks yet — add players above.</div>`; return; }
+  box.innerHTML=LIST.items.map((it,i)=>`<div class="slot filled">
+     <div class="n">${LIST.ranked?(i+1):"•"}</div>
+     <div class="name">${it.label}${it.note?` <span class="note" style="font-weight:400">— ${it.note}</span>`:""}</div>
+     <div class="ctx" style="display:flex;gap:6px">
+       ${LIST.ranked?`<button class="ghost" data-a="up" data-i="${i}" style="padding:2px 8px">↑</button><button class="ghost" data-a="down" data-i="${i}" style="padding:2px 8px">↓</button>`:""}
+       <button class="ghost" data-a="rm" data-i="${i}" style="padding:2px 8px">✕</button></div></div>`).join("");
+  Array.from(box.querySelectorAll("button")).forEach(b=>b.onclick=()=>{ const i=+b.dataset.i,a=b.dataset.a; if(a==="up")moveItem(i,-1); else if(a==="down")moveItem(i,1); else removeItem(i); });
+}
+async function saveList(){ return api("list_save",{ topic_id:LIST.topic_id, items:LIST.items, client_id:clientId(), label:$("playerName").value.trim()||"You" }); }
+$("listSaveBtn").onclick=async()=>{
+  if(!LIST.items.length){ $("listBuildErr").textContent="Add at least one pick."; return; }
+  const r=await saveList();
+  if(!r.ok){ $("listBuildErr").style.color="var(--bad)"; $("listBuildErr").textContent="Error: "+r.error; return; }
+  $("listShareUrl").value=location.origin+location.pathname+"?list="+LIST.share_token; $("listShareRow").classList.remove("hidden");
+  $("listBuildErr").style.color="var(--good)"; $("listBuildErr").textContent="Saved! Share the link so friends add theirs.";
+  setTimeout(()=>{$("listBuildErr").style.color="var(--bad)";$("listBuildErr").textContent="";},2500);
+};
+$("listCopyBtn").onclick=()=>{ $("listShareUrl").select(); navigator.clipboard?.writeText($("listShareUrl").value); $("listCopyBtn").textContent="Copied!"; setTimeout(()=>$("listCopyBtn").textContent="Copy",1200); };
+$("listBuildBack").onclick=openListsHome;
+$("listCompareBtn").onclick=async()=>{ if(LIST.items.length) await saveList(); showListCompare(); };
+async function showListCompare(){
+  show("listCompare"); $("listCompareErr").textContent="";
+  const r=await api("list_compare",{ topic_id:LIST.topic_id, share_token:LIST.share_token, client_id:clientId() });
+  if(!r.ok){ $("listCompareErr").textContent="Error: "+r.error; return; }
+  $("listComparePrompt").textContent=r.topic.prompt;
+  $("listCompareCount").textContent=`· ${r.total_authors} player${r.total_authors===1?"":"s"}`;
+  const cons=$("listConsensus");
+  cons.innerHTML = r.consensus.length
+    ? `<table><thead><tr><th></th><th>Pick</th><th>Picked by</th>${r.topic.ranked?"<th>Avg rank</th>":""}</tr></thead><tbody>`+
+      r.consensus.map((c,i)=>`<tr><td>${i===0?"👑":"#"+(i+1)}</td><td>${c.label}</td><td>${c.count} (${c.pct}%)</td>${r.topic.ranked?`<td class="mono">${c.avg_rank??"–"}</td>`:""}</tr>`).join("")+`</tbody></table>`
+    : `<div class="note">No picks yet.</div>`;
+  $("listAllLists").innerHTML = r.lists.length ? r.lists.map(l=>`<div class="card" style="margin-top:10px;background:var(--panel2)">
+     <div style="font-weight:700">${l.author_label}${l.is_you?' <span class="pill" style="padding:1px 7px">you</span>':""}</div>
+     <ol style="margin:8px 0 0;padding-left:20px">${l.items.map(it=>`<li>${it.label}${it.note?` <span class="note" style="font-weight:400">— ${it.note}</span>`:""}</li>`).join("")}</ol></div>`).join("")
+     : `<div class="note">No lists yet — be the first.</div>`;
+}
+$("listCompareBack").onclick=()=>show("lobby");
+$("listCompareRefresh").onclick=showListCompare;
+$("listMyEntry").onclick=openBuilder;
+$("listAddTake").onclick=()=>addTake("list");
+
+// browse public topics
+$("listBrowseBtn").onclick=openBrowse;
+$("listBrowseBack").onclick=openListsHome;
+async function openBrowse(){
+  show("listBrowse"); $("browseErr").textContent="";
+  const box=$("browseList"); box.innerHTML=`<div class="note">Loading…</div>`;
+  const r=await api("list_browse",{});
+  if(!r.ok){ $("browseErr").textContent="Error: "+r.error; box.innerHTML=""; return; }
+  if(!r.topics.length){ box.innerHTML=`<div class="note">No public lists yet — create one and it'll show here.</div>`; return; }
+  box.innerHTML=r.topics.map(t=>`<div class="slot" style="cursor:pointer" data-t="${t.share_token}">
+     <div class="n">${ENTRY_ICON[t.entry_type]||"🏀"}</div>
+     <div class="name">${t.prompt}</div>
+     <div class="ctx">${t.author_count} list${t.author_count===1?"":"s"}</div></div>`).join("");
+  Array.from(box.children).forEach(el=>el.onclick=()=>openListTopic(el.dataset.t,"compare"));
+}
+
+// ------------------------------------------------------------------ tier lists
+let TIER = { topic_id:null, share_token:null, prompt:"", item_type:"player", tiers:[], item_set:[], assign:{}, is_creator:false };
+const TIER_COLORS = { S:"#fbbf24", A:"#4ade80", B:"#7dd3fc", C:"#aab6d8", D:"#fb923c", F:"#fca5a5" };
+const tierIcon = t => t==="team"?"🏟️":t==="coach"?"📋":"🏀";
+
+$("tierBtn").onclick = openTierHome;
+$("tierHomeBack").onclick = ()=>show("lobby");
+async function openTierHome(){ show("tierHome"); $("tierErr").textContent=""; syncTierEra(); await loadMyTiers(); }
+async function loadMyTiers(){
+  const box=$("myTiers"); box.innerHTML="Loading…";
+  const r=await api("tier_mine",{client_id:clientId()});
+  if(!r.ok){ box.textContent="Could not load."; return; }
+  if(!r.lists.length){ box.innerHTML=`<div class="note">No tier lists yet.</div>`; return; }
+  box.innerHTML=r.lists.map(l=>`<div class="slot" style="cursor:pointer" data-t="${l.share_token}"><div class="n">${tierIcon(l.item_type)}</div><div class="name">${l.prompt}</div></div>`).join("");
+  Array.from(box.children).forEach(el=>el.onclick=()=>openTierTopic(el.dataset.t,"board"));
+}
+function syncTierEra(){ $("tierEraWrap").style.display = ($("tierPool").value==="star_players") ? "" : "none"; }
+$("tierPool").onchange=syncTierEra;
+$("tierCreateBtn").onclick=async()=>{
+  const prompt=$("tierTitle").value.trim();
+  if(!prompt){ $("tierErr").textContent="Give it a title."; return; }
+  const isPlayers=$("tierPool").value==="star_players";
+  const r=await api("tier_create",{ prompt, pool_source:$("tierPool").value, draw_size:parseInt($("tierDraw").value)||10,
+    era: (isPlayers && $("tierEra").value) ? parseInt($("tierEra").value) : undefined,
+    visibility:$("tierDiscoverable").checked?"public":"unlisted", client_id:clientId(), label:$("playerName").value.trim()||"You" });
+  if(!r.ok){ $("tierErr").textContent="Error: "+r.error; return; }
+  TIER={ topic_id:r.topic_id, share_token:r.share_token, prompt:r.prompt, item_type:r.item_type, tiers:r.tiers, item_set:r.item_set, assign:{}, is_creator:true };
+  $("tierTitle").value=""; openTierBoard();
+};
+$("tierJoinBtn").onclick=()=>{ let v=$("tierJoin").value.trim(); if(!v)return; const m=v.match(/[?&]tier=([^&\s]+)/); openTierTopic(m?m[1]:v,"board"); };
+async function openTierTopic(token,dest){
+  const r=await api("tier_open",{share_token:token, client_id:clientId()});
+  if(!r.ok){ $("tierErr").textContent="Error: "+r.error; show("tierHome"); return; }
+  TIER={ topic_id:r.topic.id, share_token:r.topic.share_token, prompt:r.topic.prompt, item_type:r.topic.item_type,
+         tiers:r.topic.tiers, item_set:r.topic.item_set, assign:{...(r.your_assignments||{})}, is_creator:r.topic.is_creator };
+  if(dest==="compare") showTierCompare(); else openTierBoard();
+}
+function openTierBoard(){
+  show("tierBoard");
+  $("tierBoardPrompt").textContent=(TIER.isDaily?"🗓️ Daily — ":"")+TIER.prompt;
+  $("tierRespin").style.display=TIER.is_creator?"":"none";
+  $("tierShareRow").classList.add("hidden"); $("tierBoardErr").textContent="";
+  renderTierBoard();
+}
+function renderTierBoard(){
+  const board=$("tierBoardRows");
+  const rows=[["Unranked",null], ...TIER.tiers.map(t=>[t,t])];
+  board.innerHTML=rows.map(([label,t])=>{
+    const items=TIER.item_set.filter(it=>(TIER.assign[it.key]||null)===t);
+    const color=t?(TIER_COLORS[t]||"#2a3556"):"#1b2440";
+    return `<div class="tierrow"><div class="tierlabel" style="background:${color};color:#0b1020">${label}</div>
+      <div class="tierzone">${items.map(tierChip).join("")||'<span class="note">—</span>'}</div></div>`;
+  }).join("");
+  Array.from(board.querySelectorAll(".tbtn")).forEach(b=>b.onclick=()=>{
+    const k=b.dataset.k,t=b.dataset.t; if(t==="__clear") delete TIER.assign[k]; else TIER.assign[k]=t; renderTierBoard();
+  });
+}
+function tierChip(it){
+  const cur=TIER.assign[it.key]||null;
+  const btns=TIER.tiers.map(t=>`<button class="tbtn ${cur===t?'on':''}" data-k="${it.key}" data-t="${t}">${t}</button>`).join("")
+    + (cur?`<button class="tbtn" data-k="${it.key}" data-t="__clear">×</button>`:"");
+  return `<div class="chip"><span>${it.label}</span><span class="tbtns">${btns}</span></div>`;
+}
+async function saveTier(){
+  const r=await api("tier_save",{ topic_id:TIER.topic_id, assignments:TIER.assign, client_id:clientId(), label:$("playerName").value.trim()||"You" });
+  if(r.ok && TIER.isDaily) bumpStreak(TIER.date);
+  return r;
+}
+$("tierSaveBtn").onclick=async()=>{
+  const r=await saveTier();
+  if(!r.ok){ $("tierBoardErr").style.color="var(--bad)"; $("tierBoardErr").textContent="Error: "+r.error; return; }
+  $("tierShareUrl").value=location.origin+location.pathname+"?tier="+TIER.share_token; $("tierShareRow").classList.remove("hidden");
+  $("tierBoardErr").style.color="var(--good)"; $("tierBoardErr").textContent="Saved! Share so friends tier the same set.";
+  setTimeout(()=>{$("tierBoardErr").style.color="var(--bad)";$("tierBoardErr").textContent="";},2500);
+};
+$("tierCopyBtn").onclick=()=>{ $("tierShareUrl").select(); navigator.clipboard?.writeText($("tierShareUrl").value); $("tierCopyBtn").textContent="Copied!"; setTimeout(()=>$("tierCopyBtn").textContent="Copy",1200); };
+$("tierBoardBack").onclick=openTierHome;
+$("tierCompareBtn").onclick=async()=>{ await saveTier(); showTierCompare(); };
+$("tierRespin").onclick=async()=>{
+  const r=await api("tier_reroll",{ topic_id:TIER.topic_id, client_id:clientId() });
+  if(!r.ok){ $("tierBoardErr").style.color="var(--bad)"; $("tierBoardErr").textContent="Error: "+r.error; return; }
+  TIER.item_set=r.item_set; TIER.assign={}; renderTierBoard();
+};
+function tierBadge(t){ if(!t) return '<span class="note">—</span>'; const c=TIER_COLORS[t]||"#2a3556"; return `<span class="rar" style="background:${c};color:#0b1020;margin-left:0">${t}</span>`; }
+function renderHotTakes(r){
+  const box=$("tierHotTakes"); if(!box) return;
+  const tiers=r.topic.tiers; const idx=t=>tiers.indexOf(t);
+  const me=(r.lists||[]).find(l=>l.is_you);
+  if(!me || r.total_authors<2){
+    box.innerHTML=`<div class="banner wait" style="margin-top:10px">🌶️ You vs. the room — share the link to see how your takes stack up against everyone else's.</div>`;
+    return;
+  }
+  const byKey={}; (r.consensus||[]).forEach(c=>byKey[c.key]=c);
+  const rows=(r.topic.item_set||[]).map(it=>{
+    const myT=(me.assignments||{})[it.key], c=byKey[it.key]||{}, dist=c.distribution||{}, votes=c.count||0;
+    let modal=null,best=0; tiers.forEach(t=>{const n=dist[t]||0; if(n>best){best=n;modal=t;}});
+    const modalPct=votes?Math.round(100*best/votes):0;
+    const gap=(myT&&modal)?Math.abs(idx(myT)-idx(modal)):-1;
+    return {label:it.label,myT,modal,modalPct,votes,gap,distinct:Object.keys(dist).length};
+  }).filter(x=>x.votes>0);
+  const bold=rows.filter(x=>x.myT&&x.gap>0).sort((a,b)=>b.gap-a.gap||b.modalPct-a.modalPct).slice(0,3);
+  const unanimous=rows.filter(x=>x.votes>=2&&x.distinct===1).slice(0,3);
+  const divisive=rows.filter(x=>x.votes>=2).slice().sort((a,b)=>a.modalPct-b.modalPct||b.distinct-a.distinct)[0];
+  const rated=rows.filter(x=>x.myT); const agreed=rated.filter(x=>x.myT===x.modal).length;
+  let h=`<div class="card" style="margin-top:10px;background:var(--panel2);border-color:var(--accent)"><div style="font-weight:800;font-size:15px">🌶️ You vs. the room</div>`;
+  if(bold.length){
+    h+=`<div style="margin-top:8px;font-weight:700;color:var(--muted);font-size:12px;letter-spacing:.5px">YOUR BOLDEST TAKES</div>`;
+    h+=bold.map(x=>{ const e=x.gap>=3?"🌶️":x.gap>=2?"🔥":"👀";
+      return `<div style="margin-top:5px">${e} ${x.label} — you ${tierBadge(x.myT)} · the room ${tierBadge(x.modal)} <span class="note">(${x.modalPct}%)</span></div>`; }).join("");
+  } else {
+    h+=`<div style="margin-top:8px" class="note">🧊 No hot takes — you're basically the consensus.</div>`;
+  }
+  if(unanimous.length){
+    h+=`<div style="margin-top:12px;font-weight:700;color:var(--muted);font-size:12px;letter-spacing:.5px">UNANIMOUS</div>`;
+    h+=unanimous.map(x=>`<div style="margin-top:5px">🤝 ${x.label} ${tierBadge(x.modal)}</div>`).join("");
+  }
+  if(divisive && divisive.modalPct<60){
+    h+=`<div style="margin-top:12px;font-weight:700;color:var(--muted);font-size:12px;letter-spacing:.5px">MOST DIVIDED</div>`;
+    h+=`<div style="margin-top:5px">🥊 The room can't agree on <b>${divisive.label}</b> — top tier only ${divisive.modalPct}%</div>`;
+  }
+  h+=`<div class="note" style="margin-top:12px">You matched the room on ${agreed}/${rated.length}.</div></div>`;
+  box.innerHTML=h;
+}
+async function showTierCompare(){
+  show("tierCompare"); $("tierCompareErr").textContent="";
+  const r=await api("tier_compare",{ topic_id:TIER.topic_id, share_token:TIER.share_token, client_id:clientId() });
+  if(!r.ok){ $("tierCompareErr").textContent="Error: "+r.error; return; }
+  $("tierComparePrompt").textContent=(TIER.isDaily?"🗓️ Daily — ":"")+r.topic.prompt;
+  $("tierCompareCount").textContent=`· ${r.total_authors} player${r.total_authors===1?"":"s"}`;
+  renderHotTakes(r);
+  $("tierConsensus").innerHTML = r.consensus.length ? r.consensus.map(c=>{
+    const color=c.avg_tier?(TIER_COLORS[c.avg_tier]||"#2a3556"):"#2a3556";
+    const dist=Object.entries(c.distribution||{}).map(([k,v])=>`${k}×${v}`).join("  ");
+    return `<div class="slot"><div class="n" style="background:${color};color:#0b1020;font-weight:900">${c.avg_tier||"–"}</div><div class="name">${c.label}</div><div class="ctx">${dist||"no votes"}</div></div>`;
+  }).join("") : `<div class="note">No one has tiered yet.</div>`;
+  $("tierAllLists").innerHTML = r.lists.length ? r.lists.map(l=>{
+    const byTier=r.topic.tiers.map(t=>{
+      const names=r.topic.item_set.filter(it=>(l.assignments||{})[it.key]===t).map(it=>it.label);
+      return names.length?`<div style="margin-top:2px"><b style="color:${TIER_COLORS[t]}">${t}</b> ${names.join(", ")}</div>`:"";
+    }).filter(Boolean).join("");
+    return `<div class="card" style="margin-top:10px;background:var(--panel2)"><div style="font-weight:700">${l.author_label}${l.is_you?' <span class="pill" style="padding:1px 7px">you</span>':""}</div><div style="margin-top:4px;font-size:14px">${byTier||'<span class="note">no picks</span>'}</div></div>`;
+  }).join("") : `<div class="note">No tier lists yet — be the first.</div>`;
+}
+$("tierCompareBack").onclick=()=>show("lobby");
+$("tierCompareRefresh").onclick=showTierCompare;
+$("tierMyEntry").onclick=openTierBoard;
+$("tierAddTake").onclick=()=>addTake("tier");
+$("tierBrowseBtn").onclick=openTierBrowse;
+$("tierBrowseBack").onclick=openTierHome;
+async function openTierBrowse(){
+  show("tierBrowse"); $("tierBrowseErr").textContent="";
+  const box=$("tierBrowseList"); box.innerHTML=`<div class="note">Loading…</div>`;
+  const r=await api("tier_browse",{});
+  if(!r.ok){ $("tierBrowseErr").textContent="Error: "+r.error; box.innerHTML=""; return; }
+  if(!r.topics.length){ box.innerHTML=`<div class="note">No public tier lists yet.</div>`; return; }
+  box.innerHTML=r.topics.map(t=>`<div class="slot" style="cursor:pointer" data-t="${t.share_token}"><div class="n">${tierIcon(t.item_type)}</div><div class="name">${t.prompt}</div><div class="ctx">${t.author_count} tiered</div></div>`).join("");
+  Array.from(box.children).forEach(el=>el.onclick=()=>openTierTopic(el.dataset.t,"compare"));
+}
+
+// ------------------------------------------------------------------ daily + share card
+function getStreak(){ try{return JSON.parse(localStorage.getItem("mp_streak")||"{}")}catch{return {}} }
+function renderStreak(){ const s=getStreak(); const el=$("dailyStreak"); if(el) el.textContent=(s.streak>0?" · 🔥 "+s.streak:""); }
+function bumpStreak(dateStr){
+  const s=getStreak();
+  if(s.last!==dateStr){
+    const y=new Date(new Date(dateStr+"T00:00:00Z").getTime()-86400000).toISOString().slice(0,10);
+    s.streak=(s.last===y)?(s.streak||0)+1:1; s.last=dateStr;
+    localStorage.setItem("mp_streak",JSON.stringify(s));
+  }
+  renderStreak();
+}
+$("dailyBtn").onclick=openDaily;
+async function openDaily(){
+  const r=await api("daily",{client_id:clientId()});
+  if(!r.ok){ $("lobbyErr").style.color="var(--bad)"; $("lobbyErr").textContent="Daily unavailable: "+r.error; return; }
+  TIER={ topic_id:r.topic.id, share_token:r.topic.share_token, prompt:r.topic.prompt, item_type:r.topic.item_type,
+         tiers:r.topic.tiers, item_set:r.topic.item_set, assign:{...(r.your_assignments||{})}, is_creator:false, isDaily:true, date:r.date };
+  if(r.done) showTierCompare(); else openTierBoard();
+}
+
+function _rr(ctx,x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+function _trunc(ctx,text,maxW){ if(ctx.measureText(text).width<=maxW) return text; let t=text; while(t.length>4 && ctx.measureText(t+"…").width>maxW) t=t.slice(0,-1); return t+"…"; }
+function tierShareCard(){
+  const used=TIER.tiers.filter(t=>TIER.item_set.some(it=>TIER.assign[it.key]===t));
+  const W=560, pad=18, headH=64, footH=38, labelW=54, lineH=22;
+  const meas=document.createElement("canvas").getContext("2d"); meas.font="600 15px system-ui,Segoe UI,sans-serif";
+  const rows=used.map(t=>{
+    const names=TIER.item_set.filter(it=>TIER.assign[it.key]===t).map(it=>it.label);
+    const maxW=W-labelW-pad*3, lines=[]; let line="";
+    names.forEach(n=>{ const test=line?line+", "+n:n; if(meas.measureText(test).width>maxW && line){ lines.push(line); line=n; } else line=test; });
+    if(line) lines.push(line);
+    return { t, lines };
+  });
+  const rowH=r=>Math.max(46, r.lines.length*lineH+14);
+  const H=headH + rows.reduce((h,r)=>h+rowH(r)+8,0) + footH;
+  const c=document.createElement("canvas"); c.width=W; c.height=H; const ctx=c.getContext("2d");
+  ctx.fillStyle="#0b1020"; ctx.fillRect(0,0,W,H);
+  ctx.fillStyle="#eef2ff"; ctx.font="800 20px system-ui,Segoe UI,sans-serif";
+  ctx.fillText((TIER.isDaily?"🗓️ Daily — ":"")+_trunc(ctx,TIER.prompt,W-pad*2), pad, 32);
+  ctx.fillStyle="#95a2c8"; ctx.font="600 13px system-ui,Segoe UI,sans-serif"; ctx.fillText("my tier list", pad, 52);
+  let y=headH;
+  const COLORS={S:"#fbbf24",A:"#4ade80",B:"#7dd3fc",C:"#aab6d8",D:"#fb923c",F:"#fca5a5"};
+  rows.forEach(r=>{
+    const h=rowH(r);
+    ctx.fillStyle=COLORS[r.t]||"#2a3556"; _rr(ctx,pad,y,labelW,h-8,8); ctx.fill();
+    ctx.fillStyle="#0b1020"; ctx.font="900 22px system-ui,Segoe UI,sans-serif"; ctx.textAlign="center";
+    ctx.fillText(r.t, pad+labelW/2, y+(h-8)/2+8); ctx.textAlign="left";
+    ctx.fillStyle="#dfe6ff"; ctx.font="600 15px system-ui,Segoe UI,sans-serif";
+    r.lines.forEach((ln,i)=>ctx.fillText(ln, pad*2+labelW, y+22+i*lineH));
+    y+=h+8;
+  });
+  ctx.fillStyle="#f97316"; ctx.font="800 14px system-ui,Segoe UI,sans-serif"; ctx.fillText("Taking Court", pad, H-14);
+  c.toBlob(async (blob)=>{
+    const link=location.origin+location.pathname+(TIER.isDaily?"":"?tier="+TIER.share_token);
+    try{
+      const file=new File([blob],"tierlist.png",{type:"image/png"});
+      if(navigator.canShare && navigator.canShare({files:[file]})){ await navigator.share({files:[file], text:(TIER.isDaily?"Today's Daily tier list":TIER.prompt)+"\n"+link}); return; }
+    }catch(e){}
+    const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download="tierlist.png"; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    try{ navigator.clipboard?.writeText(link); }catch(e){}
+  });
+}
+$("tierShareBtn").onclick=tierShareCard;
+$("tierShareBtn2").onclick=tierShareCard;
+
+// ------------------------------------------------------------------ boot
+renderStreak();
+loadSheets();
+const urlToken = new URLSearchParams(location.search).get("ch");
+const urlList = new URLSearchParams(location.search).get("list");
+const urlTier = new URLSearchParams(location.search).get("tier");
+if(urlTier){ $("playerName").value = store.get("mp_name",""); openTierTopic(urlTier,"board"); }
+else if(urlList){ $("playerName").value = store.get("mp_name",""); openListTopic(urlList,"build"); }
+else if(urlToken){ $("playerName").value = store.get("mp_name",""); openChallenge(urlToken); }
+$("playerName").addEventListener("change",e=>store.set("mp_name",e.target.value));
+$("playerName").value = store.get("mp_name","");
+
+// ------------------------------------------------------------------ first run
+(function(){
+  const hasShare = urlToken || urlList || urlTier;
+  if(hasShare || store.get("tc_seen","")) return;
+  const w = $("welcome"); w.classList.add("show");
+  const done = go => { w.classList.remove("show"); store.set("tc_seen","1"); if(go) $("dailyBtn").click(); };
+  $("welcomePlay").onclick = ()=>done(true);
+  $("welcomeSkip").onclick = ()=>done(false);
+})();
+
+// ------------------------------------------------------------------ service worker
+if("serviceWorker" in navigator){
+  window.addEventListener("load", ()=>navigator.serviceWorker.register("service-worker.js").catch(()=>{}));
+}
+</script>
+</body>
+</html>
