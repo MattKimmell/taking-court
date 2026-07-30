@@ -48,7 +48,7 @@
   .row > *{flex:1}
   .pill{display:inline-flex;align-items:center;gap:6px;background:var(--panel2);border:1px solid var(--line);
     border-radius:999px;padding:5px 12px;font-size:12px;color:var(--muted);flex:0 0 auto}
-  .hidden{display:none}
+  .hidden{display:none !important}
   .head{display:flex;justify-content:space-between;align-items:center;gap:10px}
   .timer{font-variant-numeric:tabular-nums;font-size:30px;font-weight:700;letter-spacing:1px}
   .strikes{display:flex;gap:8px;align-items:center}
@@ -84,9 +84,9 @@
   .tierrow{display:flex;gap:8px;align-items:stretch;margin-bottom:8px}
   .tierlabel{flex:0 0 48px;display:grid;place-items:center;border-radius:8px;font-weight:900;font-size:18px}
   .tierzone{flex:1;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px;display:flex;flex-wrap:wrap;gap:6px;min-height:46px;align-items:center}
-  .chip{display:inline-flex;align-items:center;gap:6px;background:#0e1730;border:1px solid var(--line);border-radius:8px;padding:4px 6px 4px 10px;font-size:13px}
-  .tbtns{display:flex;gap:2px}
-  .tbtn{padding:1px 6px;border-radius:5px;font-size:11px;font-weight:800;background:#243056;color:var(--muted);border:none;cursor:pointer}
+  .chip{display:inline-flex;align-items:center;flex-wrap:wrap;max-width:100%;gap:6px;background:#0e1730;border:1px solid var(--line);border-radius:8px;padding:6px 8px 6px 10px;font-size:13px}
+  .tbtns{display:flex;flex-wrap:wrap;gap:4px}
+  .tbtn{padding:5px 10px;border-radius:6px;font-size:13px;font-weight:800;background:#243056;color:var(--muted);border:none;cursor:pointer;min-width:32px;min-height:30px}
   .tbtn.on{background:var(--accent);color:#0b1020}
   .banner{border-radius:12px;padding:16px;text-align:center;font-weight:700;font-size:20px}
   .banner.win{background:linear-gradient(90deg,rgba(251,191,36,.2),rgba(249,115,102,.2));border:1px solid var(--gold);color:var(--gold)}
@@ -113,6 +113,10 @@
     .wrap{padding-top:16px} h1{font-size:23px}
     .row{gap:8px} .row > *{flex:1 1 100%}
     button{min-height:46px} input,select{min-height:46px;font-size:16px}
+    /* tier board: each item on its own full-width row with big thumb targets */
+    .tierzone{flex-direction:column;align-items:stretch}
+    .chip{width:100%;justify-content:space-between}
+    .tbtn{min-height:40px;min-width:40px;font-size:15px}
   }
   /* --- first-run welcome --- */
   #welcome{position:fixed;inset:0;z-index:100;display:none;flex-direction:column;justify-content:center;
@@ -1056,6 +1060,7 @@ async function openTierTopic(token,dest){
   if(!r.ok){ $("tierErr").textContent="Error: "+r.error; show("tierHome"); return; }
   TIER={ topic_id:r.topic.id, share_token:r.topic.share_token, prompt:r.topic.prompt, item_type:r.topic.item_type,
          tiers:r.topic.tiers, item_set:r.topic.item_set, assign:{...(r.your_assignments||{})}, is_creator:r.topic.is_creator };
+  if(/^daily_/.test(token)){ TIER.isDaily=true; TIER.date=token.slice(6); }
   if(dest==="compare") showTierCompare(); else openTierBoard();
 }
 function openTierBoard(){
