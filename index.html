@@ -18,6 +18,7 @@
 <meta property="og:type" content="website" />
 <meta property="og:image" content="icons/og.png" />
 <meta name="twitter:card" content="summary_large_image" />
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root{
     --bg:#0b1020; --panel:#131a2e; --panel2:#1b2440; --line:#2a3556;
@@ -87,6 +88,10 @@
   .chip{display:inline-flex;align-items:center;flex-wrap:wrap;max-width:100%;gap:6px;background:#0e1730;border:1px solid var(--line);border-radius:8px;padding:6px 8px 6px 10px;font-size:13px}
   .tbtns{display:flex;flex-wrap:wrap;gap:4px}
   .tbtn{padding:5px 10px;border-radius:6px;font-size:13px;font-weight:800;background:#243056;color:var(--muted);border:none;cursor:pointer;min-width:32px;min-height:30px}
+  .rxnbar{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+  .rxn{background:#0e1730;border:1px solid var(--line);border-radius:999px;padding:5px 11px;font-size:14px;cursor:pointer;color:var(--ink);min-height:34px}
+  .rxn.on{background:rgba(249,115,22,.18);border-color:var(--accent)}
+  .rxn.add{opacity:.6}
   .tbtn.on{background:var(--accent);color:#0b1020}
   .banner{border-radius:12px;padding:16px;text-align:center;font-weight:700;font-size:20px}
   .banner.win{background:linear-gradient(90deg,rgba(251,191,36,.2),rgba(249,115,102,.2));border:1px solid var(--gold);color:var(--gold)}
@@ -201,6 +206,7 @@
       <button class="ghost" id="lbBtn">🏆 Leaderboard</button>
       <button class="ghost" id="listsBtn">📝 Lists</button>
       <button class="ghost" id="tierBtn">🪜 Tier Lists</button>
+      <button class="ghost" id="crewBtn">👥 Crews</button>
     </div>
 
     <details>
@@ -477,6 +483,42 @@
     <div class="err" id="tierBrowseErr"></div>
   </div>
 
+  <!-- ===================== CREW HOME ===================== -->
+  <div id="crewHome" class="card hidden">
+    <div class="head">
+      <div style="font-weight:700;font-size:18px">👥 Crews</div>
+      <button class="ghost" id="crewHomeBack" style="flex:0 0 auto;padding:6px 12px">Back</button>
+    </div>
+    <div class="note">A crew is a private room that plays today's Daily together — you see each other's boards, streaks, and who's got the hottest take. Playing never needs an account; crews do.</div>
+    <div id="crewAuth">
+      <label>Email</label>
+      <div class="linkbox">
+        <input id="crewEmail" type="email" placeholder="you@example.com" autocomplete="email" />
+        <button class="sky" id="crewSignInBtn" style="flex:0 0 auto">Send link</button>
+      </div>
+      <div class="note" id="crewAuthMsg"></div>
+    </div>
+    <div id="crewSignedIn" class="hidden">
+      <div class="idbar"><span id="crewWho"></span><button class="ghost" id="crewSignOut" style="flex:0 0 auto;padding:6px 10px">Sign out</button></div>
+      <div id="crewList" style="margin-top:10px"></div>
+      <label style="margin-top:16px">Start a crew</label>
+      <div class="linkbox"><input id="crewNewName" placeholder="e.g. The Group Chat" /><button id="crewCreateBtn" style="flex:0 0 auto">Create</button></div>
+      <label style="margin-top:14px">Join with a code</label>
+      <div class="linkbox"><input id="crewJoinCode" placeholder="6-letter code" style="text-transform:uppercase" /><button class="sky" id="crewJoinBtn" style="flex:0 0 auto">Join</button></div>
+      <div class="err" id="crewHomeErr"></div>
+    </div>
+  </div>
+
+  <!-- ===================== CREW ROOM ===================== -->
+  <div id="crewRoom" class="card hidden">
+    <div class="head">
+      <div><div style="font-weight:700;font-size:18px" id="crewRoomName"></div><div class="note" id="crewRoomCode" style="cursor:pointer"></div></div>
+      <button class="ghost" id="crewRoomBack" style="flex:0 0 auto;padding:6px 12px">Back</button>
+    </div>
+    <div id="crewRoomBody"></div>
+    <div class="err" id="crewRoomErr"></div>
+  </div>
+
   <div class="note" style="margin-top:22px;text-align:center;opacity:.55">Taking Court · pickup hoops debates · no account needed</div>
 </div>
 
@@ -494,6 +536,20 @@ const store = {
   set:(k,v)=>{try{localStorage.setItem(k,v)}catch{}}
 };
 function cfg(){ return CFG; }
+
+// ---- crews auth (Supabase magic-link; only crew features need an account) ----
+const SB = window.supabase
+  ? window.supabase.createClient(CFG.url.replace(/\/functions\/v1\/mp$/, ""), CFG.key, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } })
+  : null;
+let AUTH = { session: null, user: null };
+function authToken(){ return AUTH.session?.access_token || CFG.key; }
+async function refreshAuth(){ if(!SB) return; try{ const { data } = await SB.auth.getSession(); AUTH.session = data.session; AUTH.user = data.session?.user ?? null; }catch(e){} }
+async function sendMagicLink(email){
+  if(!SB) return { error: "auth unavailable" };
+  const { error } = await SB.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname } });
+  return { error: error?.message };
+}
+async function signOut(){ if(SB){ try{ await SB.auth.signOut(); }catch(e){} } AUTH = { session: null, user: null }; }
 
 // identity (per browser; switchable so you can test both sides locally)
 function clientId(){
@@ -527,7 +583,7 @@ async function api(action, payload={}){
   const c = cfg();
   const res = await fetch(c.url, {
     method:"POST",
-    headers:{ "Content-Type":"application/json", "Authorization":"Bearer "+c.key },
+    headers:{ "Content-Type":"application/json", "Authorization":"Bearer "+authToken() },
     body: JSON.stringify({ action, ...payload })
   });
   let data; try{ data = await res.json(); }catch{ data = {ok:false,error:"bad_response ("+res.status+")"}; }
@@ -540,7 +596,7 @@ let ST = { challenge_id:null, share_token:null, attempt_id:null, attempt_token:n
            filled:{}, strikes:0, correct:0, finished:false, sheet_id:null };
 let timerInt=null;
 
-function show(id){ ["lobby","share","preview","play","results","leaderboard","listsHome","listBuild","listCompare","listBrowse","tierHome","tierBoard","tierCompare","tierBrowse"].forEach(s=>$(s).classList.toggle("hidden", s!==id)); }
+function show(id){ ["lobby","share","preview","play","results","leaderboard","listsHome","listBuild","listCompare","listBrowse","tierHome","tierBoard","tierCompare","tierBrowse","crewHome","crewRoom"].forEach(s=>$(s).classList.toggle("hidden", s!==id)); }
 function toast(msg){ $("lobbyErr").style.color="var(--muted)"; $("lobbyErr").textContent=msg; }
 function fmt(ms){ if(ms==null) return "—"; const s=ms/1000; const m=Math.floor(s/60);
   const r=(s-m*60); return m+":"+r.toFixed(1).padStart(4,"0"); }
@@ -1112,12 +1168,13 @@ async function saveTier(){
 $("tierSaveBtn").onclick=async()=>{
   const r=await saveTier();
   if(!r.ok){ $("tierBoardErr").style.color="var(--bad)"; $("tierBoardErr").textContent="Error: "+r.error; return; }
+  if(CREW_RETURN && TIER.isDaily){ const c=CREW_RETURN; CREW_RETURN=null; $("tierBoardErr").style.color="var(--good)"; $("tierBoardErr").textContent="Saved! Back to your crew…"; setTimeout(()=>openCrew(c),700); return; }
   $("tierShareUrl").value=location.origin+location.pathname+"?tier="+TIER.share_token; $("tierShareRow").classList.remove("hidden");
   $("tierBoardErr").style.color="var(--good)"; $("tierBoardErr").textContent="Saved! Share so friends tier the same set.";
   setTimeout(()=>{$("tierBoardErr").style.color="var(--bad)";$("tierBoardErr").textContent="";},2500);
 };
 $("tierCopyBtn").onclick=()=>{ $("tierShareUrl").select(); navigator.clipboard?.writeText($("tierShareUrl").value); $("tierCopyBtn").textContent="Copied!"; setTimeout(()=>$("tierCopyBtn").textContent="Copy",1200); };
-$("tierBoardBack").onclick=openTierHome;
+$("tierBoardBack").onclick=()=>{ if(CREW_RETURN){ const c=CREW_RETURN; CREW_RETURN=null; openCrew(c); } else openTierHome(); };
 $("tierCompareBtn").onclick=async()=>{ await saveTier(); showTierCompare(); };
 $("tierRespin").onclick=async()=>{
   const r=await api("tier_reroll",{ topic_id:TIER.topic_id, client_id:clientId() });
@@ -1218,7 +1275,7 @@ async function openDaily(){
   if(!r.ok){ $("lobbyErr").style.color="var(--bad)"; $("lobbyErr").textContent="Daily unavailable: "+r.error; return; }
   TIER={ topic_id:r.topic.id, share_token:r.topic.share_token, prompt:r.topic.prompt, item_type:r.topic.item_type,
          tiers:r.topic.tiers, item_set:r.topic.item_set, assign:{...(r.your_assignments||{})}, is_creator:false, isDaily:true, date:r.date };
-  if(r.done) showTierCompare(); else openTierBoard();
+  if(CREW_RETURN) openTierBoard(); else if(r.done) showTierCompare(); else openTierBoard();
 }
 
 function _rr(ctx,x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
@@ -1266,6 +1323,119 @@ function tierShareCard(){
 $("tierShareBtn").onclick=tierShareCard;
 $("tierShareBtn2").onclick=tierShareCard;
 
+// ------------------------------------------------------------------ crews
+const REACTIONS = ["🔥","💀","🧢","👑","😂"];
+let CREW_RETURN = null;   // set when the daily is launched from a crew room
+let CURRENT_CREW = null;
+
+$("crewBtn").onclick = openCrewHome;
+$("crewHomeBack").onclick = ()=>show("lobby");
+$("crewRoomBack").onclick = ()=>{ CURRENT_CREW=null; openCrewHome(); };
+
+async function openCrewHome(){
+  show("crewHome"); $("crewHomeErr").textContent=""; $("crewAuthMsg").textContent="";
+  await refreshAuth();
+  renderCrewHome();
+}
+function renderCrewHome(){
+  const inn = !!AUTH.user;
+  $("crewAuth").classList.toggle("hidden", inn);
+  $("crewSignedIn").classList.toggle("hidden", !inn);
+  if(inn){ $("crewWho").textContent = "Signed in as " + (AUTH.user.email || "you"); loadCrews(); }
+}
+$("crewSignInBtn").onclick = async ()=>{
+  const email = $("crewEmail").value.trim();
+  if(!email || !email.includes("@")){ $("crewAuthMsg").style.color="var(--bad)"; $("crewAuthMsg").textContent="Enter a valid email."; return; }
+  $("crewAuthMsg").style.color="var(--muted)"; $("crewAuthMsg").textContent="Sending…";
+  const { error } = await sendMagicLink(email);
+  if(error){ $("crewAuthMsg").style.color="var(--bad)"; $("crewAuthMsg").textContent="Error: "+error; }
+  else { $("crewAuthMsg").style.color="var(--good)"; $("crewAuthMsg").textContent="Check your email for a sign-in link, then reopen this page."; }
+};
+$("crewSignOut").onclick = async ()=>{ await signOut(); renderCrewHome(); };
+async function loadCrews(){
+  const box = $("crewList"); box.innerHTML = `<div class="note">Loading your crews…</div>`;
+  const r = await api("crew_mine", {});
+  if(!r.ok){ box.innerHTML = `<div class="note">${r.error}</div>`; return; }
+  if(!r.crews.length){ box.innerHTML = `<div class="note">No crews yet — start one below, or join with a code.</div>`; return; }
+  box.innerHTML = r.crews.map(c=>`<div class="slot" style="cursor:pointer" data-c="${c.id}"><div class="n">👥</div><div class="name">${c.name}</div><div class="ctx">${c.member_count} · ${c.code}</div></div>`).join("");
+  Array.from(box.children).forEach(el=>el.onclick=()=>openCrew(el.dataset.c));
+}
+$("crewCreateBtn").onclick = async ()=>{
+  const name = $("crewNewName").value.trim();
+  if(!name){ $("crewHomeErr").textContent="Name your crew first."; return; }
+  const r = await api("crew_create", { name, display_name: ensureName() });
+  if(!r.ok){ $("crewHomeErr").textContent = r.error==="sign_in_required" ? "Please sign in first." : "Error: "+r.error; return; }
+  $("crewNewName").value=""; openCrew(r.crew.id);
+};
+$("crewJoinBtn").onclick = async ()=>{
+  const code = $("crewJoinCode").value.trim().toUpperCase();
+  if(!code){ $("crewHomeErr").textContent="Enter a crew code."; return; }
+  const r = await api("crew_join", { code, display_name: ensureName() });
+  if(!r.ok){ $("crewHomeErr").textContent = r.error==="crew_not_found" ? "No crew with that code." : (r.error==="sign_in_required" ? "Please sign in first." : "Error: "+r.error); return; }
+  $("crewJoinCode").value=""; openCrew(r.crew.id);
+};
+
+async function openCrew(crewId){
+  CURRENT_CREW = crewId;
+  show("crewRoom"); $("crewRoomErr").textContent=""; $("crewRoomBody").innerHTML=`<div class="note">Loading…</div>`;
+  const r = await api("crew_daily", { crew_id: crewId });
+  if(!r.ok){ if(r.error==="sign_in_required"){ openCrewHome(); return; } $("crewRoomErr").textContent="Error: "+r.error; return; }
+  renderCrewRoom(r);
+}
+function crewPlayDaily(crewId){ CREW_RETURN = crewId; openDaily(); }
+
+function crewBoardHtml(m, r){
+  const byTier = r.topic.tiers.map(t=>{
+    const names = r.topic.item_set.filter(it => (m.assignments||{})[it.key]===t).map(it=>it.label);
+    return names.length ? `<div style="margin-top:2px"><b style="color:${TIER_COLORS[t]}">${t}</b> ${names.join(", ")}</div>` : "";
+  }).filter(Boolean).join("");
+  const existing = (m.reactions||[]).map(x=>`<button class="rxn ${x.mine?'on':''}" data-b="${m.board_id}" data-e="${x.emoji}">${x.emoji} ${x.count}</button>`).join("");
+  const palette = m.is_you ? "" : REACTIONS.map(e=>`<button class="rxn add" data-b="${m.board_id}" data-e="${e}">${e}</button>`).join("");
+  return `<div class="card" style="margin-top:10px;background:var(--panel2)">
+    <div style="font-weight:700">${m.display_name}${m.is_you?' <span class="pill" style="padding:1px 7px">you</span>':''}${m.streak?` · 🔥 ${m.streak}`:''}</div>
+    <div style="margin-top:4px;font-size:14px">${byTier||'<span class="note">no picks</span>'}</div>
+    <div class="rxnbar">${existing}${palette}</div>
+  </div>`;
+}
+function crewStandingsHtml(r){
+  const rows = r.members.map(m=>`<div class="slot" style="min-height:42px">
+    <div class="n" style="background:${m.played_today?'var(--good)':'#0e1730'};color:${m.played_today?'#04210f':'var(--muted)'}">${m.played_today?'✓':'·'}</div>
+    <div class="name">${m.display_name}${m.is_you?' <span class="pill" style="padding:1px 7px">you</span>':''}</div>
+    <div class="ctx">${m.streak?('🔥 '+m.streak):'—'}</div>
+  </div>`).join("");
+  return `<div style="font-weight:700;margin-top:18px">Standings <span class="note">· ${r.members.length} in the crew</span></div><div class="slots" style="margin-top:8px">${rows}</div>`;
+}
+function renderCrewRoom(r){
+  CURRENT_CREW = r.crew.id;
+  $("crewRoomName").textContent = r.crew.name;
+  $("crewRoomCode").innerHTML = `Code <b class="mono" style="letter-spacing:1px;color:var(--accent)">${r.crew.code}</b> · ${r.crew.member_count} member${r.crew.member_count===1?'':'s'} · tap to copy`;
+  $("crewRoomCode").onclick = ()=>{ try{ navigator.clipboard?.writeText(r.crew.code); const el=$("crewRoomCode"); const prev=el.innerHTML; el.textContent="Copied!"; setTimeout(()=>el.innerHTML=prev,1200); }catch(e){} };
+  const body = $("crewRoomBody");
+  let h = `<div class="note" style="margin-top:8px">🗓️ Today — ${r.topic.prompt}</div>`;
+  if(!r.i_played){
+    h += `<div class="banner wait" style="margin-top:12px">Play today's Daily to unlock the crew's boards, streaks, and who's got the hottest take.</div>`;
+    h += `<button id="crewPlayBtn" style="width:100%;margin-top:12px;font-size:16px;padding:14px;background:linear-gradient(90deg,var(--accent),var(--gold))">🗓️ Play today's Daily</button>`;
+    h += crewStandingsHtml(r);
+  } else {
+    let sup = "";
+    if(r.hottest_take) sup += `<div style="margin-top:6px">🌶️ Hottest take today: <b>${r.hottest_take.display_name}</b></div>`;
+    if(r.badge) sup += `<div style="margin-top:6px">${r.badge.label}: <b>${r.badge.display_name}</b></div>`;
+    if(sup) h += `<div class="card" style="margin-top:12px;background:var(--panel2);border-color:var(--accent)"><div style="font-weight:800">🏆 Today in the crew</div>${sup}</div>`;
+    else if(r.players_today<2) h += `<div class="note" style="margin-top:12px">Hottest take unlocks once at least 2 of you have played.</div>`;
+    h += `<button class="ghost" id="crewPlayBtn" style="margin-top:12px">✏️ Edit my board</button>`;
+    h += `<div style="font-weight:700;margin-top:18px">Everyone's boards <span class="note">· ${r.players_today} played</span></div>`;
+    h += r.members.filter(m=>m.played_today).map(m=>crewBoardHtml(m,r)).join("") || `<div class="note">No boards yet.</div>`;
+    h += crewStandingsHtml(r);
+  }
+  body.innerHTML = h;
+  const pb = $("crewPlayBtn"); if(pb) pb.onclick = ()=>crewPlayDaily(r.crew.id);
+  Array.from(body.querySelectorAll(".rxn")).forEach(b=>b.onclick=async()=>{
+    b.disabled = true;
+    await api("crew_react", { crew_id: r.crew.id, tier_list_id: b.dataset.b, emoji: b.dataset.e });
+    openCrew(r.crew.id);
+  });
+}
+
 // ------------------------------------------------------------------ boot
 renderStreak();
 loadSheets();
@@ -1292,6 +1462,14 @@ $("playerName").value = store.get("mp_name","");
 // ------------------------------------------------------------------ service worker
 if("serviceWorker" in navigator){
   window.addEventListener("load", ()=>navigator.serviceWorker.register("service-worker.js").catch(()=>{}));
+}
+
+// crews: restore session + handle magic-link return
+if(SB){
+  SB.auth.onAuthStateChange((_e, session)=>{ AUTH.session = session; AUTH.user = session?.user ?? null; });
+  refreshAuth().then(()=>{
+    if(location.hash.includes("access_token")){ history.replaceState(null, "", location.pathname); openCrewHome(); }
+  });
 }
 </script>
 </body>
