@@ -1,260 +1,15 @@
-// =============================================================================
-// Async multiplayer mode for the NBA Top-8 list game.
-// Single server-authoritative edge function with an action router.
-//
-// Why a single function: keeps one public URL and shared helpers. Every action
-// runs with the service role, so it (and only it) can read the frozen answer
-// set. Clients never touch the mp_* tables directly (RLS deny-all), which is
-// what keeps the answers — and each opponent's result — hidden until allowed.
-//
-// Actions (POST JSON { action, ... }):
-//   sheets   -> list the available Top-8 categories (no answers)
-//   create   -> create a duel/competition from a category; returns share_token
-//   open     -> peek a challenge by share_token (prompt + rules, NO answers)
-//   start    -> join (if needed) + start the server clock for this player
-//   guess    -> submit one guess; validated + timed on the server
-//   results  -> head-to-head / leaderboard (only once the caller has finished)
-//
-// Timing is server-authoritative: started_at / finished_at / elapsed are set
-// from the server clock inside `start` and `guess`; the client cannot supply
-// or alter them.
-// =============================================================================
-
-import { createClient } from "jsr:@supabase/supabase-js@2";
-
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-const db = createClient(SUPABASE_URL, SERVICE_KEY, {
-  auth: { persistSession: false, autoRefreshToken: false },
-});
-
-const CORS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
-
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...CORS, "Content-Type": "application/json" },
-  });
-}
-const ok = (b: Record<string, unknown> = {}) => json({ ok: true, ...b });
-const err = (msg: string, status = 400, extra: Record<string, unknown> = {}) =>
-  json({ ok: false, error: msg, ...extra }, status);
-
-// Name normalizer — must stay in sync with public.mp_normalize in SQL:
-// accent-fold, lowercase, keep alphanumerics only.
-function normalize(s: string): string {
-  return (s ?? "")
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, "");
-}
-
-function randomToken(bytes = 16): string {
-  const a = new Uint8Array(bytes);
-  crypto.getRandomValues(a);
-  return Array.from(a, (b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-// Pull an authenticated user id out of the caller's JWT, if present.
-// The public anon key has role "anon" (=> no user). A logged-in Supabase user
-// token has role "authenticated" and sub = user id.
-function authedUserId(req: Request): string | null {
-  const auth = req.headers.get("authorization") ?? "";
-  const t = auth.replace(/^Bearer\s+/i, "");
-  const parts = t.split(".");
-  if (parts.length !== 3) return null;
-  try {
-    const payload = JSON.parse(
-      atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")),
-    );
-    return payload?.role === "authenticated" && payload?.sub ? payload.sub : null;
-  } catch {
-    return null;
-  }
-}
-
-type SnapshotSlot = {
-  slot: number;
-  display_name: string;
-  canonical_key: string;
-  context_label: string | null;
-  accepted: string[]; // normalized accepted aliases
-};
-
-// Build the frozen answer snapshot for a sheet from perfect_sheet_answers +
-// aliases. This is stored on the challenge so the game is reproducible and the
-// answer set is fixed even if the sheet is later edited.
-async function buildSnapshot(sheetId: string): Promise<SnapshotSlot[]> {
-  const { data: answers, error: aErr } = await db
-    .from("perfect_sheet_answers")
-    .select("id, canonical_player_key, display_name, sort_order, metadata")
-    .eq("sheet_id", sheetId)
-    .order("sort_order", { ascending: true });
-  if (aErr) throw aErr;
-
-  const ids = (answers ?? []).map((a) => a.id);
-  const { data: aliases, error: alErr } = await db
-    .from("perfect_sheet_answer_aliases")
-    .select("answer_id, alias, alias_normalized")
-    .in("answer_id", ids.length ? ids : ["00000000-0000-0000-0000-000000000000"]);
-  if (alErr) throw alErr;
-
-  const byAnswer = new Map<string, Set<string>>();
-  for (const a of answers ?? []) {
-    // seed accepted with the display name itself
-    byAnswer.set(a.id, new Set<string>([normalize(a.display_name)]));
-  }
-  for (const al of aliases ?? []) {
-    const set = byAnswer.get(al.answer_id);
-    if (!set) continue;
-    if (al.alias_normalized) set.add(al.alias_normalized);
-    if (al.alias) set.add(normalize(al.alias));
-  }
-
-  return (answers ?? []).map((a) => ({
-    slot: a.sort_order,
-    display_name: a.display_name,
-    canonical_key: a.canonical_player_key,
-    context_label: (a.metadata as Record<string, unknown>)?.context_label as
-      | string
-      | null ?? null,
-    accepted: Array.from(byAnswer.get(a.id) ?? []).filter(Boolean),
-  }));
-}
-
-// Reveal list (display names + context) — safe to send once a player's own
-// game is over. Never includes opponent data.
-function revealedAnswers(snapshot: SnapshotSlot[]) {
-  return snapshot
-    .slice()
-    .sort((x, y) => x.slot - y.slot)
-    .map((s) => ({
-      slot: s.slot,
-      display_name: s.display_name,
-      context_label: s.context_label,
-    }));
-}
-
-// Head-to-head / per-challenge ordering:
-//  1) finishers (completed) before non-finishers
-//  2) finishers: faster ranking_time first
-//  3) non-finishers: more correct first, then faster time-to-that-score
-function rankCompare(a: any, b: any): number {
-  const ac = a.status === "completed" ? 1 : 0;
-  const bc = b.status === "completed" ? 1 : 0;
-  if (ac !== bc) return bc - ac;
-  if (ac === 1) {
-    return (a.ranking_time_ms ?? 1e15) - (b.ranking_time_ms ?? 1e15);
-  }
-  if ((b.correct_count ?? 0) !== (a.correct_count ?? 0)) {
-    return (b.correct_count ?? 0) - (a.correct_count ?? 0);
-  }
-  return (a.ranking_time_ms ?? 1e15) - (b.ranking_time_ms ?? 1e15);
-}
-
-// Global leaderboard ordering: completions ranked by *completion time* first,
-// then everyone else by correct count and time-to-score.
-function leaderboardCompare(a: any, b: any): number {
-  const ac = a.status === "completed" ? 1 : 0;
-  const bc = b.status === "completed" ? 1 : 0;
-  if (ac !== bc) return bc - ac;
-  if (ac === 1) return (a.elapsed_ms ?? 1e15) - (b.elapsed_ms ?? 1e15);
-  if ((b.correct_count ?? 0) !== (a.correct_count ?? 0)) {
-    return (b.correct_count ?? 0) - (a.correct_count ?? 0);
-  }
-  return (a.ranking_time_ms ?? 1e15) - (b.ranking_time_ms ?? 1e15);
-}
-
-const isBotClient = (cid: string | null) => !!cid && cid.startsWith("bot_");
-
-// ---------------------------------------------------------------------------
-// Computer opponent. Simulates an attempt against the frozen snapshot: knows
-// each answer with a difficulty-dependent probability, fills what it knows at
-// randomized human-like speeds, and either completes or strikes out. Timing is
-// still server-real (finished a few seconds "ago"), so it slots straight into
-// the same ranking + head-to-head logic as a human.
-const BOT_PRESETS: Record<string, {p:number;min:number;max:number;label:string}> = {
-  easy:   { p: 0.60, min: 4000, max: 11000, label: "Rookie" },
-  medium: { p: 0.78, min: 3000, max: 7000,  label: "Starter" },
-  hard:   { p: 0.92, min: 1800, max: 4500,  label: "All-Star" },
-};
-
-function simulateBot(snapshot: SnapshotSlot[], target: number, strikeLimit: number, difficulty: string) {
-  const cfg = BOT_PRESETS[difficulty] ?? BOT_PRESETS.medium;
-  const rt = (n: number) => Math.floor(Math.random() * n);
-  const order = snapshot.slice().sort(() => Math.random() - 0.5);
-  let known = order.filter(() => Math.random() < cfg.p);
-  if (known.length === 0) known = [order[0]];           // always know at least one
-
-  const filled: Record<string, unknown> = {};
-  const guesses: any[] = [];
-  let t = 0, correct = 0, lastCorrect = 0;
-  for (const s of known) {
-    if (correct >= target) break;
-    t += cfg.min + rt(cfg.max - cfg.min);
-    filled[String(s.slot)] = { name: s.display_name, at_ms: t };
-    guesses.push({ seq: guesses.length + 1, at_ms: t, raw: s.display_name, normalized: s.accepted[0] ?? "", result: "correct", slot: s.slot });
-    correct++; lastCorrect = t;
-  }
-
-  let status: string, strikes: number, rankingTime: number, elapsed: number;
-  if (correct >= target) {
-    status = "completed"; strikes = Math.random() < 0.5 ? 0 : 1; rankingTime = t; elapsed = t;
-  } else {
-    status = "eliminated"; strikes = strikeLimit; rankingTime = lastCorrect;
-    let st = t;
-    for (let i = 0; i < strikeLimit; i++) {
-      st += cfg.min + rt(cfg.max - cfg.min);
-      guesses.push({ seq: guesses.length + 1, at_ms: st, raw: "(guess)", normalized: "", result: "strike", slot: null });
-    }
-    elapsed = st;
-  }
-  const now = Date.now();
-  return {
-    label: cfg.label,
-    correct_count: correct, strikes, status,
-    filled_slots: filled, guesses,
-    started_at: new Date(now - elapsed).toISOString(),
-    last_correct_at: new Date(now - elapsed + lastCorrect).toISOString(),
-    finished_at: new Date(now).toISOString(),
-    elapsed_ms: elapsed, ranking_time_ms: rankingTime,
-  };
-}
-
-async function insertBot(challengeId: string, mode: string, snapshot: SnapshotSlot[],
-                         target: number, strikeLimit: number, difficulty: string) {
-  const sim = simulateBot(snapshot, target, strikeLimit, difficulty);
-  await db.from("mp_attempts").insert({
-    challenge_id: challengeId,
-    role: mode === "duel" ? "opponent" : "participant",
-    player_client_id: "bot_" + randomToken(6),
-    player_label: `Computer (${sim.label})`,
-    status: sim.status,
-    correct_count: sim.correct_count,
-    strikes: sim.strikes,
-    filled_slots: sim.filled_slots,
-    guesses: sim.guesses,
-    started_at: sim.started_at,
-    finished_at: sim.finished_at,
-    last_correct_at: sim.last_correct_at,
-    elapsed_ms: sim.elapsed_ms,
-    ranking_time_ms: sim.ranking_time_ms,
-  });
-  return sim.label;
-}
+import {
+  db, ok, err, authedUserId, normalize, randomToken,
+  buildSnapshot, revealedAnswers, strikeContext, rankCompare, leaderboardCompare, isBotClient,
+  ARENA_POOL, TEAM_POOL, insertBot, insertRosterBot, loadRosterPool, rosterReveal, RARITY_LABEL,
+} from "./shared.ts";
+import type { SnapshotSlot, PoolEntry } from "./shared.ts";
 
 // -----------------------------------------------------------------------------
 // Action handlers
 // -----------------------------------------------------------------------------
 
-async function actionSheets() {
+export async function actionSheets() {
   const { data, error } = await db
     .from("perfect_sheets")
     .select("id, prompt, difficulty, answer_count, source_kind")
@@ -262,17 +17,76 @@ async function actionSheets() {
     .eq("answer_count", 8)
     .order("difficulty", { ascending: true });
   if (error) return err(error.message, 500);
+  const top8 = (data ?? []).map((s) => ({ id: s.id, kind: "top8", prompt: s.prompt, difficulty: s.difficulty, answer_target: s.answer_count }));
+
+  const { data: rosters } = await db
+    .from("mp_roster_sheets")
+    .select("id, prompt, difficulty, target")
+    .eq("status", "approved")
+    .order("difficulty", { ascending: true });
+  const roster = (rosters ?? []).map((s) => ({ id: s.id, kind: "roster", prompt: s.prompt, difficulty: s.difficulty, answer_target: s.target }));
+
+  return ok({ sheets: [...top8, ...roster] });
+}
+
+// Create a roster challenge: freeze the eligible pool + rarity, target = "name N".
+export async function actionCreateRoster(req: Request, body: any) {
+  const userId = authedUserId(req);
+  const clientId: string | null = body.client_id ?? null;
+  if (!userId && !clientId) return err("identity_required", 400);
+  const mode = body.mode === "competition" ? "competition" : "duel";
+
+  let rid: string | null = body.sheet_id ?? null;
+  if (!rid) {
+    const { data: pool } = await db.from("mp_roster_sheets").select("id").eq("status", "approved");
+    if (!pool || pool.length === 0) return err("no_categories_available", 404);
+    rid = pool[Math.floor(Math.random() * pool.length)].id;
+  }
+  const { data: sheet, error: sErr } = await db.from("mp_roster_sheets").select("id, prompt, target").eq("id", rid).single();
+  if (sErr || !sheet) return err("category_not_found", 404);
+
+  const pool = await loadRosterPool(sheet.id);
+  if (pool.length < sheet.target) return err("category_incomplete", 500);
+
+  const strikeLimit = Number.isFinite(body.strike_limit) ? Math.max(1, Math.floor(body.strike_limit)) : 3;
+  const requireAuth = body.require_auth === true;
+  const expiresDays = Number.isFinite(body.expires_in_days) ? Math.max(1, Math.floor(body.expires_in_days)) : 30;
+  const maxParticipants = mode === "duel" ? 2 : (Number.isFinite(body.max_participants) ? Math.max(2, Math.floor(body.max_participants)) : null);
+  if (requireAuth && !userId) return err("auth_required_for_this_challenge", 401);
+
+  const shareToken = randomToken(9);
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + expiresDays * 86400000);
+
+  const { data: challenge, error: cErr } = await db.from("mp_challenges").insert({
+    share_token: shareToken, kind: "roster", roster_sheet_id: sheet.id, sheet_id: null, mode, status: "open",
+    prompt: sheet.prompt, answer_target: sheet.target, question_version: 1, answers_snapshot: pool,
+    strike_limit: strikeLimit, rules: { strike_limit: strikeLimit, answer_target: sheet.target, mode, kind: "roster" },
+    max_participants: maxParticipants, require_auth: requireAuth,
+    creator_client_id: clientId, creator_user_id: userId, creator_label: body.label ?? "Player A", expires_at: expiresAt.toISOString(),
+  }).select("id, share_token, prompt, answer_target, strike_limit, mode, expires_at").single();
+  if (cErr) return err(cErr.message, 500);
+
+  const { data: attempt, error: atErr } = await db.from("mp_attempts").insert({
+    challenge_id: challenge.id, role: "creator", player_client_id: clientId, player_user_id: userId, player_label: body.label ?? "Player A",
+  }).select("id, attempt_token").single();
+  if (atErr) return err(atErr.message, 500);
+
+  let botLabel: string | null = null;
+  if (body.vs === "computer") {
+    const diff = ["easy", "medium", "hard"].includes(body.bot_difficulty) ? body.bot_difficulty : "medium";
+    botLabel = await insertRosterBot(challenge.id, challenge.mode, pool, challenge.answer_target, strikeLimit, diff);
+  }
+
   return ok({
-    sheets: (data ?? []).map((s) => ({
-      id: s.id,
-      prompt: s.prompt,
-      difficulty: s.difficulty,
-      answer_target: s.answer_count,
-    })),
+    challenge_id: challenge.id, share_token: challenge.share_token, attempt_id: attempt.id, attempt_token: attempt.attempt_token,
+    prompt: challenge.prompt, answer_target: challenge.answer_target, strike_limit: challenge.strike_limit, mode: challenge.mode,
+    kind: "roster", expires_at: challenge.expires_at, has_bot: !!botLabel, bot_label: botLabel,
   });
 }
 
-async function actionCreate(req: Request, body: any) {
+export async function actionCreate(req: Request, body: any) {
+  if (body.kind === "roster") return await actionCreateRoster(req, body);
   const userId = authedUserId(req);
   const clientId: string | null = body.client_id ?? null;
   if (!userId && !clientId) {
@@ -388,7 +202,7 @@ async function actionCreate(req: Request, body: any) {
 
 // Add a computer opponent to an existing challenge (e.g. from a rematch or if
 // the human wants a bot to race). Returns only the label, never the bot result.
-async function actionAddBot(_req: Request, body: any) {
+export async function actionAddBot(_req: Request, body: any) {
   const { challenge, error: cErr } = await loadChallenge(body);
   if (cErr) return err(cErr, 404);
   const diff = ["easy", "medium", "hard"].includes(body.bot_difficulty) ? body.bot_difficulty : "medium";
@@ -398,6 +212,11 @@ async function actionAddBot(_req: Request, body: any) {
   if (challenge.max_participants != null && (attempts?.length ?? 0) >= challenge.max_participants) {
     return err("challenge_full", 409);
   }
+  if (challenge.kind === "roster") {
+    const pool = await loadRosterPool(challenge.roster_sheet_id);
+    const rlabel = await insertRosterBot(challenge.id, challenge.mode, pool, challenge.answer_target, challenge.strike_limit, diff);
+    return ok({ bot_added: true, bot_label: rlabel });
+  }
   const label = await insertBot(
     challenge.id, challenge.mode, challenge.answers_snapshot as SnapshotSlot[],
     challenge.answer_target, challenge.strike_limit, diff,
@@ -405,7 +224,7 @@ async function actionAddBot(_req: Request, body: any) {
   return ok({ bot_added: true, bot_label: label });
 }
 
-async function loadChallenge(body: any) {
+export async function loadChallenge(body: any) {
   let q = db.from("mp_challenges").select("*");
   if (body.challenge_id) q = q.eq("id", body.challenge_id);
   else if (body.share_token) q = q.eq("share_token", body.share_token);
@@ -415,7 +234,7 @@ async function loadChallenge(body: any) {
   return { challenge: data, error: null };
 }
 
-async function actionOpen(req: Request, body: any) {
+export async function actionOpen(req: Request, body: any) {
   const { challenge, error: cErr } = await loadChallenge(body);
   if (cErr) return err(cErr, 404);
 
@@ -442,6 +261,7 @@ async function actionOpen(req: Request, body: any) {
       answer_target: challenge.answer_target,
       strike_limit: challenge.strike_limit,
       mode: challenge.mode,
+      kind: challenge.kind ?? "top8",
       status: challenge.status,
       require_auth: challenge.require_auth,
       max_participants: challenge.max_participants,
@@ -462,7 +282,7 @@ async function actionOpen(req: Request, body: any) {
   });
 }
 
-async function actionStart(req: Request, body: any) {
+export async function actionStart(req: Request, body: any) {
   const { challenge, error: cErr } = await loadChallenge(body);
   if (cErr) return err(cErr, 404);
 
@@ -557,6 +377,7 @@ async function actionStart(req: Request, body: any) {
     answer_target: challenge.answer_target,
     strike_limit: challenge.strike_limit,
     mode: challenge.mode,
+    kind: challenge.kind ?? "top8",
     status: mine.status,
     started_at: mine.started_at,
     correct_count: mine.correct_count ?? 0,
@@ -565,7 +386,7 @@ async function actionStart(req: Request, body: any) {
   });
 }
 
-async function actionGuess(_req: Request, body: any) {
+export async function actionGuess(_req: Request, body: any) {
   const attemptId = body.attempt_id;
   const attemptToken = body.attempt_token;
   const rawGuess: string = body.guess ?? "";
@@ -628,16 +449,14 @@ async function actionGuess(_req: Request, body: any) {
   const startedMs = new Date(startedAt).getTime();
   const atMs = now.getTime() - startedMs;
 
-  const snapshot = challenge.answers_snapshot as SnapshotSlot[];
+  const isRoster = challenge.kind === "roster";
+  const snapshot = challenge.answers_snapshot as any[];
   const filled = { ...(attempt.filled_slots as Record<string, any>) };
   const guesses = [...(attempt.guesses as any[])];
   const norm = normalize(rawGuess);
-
   if (!norm) return err("empty_guess", 400);
 
-  // has this normalized string already been used (right or wrong)?
   const priorNorms = new Set(guesses.map((g) => g.normalized));
-
   let correctCount = attempt.correct_count;
   let strikes = attempt.strikes;
   let lastCorrectAt = attempt.last_correct_at;
@@ -645,84 +464,87 @@ async function actionGuess(_req: Request, body: any) {
   let matchedSlot: number | null = null;
   let matchedName: string | null = null;
   let matchedContext: string | null = null;
+  let rarityInfo: any = null;
 
-  const hit = snapshot.find((s) => s.accepted.includes(norm));
-  if (hit) {
-    if (filled[String(hit.slot)]) {
-      result = "duplicate"; // already found this one — no penalty
-      matchedSlot = hit.slot;
-      matchedName = hit.display_name;
+  if (isRoster) {
+    // pool game: any un-used pool member fills the next open slot (1..target)
+    const usedKeys = new Set(Object.values(filled).map((f: any) => f.player_key));
+    const hit = (snapshot as PoolEntry[]).find((p) => p.accepted.includes(norm));
+    if (hit) {
+      if (usedKeys.has(hit.player_key)) {
+        result = "duplicate"; matchedName = hit.display_name;
+      } else {
+        result = "correct"; matchedName = hit.display_name;
+        let slot = 1; while (filled[String(slot)]) slot++;
+        matchedSlot = slot;
+        matchedContext = RARITY_LABEL[hit.rarity_tier] ?? hit.rarity_tier;
+        filled[String(slot)] = { name: hit.display_name, player_key: hit.player_key, at_ms: atMs, rarity_tier: hit.rarity_tier };
+        correctCount += 1; lastCorrectAt = now.toISOString();
+        // live crowd pick-rate (once enough games have been played)
+        let pickPct: number | null = null;
+        try {
+          const { data: bp } = await db.rpc("mp_roster_bump_pick", { p_sheet: challenge.roster_sheet_id, p_player: hit.player_key });
+          const rowp = Array.isArray(bp) ? bp[0] : bp;
+          if (rowp && rowp.plays >= 15) pickPct = Math.max(1, Math.min(100, Math.round((rowp.picks * 100) / rowp.plays)));
+        } catch { /* pick tracking is best-effort */ }
+        rarityInfo = { rarity_tier: hit.rarity_tier, rarity_label: RARITY_LABEL[hit.rarity_tier] ?? hit.rarity_tier, pick_pct: pickPct };
+      }
     } else {
-      result = "correct";
-      matchedSlot = hit.slot;
-      matchedName = hit.display_name;
-      matchedContext = hit.context_label;
-      filled[String(hit.slot)] = { name: hit.display_name, at_ms: atMs };
-      correctCount += 1;
-      lastCorrectAt = now.toISOString();
+      if (priorNorms.has(norm)) result = "duplicate";
+      else { result = "strike"; strikes += 1; }
     }
   } else {
-    if (priorNorms.has(norm)) {
-      result = "duplicate"; // repeated wrong guess — don't double-penalize
+    const hit = (snapshot as SnapshotSlot[]).find((s) => s.accepted.includes(norm));
+    if (hit) {
+      if (filled[String(hit.slot)]) { result = "duplicate"; matchedSlot = hit.slot; matchedName = hit.display_name; }
+      else {
+        result = "correct"; matchedSlot = hit.slot; matchedName = hit.display_name; matchedContext = hit.context_label;
+        filled[String(hit.slot)] = { name: hit.display_name, at_ms: atMs };
+        correctCount += 1; lastCorrectAt = now.toISOString();
+      }
     } else {
-      result = "strike";
-      strikes += 1;
+      if (priorNorms.has(norm)) result = "duplicate";
+      else { result = "strike"; strikes += 1; }
     }
   }
 
-  guesses.push({
-    seq: guesses.length + 1,
-    at_ms: atMs,
-    raw: rawGuess,
-    normalized: norm,
-    result,
-    slot: matchedSlot,
-  });
+  guesses.push({ seq: guesses.length + 1, at_ms: atMs, raw: rawGuess, normalized: norm, result, slot: matchedSlot });
 
-  // resolve terminal states
   let status = attempt.status;
   let finishedAt: string | null = null;
   let elapsedMs: number | null = null;
   let rankingTimeMs: number | null = null;
-
   if (result === "correct" && correctCount >= challenge.answer_target) {
-    status = "completed";
-    finishedAt = now.toISOString();
-    elapsedMs = atMs;
-    rankingTimeMs = atMs;
+    status = "completed"; finishedAt = now.toISOString(); elapsedMs = atMs; rankingTimeMs = atMs;
   } else if (result === "strike" && strikes >= challenge.strike_limit) {
-    status = "eliminated";
-    finishedAt = now.toISOString();
-    elapsedMs = atMs;
-    rankingTimeMs = lastCorrectAt
-      ? new Date(lastCorrectAt).getTime() - startedMs
-      : 0;
+    status = "eliminated"; finishedAt = now.toISOString(); elapsedMs = atMs;
+    rankingTimeMs = lastCorrectAt ? new Date(lastCorrectAt).getTime() - startedMs : 0;
   }
 
   const patch: Record<string, unknown> = {
-    started_at: startedAt,
-    correct_count: correctCount,
-    strikes,
-    filled_slots: filled,
-    guesses,
-    last_correct_at: lastCorrectAt,
-    status,
-    updated_at: now.toISOString(),
+    started_at: startedAt, correct_count: correctCount, strikes, filled_slots: filled, guesses,
+    last_correct_at: lastCorrectAt, status, updated_at: now.toISOString(),
   };
-  if (finishedAt) {
-    patch.finished_at = finishedAt;
-    patch.elapsed_ms = elapsedMs;
-    patch.ranking_time_ms = rankingTimeMs;
-  }
+  if (finishedAt) { patch.finished_at = finishedAt; patch.elapsed_ms = elapsedMs; patch.ranking_time_ms = rankingTimeMs; }
   const { error: uErr } = await db.from("mp_attempts").update(patch).eq("id", attempt.id);
   if (uErr) return err(uErr.message, 500);
 
   const finished = status !== "in_progress";
+  if (isRoster && finished && challenge.roster_sheet_id) {
+    try { await db.rpc("mp_roster_bump_play", { p_sheet: challenge.roster_sheet_id }); } catch { /* best-effort */ }
+  }
+
+  // near-miss context (top8 metric categories only)
+  const guessInfo = (!isRoster && result === "strike") ? await strikeContext(challenge, rawGuess) : null;
+  const reveal = finished ? (isRoster ? rosterReveal(snapshot as PoolEntry[]) : revealedAnswers(snapshot as SnapshotSlot[])) : undefined;
+
   return ok({
     result,
     slot: matchedSlot,
     display_name: result === "correct" ? matchedName : undefined,
     context_label: result === "correct" ? matchedContext : undefined,
+    guess_info: guessInfo ?? undefined,
+    rarity: rarityInfo ?? undefined,
     correct_count: correctCount,
     strikes,
     strikes_remaining: challenge.strike_limit - strikes,
@@ -733,12 +555,11 @@ async function actionGuess(_req: Request, body: any) {
     finished,
     elapsed_ms: elapsedMs ?? undefined,
     ranking_time_ms: rankingTimeMs ?? undefined,
-    // once your own game is over, reveal the full answer list (never opponents)
-    revealed_answers: finished ? revealedAnswers(snapshot) : undefined,
+    revealed_answers: reveal,
   });
 }
 
-async function actionResults(_req: Request, body: any) {
+export async function actionResults(_req: Request, body: any) {
   const { challenge, error: cErr } = await loadChallenge(body);
   if (cErr) return err(cErr, 404);
 
@@ -796,7 +617,10 @@ async function actionResults(_req: Request, body: any) {
     }
   }
 
-  const snapshot = challenge.answers_snapshot as SnapshotSlot[];
+  const snapshot = challenge.answers_snapshot as any[];
+  const reveal = challenge.kind === "roster"
+    ? rosterReveal(snapshot as PoolEntry[])
+    : revealedAnswers(snapshot as SnapshotSlot[]);
 
   const participants = ranked.map((a) => {
     const isRequester = a.id === reqAttempt.id;
@@ -830,6 +654,7 @@ async function actionResults(_req: Request, body: any) {
   return ok({
     challenge_id: challenge.id,
     mode: challenge.mode,
+    kind: challenge.kind ?? "top8",
     status: challenge.status,
     prompt: challenge.prompt,
     answer_target: challenge.answer_target,
@@ -838,14 +663,14 @@ async function actionResults(_req: Request, body: any) {
     winner,
     participants,
     your_attempt_id: reqAttempt.id,
-    revealed_answers: revealedAnswers(snapshot),
+    revealed_answers: reveal,
   });
 }
 
 // Global / per-category leaderboard. Ranks finished attempts by completion then
 // completion time. Only ever exposes finished attempts (never in-progress, so no
 // live game is leaked), aggregate stats only (labels + times, never answers).
-async function actionLeaderboard(req: Request, body: any) {
+export async function actionLeaderboard(req: Request, body: any) {
   const userId = authedUserId(req);
   const clientId: string | null = body.client_id ?? null;
   const includeBots = body.include_bots === true;
@@ -853,12 +678,12 @@ async function actionLeaderboard(req: Request, body: any) {
 
   const { data, error } = await db
     .from("mp_attempts")
-    .select("id, player_label, player_client_id, player_user_id, status, correct_count, strikes, elapsed_ms, ranking_time_ms, finished_at, challenge:mp_challenges!inner(prompt, sheet_id, answer_target)")
+    .select("id, player_label, player_client_id, player_user_id, status, correct_count, strikes, elapsed_ms, ranking_time_ms, finished_at, challenge:mp_challenges!inner(prompt, sheet_id, roster_sheet_id, answer_target)")
     .in("status", ["completed", "eliminated", "expired"]);
   if (error) return err(error.message, 500);
 
   let rows = (data ?? []).filter((r: any) => r.finished_at);
-  if (body.sheet_id) rows = rows.filter((r: any) => r.challenge?.sheet_id === body.sheet_id);
+  if (body.sheet_id) rows = rows.filter((r: any) => r.challenge?.sheet_id === body.sheet_id || r.challenge?.roster_sheet_id === body.sheet_id);
   if (!includeBots) rows = rows.filter((r: any) => !isBotClient(r.player_client_id));
 
   rows.sort(leaderboardCompare);
@@ -880,42 +705,80 @@ async function actionLeaderboard(req: Request, body: any) {
   return ok({ scope: body.sheet_id ? "category" : "global", count: rows.length, entries: top });
 }
 
-// -----------------------------------------------------------------------------
-// Router
-// -----------------------------------------------------------------------------
-Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
-  if (req.method !== "POST") return err("method_not_allowed", 405);
+// Typeahead pool for a challenge's category. Returns the guessable universe
+// (all notable players, or all arenas) — never the answer set — so the client
+// can render an autocomplete without leaking which names are correct.
+// broad player universe — shared by roster games and subjective lists
+export async function playerPool() {
+  const { data, error } = await db
+    .from("vw_trivia_player_career_summary")
+    .select("player_name, games_played")
+    .eq("season_type", "REGULAR")
+    .order("games_played", { ascending: false })
+    .limit(5000);
+  if (error) return err(error.message, 500);
+  const seen = new Set<string>();
+  const names: string[] = [];
+  for (const r of data ?? []) { if (r.player_name && !seen.has(r.player_name)) { seen.add(r.player_name); names.push(r.player_name); } }
+  return ok({ type: "player", items: names });
+}
 
-  let body: any;
-  try {
-    body = await req.json();
-  } catch {
-    return err("invalid_json", 400);
+export async function actionSuggest(_req: Request, body: any) {
+  if (body.pool === "players") return await playerPool();   // challenge-less (lists)
+  if (body.pool === "teams") return ok({ type: "team", items: TEAM_POOL });
+  let sheetId: string | null = body.sheet_id ?? null;
+  let kind = "top8";
+  if (body.challenge_id || body.share_token) {
+    const { challenge } = await loadChallenge(body);
+    if (challenge) { kind = challenge.kind ?? "top8"; if (!sheetId) sheetId = challenge.sheet_id; }
   }
 
-  try {
-    switch (body.action) {
-      case "sheets":
-        return await actionSheets();
-      case "create":
-        return await actionCreate(req, body);
-      case "open":
-        return await actionOpen(req, body);
-      case "start":
-        return await actionStart(req, body);
-      case "guess":
-        return await actionGuess(req, body);
-      case "results":
-        return await actionResults(req, body);
-      case "add_bot":
-        return await actionAddBot(req, body);
-      case "leaderboard":
-        return await actionLeaderboard(req, body);
-      default:
-        return err("unknown_action", 400);
+  // Roster: broad player universe (never the eligible pool — that would leak
+  // the answers). Wide net so obscure but valid picks can still be typed.
+  if (kind === "roster") {
+    const { data, error } = await db
+      .from("vw_trivia_player_career_summary")
+      .select("player_name, games_played")
+      .eq("season_type", "REGULAR")
+      .order("games_played", { ascending: false })
+      .limit(5000);
+    if (error) return err(error.message, 500);
+    const seen = new Set<string>();
+    const names: string[] = [];
+    for (const r of data ?? []) { if (r.player_name && !seen.has(r.player_name)) { seen.add(r.player_name); names.push(r.player_name); } }
+    return ok({ type: "player", items: names });
+  }
+
+  if (!sheetId) return err("missing_sheet_ref", 400);
+
+  const { data: sheet } = await db
+    .from("perfect_sheets")
+    .select("source_params")
+    .eq("id", sheetId)
+    .single();
+  const metric = (sheet?.source_params as Record<string, unknown> | null)?.metric;
+
+  if (metric === "arenacapacity") {
+    return ok({ type: "arena", items: ARENA_POOL });
+  }
+
+  // player categories: notable players from the public career-summary view
+  const { data, error } = await db
+    .from("vw_trivia_player_career_summary")
+    .select("player_name, career_points")
+    .eq("season_type", "REGULAR")
+    .order("career_points", { ascending: false })
+    .limit(6000);   // broad autocomplete: every rostered player is typeable (was 1500, which hid role players)
+  if (error) return err(error.message, 500);
+
+  const seen = new Set<string>();
+  const names: string[] = [];
+  for (const r of data ?? []) {
+    if (r.player_name && !seen.has(r.player_name)) {
+      seen.add(r.player_name);
+      names.push(r.player_name);
     }
-  } catch (e) {
-    return err(`server_error: ${e instanceof Error ? e.message : String(e)}`, 500);
   }
-});
+  return ok({ type: "player", items: names });
+}
+

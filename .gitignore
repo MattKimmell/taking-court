@@ -1,0 +1,8 @@
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+# FUSE mount artifacts (from the build sandbox)
+.fuse_hidden*
+# deps / logs / scratch
+node_modules/
+*.log
