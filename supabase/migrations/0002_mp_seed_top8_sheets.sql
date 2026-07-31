@@ -1,0 +1,24 @@
+-- =========================================================================
+-- 0002  Seed three real, DB-validated Top-8 Perfect Sheets (answer_count = 8).
+-- Values computed from public.vw_trivia_player_career_summary (regular season).
+-- Applied to project ubadgdkajflkmmbmgeov on 2026-07-21.
+-- See 0001 migration output in chat for the full statements; identical logic:
+--   - insert a perfect_sheets row (status 'approved', source_kind 'mp_seed_v1')
+--   - insert 8 perfect_sheet_answers (sort_order 1..8, canonical_player_key,
+--     display_name, metadata.context_label)
+--   - insert aliases: canonical full name + last name + curated nicknames,
+--     alias_normalized via public.mp_normalize()
+--
+-- Sheet 1  Most career games played:
+--   1 Robert Parish 2 LeBron James 3 Kareem Abdul-Jabbar 4 Vince Carter
+--   5 Dirk Nowitzki 6 John Stockton 7 Karl Malone 8 Kevin Garnett
+-- Sheet 2  Highest career PPG (min 100 g):
+--   1 Michael Jordan 2 Wilt Chamberlain 3 Joel Embiid 4 Elgin Baylor
+--   5 Kevin Durant 6 Jerry West 7 LeBron James 8 Allen Iverson
+-- Sheet 3  Most career points:
+--   1 LeBron James 2 Kareem Abdul-Jabbar 3 Karl Malone 4 Kobe Bryant
+--   5 Michael Jordan 6 Kevin Durant 7 Dirk Nowitzki 8 Wilt Chamberlain
+-- =========================================================================
+-- (Full INSERT statements were applied via the Supabase migration tool.
+--  Re-seeding is idempotent-safe to skip; delete rows where
+--  source_kind = 'mp_seed_v1' to remove them.)

@@ -1,0 +1,26 @@
+-- =========================================================================
+-- 0003  Four more DB-validated Top-8 sheets (answer_count = 8), applied to
+-- project ubadgdkajflkmmbmgeov on 2026-07-21. Same insert pattern as 0002:
+-- perfect_sheets (status 'approved', source_kind 'mp_seed_v1') + 8 answers +
+-- aliases (canonical full name added automatically; extra aliases must NOT
+-- repeat it — there is a unique index on (answer_id, alias_normalized)).
+--
+-- Sheet 4  Most career rebounds (reg. season):
+--   1 Wilt Chamberlain 2 Bill Russell 3 Kareem Abdul-Jabbar 4 Elvin Hayes
+--   5 Moses Malone 6 Tim Duncan 7 Karl Malone 8 Robert Parish
+--   (note: "Malone" alias omitted — Karl & Moses both present)
+-- Sheet 5  Most career assists (reg. season):
+--   1 John Stockton 2 Chris Paul 3 Jason Kidd 4 LeBron James
+--   5 Steve Nash 6 Mark Jackson 7 Russell Westbrook 8 Magic Johnson
+-- Sheet 6  Most career blocks (reg. season):
+--   1 Hakeem Olajuwon 2 Dikembe Mutombo 3 Kareem Abdul-Jabbar 4 Mark Eaton
+--   5 Tim Duncan 6 David Robinson 7 Patrick Ewing 8 Shaquille O'Neal
+-- Sheet 7  Largest NBA arenas by capacity (nba_raw.team_details):
+--   1 United Center 2 Rocket Mortgage FieldHouse 3 Moda Center
+--   4 Madison Square Garden 5 Kaseya Center 6 Target Center
+--   7 American Airlines Center 8 Crypto.com Arena
+--   (arena answers accept arena name, team name(s) and city as aliases)
+-- =========================================================================
+-- Full INSERT statements were applied via the Supabase migration tool.
+-- Remove with:  delete from perfect_sheets where source_kind = 'mp_seed_v1';
+--               (delete child answers/aliases first if FKs do not cascade)

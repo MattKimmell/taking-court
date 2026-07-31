@@ -1,0 +1,6 @@
+# Supabase project config for Taking Court.
+# Used by the Supabase CLI (`supabase functions deploy`, `supabase link`).
+project_id = "ubadgdkajflkmmbmgeov"
+
+[functions.mp]
+verify_jwt = true
