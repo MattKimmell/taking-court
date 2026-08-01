@@ -5,6 +5,20 @@ import {
 } from "./shared.ts";
 import type { SnapshotSlot, PoolEntry } from "./shared.ts";
 
+// Fetch every row past PostgREST's 1000-row cap by paging. Used only for the
+// autocomplete player pools (the full guessable universe); the client fetches
+// these once per session and filters locally.
+async function pagedRows(build: () => any): Promise<any[]> {
+  const out: any[] = []; const size = 1000;
+  for (let from = 0; from < 30000; from += size) {
+    const { data, error } = await build().range(from, from + size - 1);
+    if (error || !data || data.length === 0) break;
+    out.push(...data);
+    if (data.length < size) break;
+  }
+  return out;
+}
+
 // -----------------------------------------------------------------------------
 // Action handlers
 // -----------------------------------------------------------------------------
@@ -710,16 +724,14 @@ export async function actionLeaderboard(req: Request, body: any) {
 // can render an autocomplete without leaking which names are correct.
 // broad player universe — shared by roster games and subjective lists
 export async function playerPool() {
-  const { data, error } = await db
+  const data = await pagedRows(() => db
     .from("vw_trivia_player_career_summary")
     .select("player_name, games_played")
     .eq("season_type", "REGULAR")
-    .order("games_played", { ascending: false })
-    .limit(5000);
-  if (error) return err(error.message, 500);
+    .order("games_played", { ascending: false }));
   const seen = new Set<string>();
   const names: string[] = [];
-  for (const r of data ?? []) { if (r.player_name && !seen.has(r.player_name)) { seen.add(r.player_name); names.push(r.player_name); } }
+  for (const r of data) { if (r.player_name && !seen.has(r.player_name)) { seen.add(r.player_name); names.push(r.player_name); } }
   return ok({ type: "player", items: names });
 }
 
@@ -736,16 +748,14 @@ export async function actionSuggest(_req: Request, body: any) {
   // Roster: broad player universe (never the eligible pool — that would leak
   // the answers). Wide net so obscure but valid picks can still be typed.
   if (kind === "roster") {
-    const { data, error } = await db
+    const data = await pagedRows(() => db
       .from("vw_trivia_player_career_summary")
       .select("player_name, games_played")
       .eq("season_type", "REGULAR")
-      .order("games_played", { ascending: false })
-      .limit(5000);
-    if (error) return err(error.message, 500);
+      .order("games_played", { ascending: false }));
     const seen = new Set<string>();
     const names: string[] = [];
-    for (const r of data ?? []) { if (r.player_name && !seen.has(r.player_name)) { seen.add(r.player_name); names.push(r.player_name); } }
+    for (const r of data) { if (r.player_name && !seen.has(r.player_name)) { seen.add(r.player_name); names.push(r.player_name); } }
     return ok({ type: "player", items: names });
   }
 
@@ -762,14 +772,13 @@ export async function actionSuggest(_req: Request, body: any) {
     return ok({ type: "arena", items: ARENA_POOL });
   }
 
-  // player categories: notable players from the public career-summary view
-  const { data, error } = await db
+  // player categories: notable players from the public career-summary view.
+  // Paged past PostgREST's 1000-row cap so every player is typeable.
+  const data = await pagedRows(() => db
     .from("vw_trivia_player_career_summary")
     .select("player_name, career_points")
     .eq("season_type", "REGULAR")
-    .order("career_points", { ascending: false })
-    .limit(6000);   // broad autocomplete: every rostered player is typeable (was 1500, which hid role players)
-  if (error) return err(error.message, 500);
+    .order("career_points", { ascending: false }));
 
   const seen = new Set<string>();
   const names: string[] = [];
