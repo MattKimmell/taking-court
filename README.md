@@ -22,6 +22,9 @@ consensus — runs server-side in a Supabase edge function, so the client is jus
 - **Rosters** — "name N players of position X who played for team Y" with rarity badges.
 - **Lists** — subjective, no-wrong-answer lists you make, share, and compare.
 
+Tier lists and Lists are private to their share link by default. Their creator can submit one for public
+**Browse**, where it appears only after review — approval gates discovery, never the share link.
+
 ## Project layout
 
 ```

@@ -41,11 +41,17 @@ export async function actionListCreate(req: Request, body: any) {
   const ranked = body.ranked !== false;
   const maxItems = Number.isFinite(body.max_items) ? Math.min(25, Math.max(1, Math.floor(body.max_items))) : 10;
   const entryType = ["player", "team", "coach", "moment"].includes(body.entry_type) ? body.entry_type : "player";
-  const visibility = body.visibility === "unlisted" ? "unlisted" : "public";
+  // Public browse is opt-in and moderated (migration 0016): submitting only
+  // queues the topic for review. Anything else — including an older cached
+  // client still sending `visibility` — stays link-only, so this fails closed.
+  const submitPublic = body.submit_public === true;
+  const visibility = submitPublic ? "public" : "unlisted";
   const { data: topic, error: tErr } = await db.from("mp_list_topics").insert({
     share_token: randomToken(9), prompt, ranked, max_items: maxItems, entry_type: entryType, visibility,
+    review_status: submitPublic ? "pending" : "unsubmitted",
+    submitted_at: submitPublic ? new Date().toISOString() : null,
     creator_client_id: clientId, creator_user_id: userId, creator_label: body.label ?? "Anonymous",
-  }).select("id, share_token, prompt, ranked, max_items, entry_type, visibility").single();
+  }).select("id, share_token, prompt, ranked, max_items, entry_type, visibility, review_status").single();
   if (tErr) return err(tErr.message, 500);
 
   let listId: string | null = null;
@@ -56,7 +62,7 @@ export async function actionListCreate(req: Request, body: any) {
     }).select("id").single();
     listId = list?.id ?? null;
   }
-  return ok({ topic_id: topic.id, share_token: topic.share_token, prompt: topic.prompt, ranked: topic.ranked, max_items: topic.max_items, entry_type: topic.entry_type, visibility: topic.visibility, list_id: listId });
+  return ok({ topic_id: topic.id, share_token: topic.share_token, prompt: topic.prompt, ranked: topic.ranked, max_items: topic.max_items, entry_type: topic.entry_type, visibility: topic.visibility, review_status: topic.review_status, list_id: listId });
 }
 
 export async function actionListSave(req: Request, body: any) {
@@ -89,9 +95,27 @@ export async function actionListOpen(req: Request, body: any) {
   const { data: lists } = await db.from("mp_lists").select("id, author_client_id, author_user_id, items, author_label").eq("topic_id", topic.id);
   const mine = (lists ?? []).find((l) => (userId && l.author_user_id === userId) || (clientId && l.author_client_id === clientId));
   return ok({
-    topic: { id: topic.id, share_token: topic.share_token, prompt: topic.prompt, ranked: topic.ranked, max_items: topic.max_items, entry_type: topic.entry_type ?? "player", visibility: topic.visibility ?? "public", author_count: (lists ?? []).length },
+    topic: { id: topic.id, share_token: topic.share_token, prompt: topic.prompt, ranked: topic.ranked, max_items: topic.max_items, entry_type: topic.entry_type ?? "player", visibility: topic.visibility ?? "unlisted", review_status: topic.review_status ?? "unsubmitted", is_creator: !!((userId && topic.creator_user_id === userId) || (clientId && topic.creator_client_id === clientId)), author_count: (lists ?? []).length },
     your_list: mine ? { id: mine.id, items: mine.items, author_label: mine.author_label } : null,
   });
+}
+
+// Creator opts an existing link-only topic into public browse. This only queues
+// it — a moderator still has to approve before it shows up in Browse.
+export async function actionListSubmit(req: Request, body: any) {
+  const { topic, error } = await loadTopic(body);
+  if (error) return err(error, 404);
+  const userId = authedUserId(req);
+  const clientId: string | null = body.client_id ?? null;
+  const isCreator = (userId && topic.creator_user_id === userId) || (clientId && topic.creator_client_id === clientId);
+  if (!isCreator) return err("only_creator_can_submit", 403);
+  const status = topic.review_status ?? "unsubmitted";
+  if (status === "approved" || status === "pending") return ok({ review_status: status, already: true });
+  if (status === "rejected") return err("submission_declined", 409);
+  await db.from("mp_list_topics").update({
+    visibility: "public", review_status: "pending", submitted_at: new Date().toISOString(),
+  }).eq("id", topic.id);
+  return ok({ review_status: "pending" });
 }
 
 export async function actionListCompare(req: Request, body: any) {
@@ -132,7 +156,7 @@ export async function actionListMine(req: Request, body: any) {
   const userId = authedUserId(req);
   const clientId: string | null = body.client_id ?? null;
   if (!userId && !clientId) return err("identity_required", 400);
-  let q = db.from("mp_lists").select("id, items, updated_at, topic:mp_list_topics!inner(id, share_token, prompt, ranked, max_items, entry_type)").order("updated_at", { ascending: false });
+  let q = db.from("mp_lists").select("id, items, updated_at, topic:mp_list_topics!inner(id, share_token, prompt, ranked, max_items, entry_type, review_status, creator_client_id, creator_user_id)").order("updated_at", { ascending: false });
   q = userId ? q.eq("author_user_id", userId) : q.eq("author_client_id", clientId);
   const { data, error } = await q;
   if (error) return err(error.message, 500);
@@ -140,15 +164,17 @@ export async function actionListMine(req: Request, body: any) {
     lists: (data ?? []).map((l: any) => ({
       list_id: l.id, item_count: (l.items ?? []).length, updated_at: l.updated_at,
       topic_id: l.topic?.id, share_token: l.topic?.share_token, prompt: l.topic?.prompt, ranked: l.topic?.ranked, max_items: l.topic?.max_items, entry_type: l.topic?.entry_type ?? "player",
+      review_status: l.topic?.review_status ?? "unsubmitted",
+      is_creator: !!((userId && l.topic?.creator_user_id === userId) || (clientId && l.topic?.creator_client_id === clientId)),
     })),
   });
 }
 
-// Public discovery: recent public topics, ranked by how many people have listed.
+// Public discovery: approved topics only, ranked by how many people have listed.
 export async function actionListBrowse(_req: Request, _body: any) {
   const { data: topics } = await db.from("mp_list_topics")
     .select("id, share_token, prompt, ranked, entry_type, created_at")
-    .eq("visibility", "public")
+    .eq("review_status", "approved")
     .order("created_at", { ascending: false })
     .limit(60);
   const ids = (topics ?? []).map((t) => t.id);

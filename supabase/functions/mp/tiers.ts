@@ -22,17 +22,41 @@ export async function actionTierCreate(req: Request, body: any) {
   const source = ["star_players", "all_teams", "champion_teams", "notable_coaches"].includes(body.pool_source) ? body.pool_source : "star_players";
   const itemType = POOL_TYPE[source];
   const drawSize = Number.isFinite(body.draw_size) ? Math.min(16, Math.max(4, Math.floor(body.draw_size))) : 8;
-  const visibility = body.visibility === "unlisted" ? "unlisted" : "public";
+  // Opt-in + moderated (migration 0016); an older cached client sending
+  // `visibility` no longer publishes anything, which is the safe direction.
+  const submitPublic = body.submit_public === true;
+  const visibility = submitPublic ? "public" : "unlisted";
   const era = (source === "star_players" && Number.isFinite(body.era)) ? Math.floor(body.era) : null;   // decade start year; players-only
   const pool = await tierPool(source, era);
   if (pool.length < 4) return err("pool_too_small", 500);
   const itemSet = drawSet(pool, drawSize);
   const { data: topic, error: tErr } = await db.from("mp_tier_topics").insert({
     share_token: randomToken(9), prompt, item_type: itemType, pool_source: source, draw_size: drawSize,
-    item_set: itemSet, pool_params: era != null ? { era } : {}, visibility, creator_client_id: clientId, creator_user_id: userId, creator_label: body.label ?? "Anonymous",
-  }).select("id, share_token, prompt, item_type, tiers, item_set").single();
+    item_set: itemSet, pool_params: era != null ? { era } : {}, visibility,
+    review_status: submitPublic ? "pending" : "unsubmitted",
+    submitted_at: submitPublic ? new Date().toISOString() : null,
+    creator_client_id: clientId, creator_user_id: userId, creator_label: body.label ?? "Anonymous",
+  }).select("id, share_token, prompt, item_type, tiers, item_set, review_status").single();
   if (tErr) return err(tErr.message, 500);
-  return ok({ topic_id: topic.id, share_token: topic.share_token, prompt: topic.prompt, item_type: topic.item_type, tiers: topic.tiers, item_set: topic.item_set, is_creator: true });
+  return ok({ topic_id: topic.id, share_token: topic.share_token, prompt: topic.prompt, item_type: topic.item_type, tiers: topic.tiers, item_set: topic.item_set, review_status: topic.review_status, is_creator: true });
+}
+
+// Creator opts an existing link-only topic into public browse — queues it for
+// review; approval is out-of-band (see migration 0016).
+export async function actionTierSubmit(req: Request, body: any) {
+  const { topic, error } = await loadTierTopic(body);
+  if (error) return err(error, 404);
+  const userId = authedUserId(req);
+  const clientId: string | null = body.client_id ?? null;
+  const isCreator = (userId && topic.creator_user_id === userId) || (clientId && topic.creator_client_id === clientId);
+  if (!isCreator) return err("only_creator_can_submit", 403);
+  const status = topic.review_status ?? "unsubmitted";
+  if (status === "approved" || status === "pending") return ok({ review_status: status, already: true });
+  if (status === "rejected") return err("submission_declined", 409);
+  await db.from("mp_tier_topics").update({
+    visibility: "public", review_status: "pending", submitted_at: new Date().toISOString(),
+  }).eq("id", topic.id);
+  return ok({ review_status: "pending" });
 }
 
 export async function actionTierReroll(req: Request, body: any) {
@@ -60,7 +84,7 @@ export async function actionTierOpen(req: Request, body: any) {
   const mine = (lists ?? []).find((l) => (userId && l.author_user_id === userId) || (clientId && l.author_client_id === clientId));
   const isCreator = (userId && topic.creator_user_id === userId) || (clientId && topic.creator_client_id === clientId);
   return ok({
-    topic: { id: topic.id, share_token: topic.share_token, prompt: topic.prompt, item_type: topic.item_type, tiers: topic.tiers, item_set: topic.item_set, author_count: (lists ?? []).length, is_creator: !!isCreator },
+    topic: { id: topic.id, share_token: topic.share_token, prompt: topic.prompt, item_type: topic.item_type, tiers: topic.tiers, item_set: topic.item_set, author_count: (lists ?? []).length, is_creator: !!isCreator, review_status: topic.review_status ?? "unsubmitted" },
     your_assignments: mine?.assignments ?? {},
   });
 }
@@ -115,15 +139,19 @@ export async function actionTierMine(req: Request, body: any) {
   const userId = authedUserId(req);
   const clientId: string | null = body.client_id ?? null;
   if (!userId && !clientId) return err("identity_required", 400);
-  let q = db.from("mp_tier_lists").select("id, updated_at, author_client_id, author_user_id, topic:mp_tier_topics!inner(id, share_token, prompt, item_type)").order("updated_at", { ascending: false });
+  let q = db.from("mp_tier_lists").select("id, updated_at, author_client_id, author_user_id, topic:mp_tier_topics!inner(id, share_token, prompt, item_type, review_status, creator_client_id, creator_user_id)").order("updated_at", { ascending: false });
   q = userId ? q.eq("author_user_id", userId) : q.eq("author_client_id", clientId);
   const { data, error } = await q;
   if (error) return err(error.message, 500);
-  return ok({ lists: (data ?? []).map((l: any) => ({ topic_id: l.topic?.id, share_token: l.topic?.share_token, prompt: l.topic?.prompt, item_type: l.topic?.item_type, updated_at: l.updated_at })) });
+  return ok({ lists: (data ?? []).map((l: any) => ({
+    topic_id: l.topic?.id, share_token: l.topic?.share_token, prompt: l.topic?.prompt, item_type: l.topic?.item_type, updated_at: l.updated_at,
+    review_status: l.topic?.review_status ?? "unsubmitted",
+    is_creator: !!((userId && l.topic?.creator_user_id === userId) || (clientId && l.topic?.creator_client_id === clientId)),
+  })) });
 }
 
 export async function actionTierBrowse(_req: Request, _body: any) {
-  const { data: topics } = await db.from("mp_tier_topics").select("id, share_token, prompt, item_type, created_at").eq("visibility", "public").neq("creator_client_id", "daily").order("created_at", { ascending: false }).limit(60);
+  const { data: topics } = await db.from("mp_tier_topics").select("id, share_token, prompt, item_type, created_at").eq("review_status", "approved").neq("creator_client_id", "daily").order("created_at", { ascending: false }).limit(60);
   const ids = (topics ?? []).map((t) => t.id);
   const { data: lists } = await db.from("mp_tier_lists").select("topic_id").in("topic_id", ids.length ? ids : ["00000000-0000-0000-0000-000000000000"]);
   const counts = new Map<string, number>();
@@ -157,7 +185,9 @@ export async function getOrCreateDailyTopic(): Promise<{ topic: any; date: strin
     const itemSet = drawSet(await tierPool(poolSource, era), drawSizeN);
     const { data: created, error: cErr } = await db.from("mp_tier_topics").insert({
       share_token: token, prompt, item_type: POOL_TYPE[poolSource], pool_source: poolSource,
-      draw_size: drawSizeN, item_set: itemSet, pool_params: era != null ? { era } : {}, visibility: "public", creator_client_id: "daily", creator_label: "Daily",
+      draw_size: drawSizeN, item_set: itemSet, pool_params: era != null ? { era } : {}, visibility: "public",
+      review_status: "approved",   // first-party content; never enters the review queue
+      creator_client_id: "daily", creator_label: "Daily",
     }).select("*").single();
     if (cErr) { const again = await loadTierTopic({ share_token: token }); topic = again.topic; }
     else topic = created;

@@ -321,8 +321,9 @@
     <div class="row" style="margin-top:12px">
       <button id="listCreateBtn">Create list</button>
       <label class="pill" style="flex:0 0 auto;cursor:pointer"><input type="checkbox" id="listRanked" checked style="width:auto;margin-right:6px" /> Ranked</label>
-      <label class="pill" style="flex:0 0 auto;cursor:pointer"><input type="checkbox" id="listDiscoverable" checked style="width:auto;margin-right:6px" /> Discoverable</label>
+      <label class="pill" style="flex:0 0 auto;cursor:pointer"><input type="checkbox" id="listDiscoverable" style="width:auto;margin-right:6px" /> Submit to Browse</label>
     </div>
+    <div class="note" style="margin-top:6px">Your list is private to its share link. Submitting sends it for review — it shows up in Browse only once approved.</div>
     <div class="row" style="margin-top:10px">
       <button class="ghost" id="listBrowseBtn">🔎 Browse public lists</button>
     </div>
@@ -420,8 +421,9 @@
     </div>
     <div class="row" style="margin-top:12px">
       <button id="tierCreateBtn">🎲 Spin &amp; create</button>
-      <label class="pill" style="flex:0 0 auto;cursor:pointer"><input type="checkbox" id="tierDiscoverable" checked style="width:auto;margin-right:6px" /> Discoverable</label>
+      <label class="pill" style="flex:0 0 auto;cursor:pointer"><input type="checkbox" id="tierDiscoverable" style="width:auto;margin-right:6px" /> Submit to Browse</label>
     </div>
+    <div class="note" style="margin-top:6px">Your tier list is private to its share link. Submitting sends it for review — it shows up in Browse only once approved.</div>
     <div class="row" style="margin-top:10px"><button class="ghost" id="tierBrowseBtn">🔎 Browse tier lists</button></div>
     <details style="margin-top:8px"><summary>Open a shared tier link</summary>
       <div class="linkbox"><input id="tierJoin" placeholder="Paste tier link or token" /><button class="sky" id="tierJoinBtn" style="flex:0 0 auto">Open</button></div>
@@ -955,6 +957,25 @@ let LIST_POOL = []; let LIST_POOL_TYPE = null;
 const ENTRY_ICON = { player:"🏀", team:"🏟️", coach:"📋", moment:"✨" };
 const ENTRY_PH = { player:"Add a player…", team:"Add a team…", coach:"Add a coach…", moment:"Add a moment or anything…" };
 
+// --- public-browse review status (shared by lists + tier lists) -------------
+// A topic is link-only until its creator submits it and a moderator approves.
+const REVIEW_TAG = { pending:"⏳ pending review", approved:"✅ in Browse", rejected:"🚫 not listed" };
+const reviewTag = s => REVIEW_TAG[s] || "";
+const submitBtn = l => (l.is_creator && (l.review_status||"unsubmitted")==="unsubmitted")
+  ? `<button class="ghost" data-submit="${l.share_token}" style="flex:0 0 auto;padding:6px 10px">Submit</button>` : "";
+// Wires the per-row Submit buttons; stops the click from also opening the topic.
+function wireSubmit(box, action, errId, reload){
+  Array.from(box.children).forEach(el=>{
+    const b=el.querySelector("[data-submit]"); if(!b) return;
+    b.onclick=async ev=>{
+      ev.stopPropagation(); b.disabled=true; b.textContent="…";
+      const r=await api(action,{ share_token:b.dataset.submit, client_id:clientId() });
+      if(!r.ok){ $(errId).textContent="Error: "+r.error; b.disabled=false; b.textContent="Submit"; return; }
+      await reload();
+    };
+  });
+}
+
 $("listsBtn").onclick = openListsHome;
 $("listsHomeBack").onclick = ()=>show("lobby");
 async function openListsHome(){ show("listsHome"); $("listsErr").textContent=""; await loadMyLists(); }
@@ -965,30 +986,33 @@ async function loadMyLists(){
   if(!r.lists.length){ box.innerHTML=`<div class="note">No lists yet — create one above.</div>`; return; }
   box.innerHTML = r.lists.map(l=>`<div class="slot" style="cursor:pointer" data-t="${l.share_token}">
      <div class="n">${ENTRY_ICON[l.entry_type]||"🏀"}</div>
-     <div class="name">${l.prompt}</div><div class="ctx">${l.item_count} pick${l.item_count===1?"":"s"}</div></div>`).join("");
+     <div class="name">${l.prompt}</div><div class="ctx">${l.item_count} pick${l.item_count===1?"":"s"}${reviewTag(l.review_status)?" · "+reviewTag(l.review_status):""}</div>
+     ${submitBtn(l)}</div>`).join("");
   Array.from(box.children).forEach(el=>el.onclick=()=>openListTopic(el.dataset.t,"build"));
+  wireSubmit(box, "list_submit", "listsErr", loadMyLists);
 }
 $("listCreateBtn").onclick = async ()=>{
   const prompt=$("listTitle").value.trim();
   if(!prompt){ $("listsErr").textContent="Give your list a title."; return; }
   const r=await api("list_create",{ prompt, ranked:$("listRanked").checked, entry_type:$("listEntryType").value,
-    visibility:$("listDiscoverable").checked?"public":"unlisted", client_id:clientId(), label:$("playerName").value.trim()||"You" });
+    submit_public:$("listDiscoverable").checked, client_id:clientId(), label:$("playerName").value.trim()||"You" });
   if(!r.ok){ $("listsErr").textContent="Error: "+r.error; return; }
-  LIST={ topic_id:r.topic_id, share_token:r.share_token, prompt:r.prompt, ranked:r.ranked, max_items:r.max_items, entry_type:r.entry_type||"player", items:[] };
+  LIST={ topic_id:r.topic_id, share_token:r.share_token, prompt:r.prompt, ranked:r.ranked, max_items:r.max_items, entry_type:r.entry_type||"player", review_status:r.review_status, items:[] };
   $("listTitle").value=""; openBuilder();
 };
 $("listJoinBtn").onclick = ()=>{ let v=$("listJoin").value.trim(); if(!v) return; const m=v.match(/[?&]list=([^&\s]+)/); openListTopic(m?m[1]:v,"build"); };
 async function openListTopic(token, dest){
   const r=await api("list_open",{ share_token:token, client_id:clientId() });
   if(!r.ok){ $("listsErr").textContent="Error: "+r.error; show("listsHome"); return; }
-  LIST={ topic_id:r.topic.id, share_token:r.topic.share_token, prompt:r.topic.prompt, ranked:r.topic.ranked, max_items:r.topic.max_items, entry_type:r.topic.entry_type||"player",
+  LIST={ topic_id:r.topic.id, share_token:r.topic.share_token, prompt:r.topic.prompt, ranked:r.topic.ranked, max_items:r.topic.max_items, entry_type:r.topic.entry_type||"player", review_status:r.topic.review_status,
          items:(r.your_list&&r.your_list.items)? r.your_list.items.map(it=>({label:it.label,note:it.note||null,player_key:it.player_key||null})):[] };
   if(dest==="compare") showListCompare(); else openBuilder();
 }
 async function openBuilder(){
   show("listBuild");
   $("listBuildPrompt").textContent=LIST.prompt;
-  $("listBuildMeta").textContent=`${ENTRY_ICON[LIST.entry_type]||""} ${LIST.entry_type} · ${LIST.ranked?"ranked":"unordered"} · up to ${LIST.max_items}`;
+  $("listBuildMeta").textContent=`${ENTRY_ICON[LIST.entry_type]||""} ${LIST.entry_type} · ${LIST.ranked?"ranked":"unordered"} · up to ${LIST.max_items}`
+    + (reviewTag(LIST.review_status)?" · "+reviewTag(LIST.review_status):"");
   $("listAddInput").placeholder=ENTRY_PH[LIST.entry_type]||"Add…";
   $("listShareRow").classList.add("hidden"); $("listBuildErr").textContent="";
   $("listShareHook").classList.toggle("hidden", !window.FROM_SHARE);
@@ -1108,8 +1132,9 @@ async function loadMyTiers(){
   const r=await api("tier_mine",{client_id:clientId()});
   if(!r.ok){ box.textContent="Could not load."; return; }
   if(!r.lists.length){ box.innerHTML=`<div class="note">No tier lists yet.</div>`; return; }
-  box.innerHTML=r.lists.map(l=>`<div class="slot" style="cursor:pointer" data-t="${l.share_token}"><div class="n">${tierIcon(l.item_type)}</div><div class="name">${l.prompt}</div></div>`).join("");
+  box.innerHTML=r.lists.map(l=>`<div class="slot" style="cursor:pointer" data-t="${l.share_token}"><div class="n">${tierIcon(l.item_type)}</div><div class="name">${l.prompt}</div>${reviewTag(l.review_status)?`<div class="ctx">${reviewTag(l.review_status)}</div>`:""}${submitBtn(l)}</div>`).join("");
   Array.from(box.children).forEach(el=>el.onclick=()=>openTierTopic(el.dataset.t,"board"));
+  wireSubmit(box, "tier_submit", "tierErr", loadMyTiers);
 }
 function syncTierEra(){ $("tierEraWrap").style.display = ($("tierPool").value==="star_players") ? "" : "none"; }
 $("tierPool").onchange=syncTierEra;
@@ -1119,9 +1144,9 @@ $("tierCreateBtn").onclick=async()=>{
   const isPlayers=$("tierPool").value==="star_players";
   const r=await api("tier_create",{ prompt, pool_source:$("tierPool").value, draw_size:parseInt($("tierDraw").value)||10,
     era: (isPlayers && $("tierEra").value) ? parseInt($("tierEra").value) : undefined,
-    visibility:$("tierDiscoverable").checked?"public":"unlisted", client_id:clientId(), label:$("playerName").value.trim()||"You" });
+    submit_public:$("tierDiscoverable").checked, client_id:clientId(), label:$("playerName").value.trim()||"You" });
   if(!r.ok){ $("tierErr").textContent="Error: "+r.error; return; }
-  TIER={ topic_id:r.topic_id, share_token:r.share_token, prompt:r.prompt, item_type:r.item_type, tiers:r.tiers, item_set:r.item_set, assign:{}, is_creator:true };
+  TIER={ topic_id:r.topic_id, share_token:r.share_token, prompt:r.prompt, item_type:r.item_type, tiers:r.tiers, item_set:r.item_set, review_status:r.review_status, assign:{}, is_creator:true };
   $("tierTitle").value=""; openTierBoard();
 };
 $("tierJoinBtn").onclick=()=>{ let v=$("tierJoin").value.trim(); if(!v)return; const m=v.match(/[?&]tier=([^&\s]+)/); openTierTopic(m?m[1]:v,"board"); };

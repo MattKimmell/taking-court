@@ -2,8 +2,8 @@
 // (shared / games / lists / tiers / crews); this file only maps actions to them.
 import { CORS, err } from "./shared.ts";
 import { actionSheets, actionCreate, actionOpen, actionStart, actionGuess, actionResults, actionAddBot, actionLeaderboard, actionSuggest } from "./games.ts";
-import { actionListCreate, actionListSave, actionListOpen, actionListCompare, actionListMine, actionListBrowse } from "./lists.ts";
-import { actionTierCreate, actionTierReroll, actionTierOpen, actionTierSave, actionTierCompare, actionTierMine, actionTierBrowse, actionDaily } from "./tiers.ts";
+import { actionListCreate, actionListSave, actionListOpen, actionListCompare, actionListMine, actionListBrowse, actionListSubmit } from "./lists.ts";
+import { actionTierCreate, actionTierReroll, actionTierOpen, actionTierSave, actionTierCompare, actionTierMine, actionTierBrowse, actionTierSubmit, actionDaily } from "./tiers.ts";
 import { actionCrewCreate, actionCrewJoin, actionCrewMine, actionCrewDaily, actionCrewReact } from "./crews.ts";
 
 // -----------------------------------------------------------------------------
@@ -52,6 +52,8 @@ Deno.serve(async (req: Request) => {
         return await actionListMine(req, body);
       case "list_browse":
         return await actionListBrowse(req, body);
+      case "list_submit":
+        return await actionListSubmit(req, body);
       case "tier_create":
         return await actionTierCreate(req, body);
       case "tier_reroll":
@@ -66,6 +68,8 @@ Deno.serve(async (req: Request) => {
         return await actionTierMine(req, body);
       case "tier_browse":
         return await actionTierBrowse(req, body);
+      case "tier_submit":
+        return await actionTierSubmit(req, body);
       case "daily":
         return await actionDaily(req, body);
       case "crew_create":
