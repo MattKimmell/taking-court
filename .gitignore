@@ -6,3 +6,10 @@ Thumbs.db
 # deps / logs / scratch
 node_modules/
 *.log
+
+# local-only project notes and research (never published)
+CLAUDE.local.md
+82_0_research/
+
+# Claude Code local config + worktrees (never published; repo root is the site)
+.claude/

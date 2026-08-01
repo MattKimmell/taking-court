@@ -352,7 +352,7 @@
       <div style="font-weight:700;font-size:17px" id="listBuildPrompt"></div>
       <div class="pill" id="listBuildMeta"></div>
     </div>
-    <div id="listShareHook" class="hidden" style="margin-top:10px;padding:11px 13px;border-radius:10px;background:rgba(249,115,22,.12);border:1px solid var(--accent);font-size:14px;font-weight:600">🔥 Someone shared their take! Drop yours, then hit Compare to see where you agree</div>
+    <div id="listShareHook" class="hidden" style="margin-top:10px;padding:11px 13px;border-radius:10px;background:rgba(249,115,22,.12);border:1px solid var(--accent);font-size:14px;font-weight:600">🔥 Someone shared their take! Drop yours, then lock it in to see where you land</div>
     <div class="linkbox" style="margin-top:12px">
       <div style="position:relative;flex:1">
         <input id="listAddInput" placeholder="Add a player (or anything)…" autocomplete="off" />
@@ -364,7 +364,7 @@
     <div class="slots" id="listItems" style="margin-top:12px"></div>
     <div class="row" style="margin-top:14px">
       <button id="listSaveBtn">Save list</button>
-      <button class="ghost" id="listCompareBtn" style="flex:0 0 auto">Compare</button>
+      <button class="ghost" id="listCompareBtn" style="flex:0 0 auto">Lock in my list</button>
       <button class="ghost" id="listBuildBack" style="flex:0 0 auto">Back</button>
     </div>
     <div class="linkbox hidden" id="listShareRow"><input id="listShareUrl" readonly /><button class="sky" id="listCopyBtn" style="flex:0 0 auto">Copy</button></div>
@@ -440,11 +440,11 @@
       <button class="ghost" id="tierRespin" style="flex:0 0 auto;padding:6px 12px">🎲 Re-spin</button>
     </div>
     <div class="note">Tap a tier letter on each item to place it.</div>
-    <div id="tierShareHook" class="hidden" style="margin-top:10px;padding:11px 13px;border-radius:10px;background:rgba(249,115,22,.12);border:1px solid var(--accent);font-size:14px;font-weight:600">🔥 Someone shared their take! Drop yours, then hit Compare to see where you agree</div>
+    <div id="tierShareHook" class="hidden" style="margin-top:10px;padding:11px 13px;border-radius:10px;background:rgba(249,115,22,.12);border:1px solid var(--accent);font-size:14px;font-weight:600">🔥 Someone shared their take! Drop yours, then lock it in to see where you land</div>
     <div id="tierBoardRows" style="margin-top:12px"></div>
     <div class="row" style="margin-top:14px">
-      <button id="tierSaveBtn">Save</button>
-      <button class="ghost" id="tierCompareBtn" style="flex:0 0 auto">Compare</button>
+      <button id="tierCompareBtn">Lock in my take</button>
+      <button class="ghost" id="tierSaveBtn" style="flex:0 0 auto">Save</button>
       <button class="ghost" id="tierShareBtn" style="flex:0 0 auto">📸 Share</button>
       <button class="ghost" id="tierBoardBack" style="flex:0 0 auto">Back</button>
     </div>
@@ -581,6 +581,11 @@ function addTake(kind){
   if(kind==="tier") openTierTopic(TIER.share_token,"board"); else openListTopic(LIST.share_token,"build");
 }
 
+// Analytics: strictly fire-and-forget. Never awaited, never surfaces an error —
+// a broken beacon must not be able to break a tap.
+function track(event, props={}){
+  try{ api("track",{ event, props, client_id:clientId() }).catch(()=>{}); }catch(e){}
+}
 async function api(action, payload={}){
   const c = cfg();
   const res = await fetch(c.url, {
@@ -1121,6 +1126,7 @@ async function openBrowse(){
 
 // ------------------------------------------------------------------ tier lists
 let TIER = { topic_id:null, share_token:null, prompt:"", item_type:"player", tiers:[], item_set:[], assign:{}, is_creator:false };
+let TIER_RESULT = null;   // set by renderHotTakes once there's a room to compare against
 const TIER_COLORS = { S:"#fbbf24", A:"#4ade80", B:"#7dd3fc", C:"#aab6d8", D:"#fb923c", F:"#fca5a5" };
 const tierIcon = t => t==="team"?"🏟️":t==="coach"?"📋":"🏀";
 
@@ -1160,10 +1166,13 @@ async function openTierTopic(token,dest){
 }
 function openTierBoard(){
   show("tierBoard");
+  TIER_RESULT=null;   // don't let a previous topic's score ride along on this board's card
   $("tierBoardPrompt").textContent=(TIER.isDaily?"🗓️ Daily — ":"")+TIER.prompt;
   $("tierRespin").style.display=TIER.is_creator?"":"none";
   $("tierShareRow").classList.add("hidden"); $("tierBoardErr").textContent="";
   $("tierShareHook").classList.toggle("hidden", !(window.FROM_SHARE && !TIER.is_creator));
+  // Arriving from a crew room, saving is the way back — say so instead of "Save".
+  $("tierSaveBtn").textContent=(CREW_RETURN&&TIER.isDaily)?"Save & back to crew":"Save";
   renderTierBoard();
 }
 function renderTierBoard(){
@@ -1188,6 +1197,7 @@ function tierChip(it){
 async function saveTier(){
   const r=await api("tier_save",{ topic_id:TIER.topic_id, assignments:TIER.assign, client_id:clientId(), label:ensureName() });
   if(r.ok && TIER.isDaily) bumpStreak(TIER.date);
+  if(r.ok) track("board_complete", { daily: !!TIER.isDaily });
   return r;
 }
 $("tierSaveBtn").onclick=async()=>{
@@ -1212,6 +1222,7 @@ function renderHotTakes(r){
   const tiers=r.topic.tiers; const idx=t=>tiers.indexOf(t);
   const me=(r.lists||[]).find(l=>l.is_you);
   if(!me || r.total_authors<2){
+    TIER_RESULT=null; syncShareLabels();
     box.innerHTML=`<div class="banner wait" style="margin-top:10px">🌶️ You vs. the room — share the link to see how your takes stack up against everyone else's.</div>`;
     return;
   }
@@ -1245,6 +1256,30 @@ function renderHotTakes(r){
   }
   h+=`<div class="note" style="margin-top:12px">You matched the room on ${agreed}/${rated.length}.</div></div>`;
   box.innerHTML=h;
+  // Stash the reveal so the share card can carry the result, not just the board.
+  TIER_RESULT={ rows, bold, agreed, total:rated.length, authors:r.total_authors };
+  syncShareLabels();
+}
+// Divergence → heat square. Blocks stay legible at a glance where expressive emoji
+// blur together; cold→hot reads as "how spicy was my take", not right vs. wrong.
+function gapEmoji(gap){ return gap>=3?"🟥":gap>=2?"🟧":gap>=1?"🟨":"🟦"; }
+function shareLink(){ return location.origin+location.pathname+(TIER.isDaily?"":"?tier="+TIER.share_token); }
+// The Wordle-style line: spoiler-light shape of how contrarian you were, plus a score.
+function buildShareText(){
+  const title=(TIER.isDaily?"🏀 Taking Court — Daily"+(TIER.date?" "+TIER.date:""):"🏀 Taking Court — "+TIER.prompt);
+  if(!TIER_RESULT) return title+"\n"+shareLink();
+  const grid=TIER_RESULT.rows.filter(x=>x.myT).map(x=>gapEmoji(x.gap)).join("");
+  const s=getStreak();
+  const lines=[title, grid, `Matched the room ${TIER_RESULT.agreed}/${TIER_RESULT.total}`
+    +(TIER.isDaily&&s.streak>0?` · 🔥 ${s.streak}`:"")];
+  const top=TIER_RESULT.bold[0];
+  if(top) lines.push(`Boldest: ${top.label} — me ${top.myT} · room ${top.modal}`);
+  lines.push(shareLink());
+  return lines.join("\n");
+}
+// Compare screen has the reveal to share; the board only has the board.
+function syncShareLabels(){
+  const b2=$("tierShareBtn2"); if(b2) b2.textContent=TIER_RESULT?"📸 Share my score":"📸 Share";
 }
 async function showTierCompare(){
   show("tierCompare"); $("tierCompareErr").textContent="";
@@ -1252,6 +1287,7 @@ async function showTierCompare(){
   if(!r.ok){ $("tierCompareErr").textContent="Error: "+r.error; return; }
   $("tierComparePrompt").textContent=(TIER.isDaily?"🗓️ Daily — ":"")+r.topic.prompt;
   $("tierCompareCount").textContent=`· ${r.total_authors} player${r.total_authors===1?"":"s"}`;
+  track("compare_view", { daily: !!TIER.isDaily, authors: r.total_authors });
   renderHotTakes(r);
   $("tierConsensus").innerHTML = r.consensus.length ? r.consensus.map(c=>{
     const color=c.avg_tier?(TIER_COLORS[c.avg_tier]||"#2a3556"):"#2a3556";
@@ -1306,8 +1342,27 @@ async function openDaily(){
 function _rr(ctx,x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
 function _trunc(ctx,text,maxW){ if(ctx.measureText(text).width<=maxW) return text; let t=text; while(t.length>4 && ctx.measureText(t+"…").width>maxW) t=t.slice(0,-1); return t+"…"; }
 function tierShareCard(){
+  track("share_click", { scored: !!TIER_RESULT, daily: !!TIER.isDaily });
+  const c=tierShareCanvas();
+  // Build the blob synchronously: toBlob's async callback drops the user-activation
+  // that navigator.share requires on iOS, which is where most sharing happens.
+  const blob=_dataUrlToBlob(c.toDataURL("image/png"));
+  const text=buildShareText();
+  try{
+    const file=new File([blob],"tierlist.png",{type:"image/png"});
+    if(navigator.canShare && navigator.canShare({files:[file]})){
+      navigator.share({files:[file], text}).catch(()=>{});
+      return;
+    }
+  }catch(e){}
+  if(navigator.share){ navigator.share({text}).catch(()=>{}); return; }
+  const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download="tierlist.png"; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  try{ navigator.clipboard?.writeText(text); }catch(e){}
+}
+function tierShareCanvas(){
   const used=TIER.tiers.filter(t=>TIER.item_set.some(it=>TIER.assign[it.key]===t));
-  const W=560, pad=18, headH=64, footH=38, labelW=54, lineH=22;
+  // With a result to show, the header grows to carry the scoreboard band.
+  const res=TIER_RESULT, W=560, pad=18, headH=res?116:64, footH=38, labelW=54, lineH=22;
   const meas=document.createElement("canvas").getContext("2d"); meas.font="600 15px system-ui,Segoe UI,sans-serif";
   const rows=used.map(t=>{
     const names=TIER.item_set.filter(it=>TIER.assign[it.key]===t).map(it=>it.label);
@@ -1322,7 +1377,16 @@ function tierShareCard(){
   ctx.fillStyle="#0b1020"; ctx.fillRect(0,0,W,H);
   ctx.fillStyle="#eef2ff"; ctx.font="800 20px system-ui,Segoe UI,sans-serif";
   ctx.fillText((TIER.isDaily?"🗓️ Daily — ":"")+_trunc(ctx,TIER.prompt,W-pad*2), pad, 32);
-  ctx.fillStyle="#95a2c8"; ctx.font="600 13px system-ui,Segoe UI,sans-serif"; ctx.fillText("my tier list", pad, 52);
+  if(res){
+    ctx.font="22px system-ui,Segoe UI,sans-serif";
+    ctx.fillText(res.rows.filter(x=>x.myT).map(x=>gapEmoji(x.gap)).join(""), pad, 64);
+    const s=getStreak();
+    ctx.fillStyle="#f97316"; ctx.font="800 16px system-ui,Segoe UI,sans-serif";
+    ctx.fillText(`Matched the room ${res.agreed}/${res.total}`
+      +(TIER.isDaily&&s.streak>0?`   🔥 ${s.streak}`:""), pad, 94);
+  } else {
+    ctx.fillStyle="#95a2c8"; ctx.font="600 13px system-ui,Segoe UI,sans-serif"; ctx.fillText("my tier list", pad, 52);
+  }
   let y=headH;
   const COLORS={S:"#fbbf24",A:"#4ade80",B:"#7dd3fc",C:"#aab6d8",D:"#fb923c",F:"#fca5a5"};
   rows.forEach(r=>{
@@ -1335,15 +1399,12 @@ function tierShareCard(){
     y+=h+8;
   });
   ctx.fillStyle="#f97316"; ctx.font="800 14px system-ui,Segoe UI,sans-serif"; ctx.fillText("Taking Court", pad, H-14);
-  c.toBlob(async (blob)=>{
-    const link=location.origin+location.pathname+(TIER.isDaily?"":"?tier="+TIER.share_token);
-    try{
-      const file=new File([blob],"tierlist.png",{type:"image/png"});
-      if(navigator.canShare && navigator.canShare({files:[file]})){ await navigator.share({files:[file], text:(TIER.isDaily?"Today's Daily tier list":TIER.prompt)+"\n"+link}); return; }
-    }catch(e){}
-    const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download="tierlist.png"; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-    try{ navigator.clipboard?.writeText(link); }catch(e){}
-  });
+  return c;
+}
+function _dataUrlToBlob(dataUrl){
+  const bin=atob(dataUrl.split(",")[1]), buf=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) buf[i]=bin.charCodeAt(i);
+  return new Blob([buf],{type:"image/png"});
 }
 $("tierShareBtn").onclick=tierShareCard;
 $("tierShareBtn2").onclick=tierShareCard;
@@ -1468,6 +1529,7 @@ const urlToken = new URLSearchParams(location.search).get("ch");
 const urlList = new URLSearchParams(location.search).get("list");
 const urlTier = new URLSearchParams(location.search).get("tier");
 window.FROM_SHARE = !!(urlTier || urlList);
+track("landing", { from: window.FROM_SHARE ? "share" : "direct" });
 if(urlTier){ $("playerName").value = store.get("mp_name",""); openTierTopic(urlTier,"board"); }
 else if(urlList){ $("playerName").value = store.get("mp_name",""); openListTopic(urlList,"build"); }
 else if(urlToken){ $("playerName").value = store.get("mp_name",""); openChallenge(urlToken); }

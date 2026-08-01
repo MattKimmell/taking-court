@@ -5,6 +5,7 @@ import { actionSheets, actionCreate, actionOpen, actionStart, actionGuess, actio
 import { actionListCreate, actionListSave, actionListOpen, actionListCompare, actionListMine, actionListBrowse, actionListSubmit } from "./lists.ts";
 import { actionTierCreate, actionTierReroll, actionTierOpen, actionTierSave, actionTierCompare, actionTierMine, actionTierBrowse, actionTierSubmit, actionDaily } from "./tiers.ts";
 import { actionCrewCreate, actionCrewJoin, actionCrewMine, actionCrewDaily, actionCrewReact } from "./crews.ts";
+import { actionTrack } from "./events.ts";
 
 // -----------------------------------------------------------------------------
 // Router
@@ -82,6 +83,8 @@ Deno.serve(async (req: Request) => {
         return await actionCrewDaily(req, body);
       case "crew_react":
         return await actionCrewReact(req, body);
+      case "track":
+        return await actionTrack(req, body);
       default:
         return err("unknown_action", 400);
     }
