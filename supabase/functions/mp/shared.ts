@@ -263,12 +263,15 @@ export async function tierPool(source: string, era?: number | null): Promise<{ k
   if (source === "all_teams") return mk(TEAM_POOL.map((t) => t.v));
   if (source === "champion_teams") return mk(CHAMPION_TEAMS);
   if (source === "notable_coaches") return mk(NOTABLE_COACHES);
-  let q = db.from("vw_trivia_player_career_summary").select("player_name, career_points").eq("season_type", "REGULAR");
+  // star_players: draw from a notability-ranked pool (stars + memorable role players +
+  // surviving legends, with a built-in recency lean) so tier sets are recognizable and
+  // debatable — not just the top career scorers.
+  let q = db.from("mp_player_notability").select("player_name, notability");
   if (typeof era === "number" && Number.isFinite(era)) {
-    // players who *played in* the decade (career overlaps it), filtered to recognizable
-    q = q.lte("first_season", era + 9).gte("last_season", era).gte("career_points", 8000).order("career_points", { ascending: false }).limit(150);
+    // players who *played in* the decade (career overlaps it), recognizable enough to debate
+    q = q.lte("first_season", era + 9).gte("last_season", era).gte("notability", 20).order("notability", { ascending: false }).limit(180);
   } else {
-    q = q.order("career_points", { ascending: false }).limit(90);
+    q = q.order("notability", { ascending: false }).limit(160);
   }
   const { data } = await q;
   const seen = new Set<string>(); const out: { key: string; label: string }[] = [];
