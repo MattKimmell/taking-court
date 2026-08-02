@@ -208,6 +208,9 @@
       <button class="ghost" id="tierBtn">🪜 Tier Lists</button>
       <button class="ghost" id="crewBtn">👥 Crews</button>
     </div>
+    <div class="row" style="margin-top:8px">
+      <button class="ghost" id="partyBtn" style="border-color:var(--accent)">🏀 Pickup — play in person</button>
+    </div>
 
     <details>
       <summary>Or join with a challenge link / token</summary>
@@ -441,6 +444,7 @@
     </div>
     <div class="note">Tap a tier letter on each item to place it.</div>
     <div id="tierShareHook" class="hidden" style="margin-top:10px;padding:11px 13px;border-radius:10px;background:rgba(249,115,22,.12);border:1px solid var(--accent);font-size:14px;font-weight:600">🔥 Someone shared their take! Drop yours, then lock it in to see where you land</div>
+    <div id="tierSkipHook" class="hidden" style="margin-top:8px"><button class="ghost" id="tierSkipBtn" style="width:100%">👀 Just show me the results</button></div>
     <div id="tierBoardRows" style="margin-top:12px"></div>
     <div class="row" style="margin-top:14px">
       <button id="tierCompareBtn">Lock in my take</button>
@@ -486,6 +490,92 @@
   </div>
 
   <!-- ===================== CREW HOME ===================== -->
+  <!-- Pickup: in-person co-op. Host screen doubles as the shared display. -->
+  <div id="partyHost" class="card hidden">
+    <div class="head">
+      <div style="font-weight:700;font-size:18px">🏀 Pickup</div>
+      <button class="ghost" id="partyHostBack" style="flex:0 0 auto;padding:6px 12px">Back</button>
+    </div>
+    <div class="note">Everyone in the room plays together on their own phone. Pick a challenge, show the code, and shout names at each other. No accounts.</div>
+
+    <div id="partySetup">
+      <label>Your name</label>
+      <input id="partyName" placeholder="e.g. Dave" autocomplete="off" />
+      <label style="margin-top:10px">Challenge</label>
+      <select id="partyPrompt"><option>Loading…</option></select>
+      <label style="margin-top:10px">Clock</label>
+      <select id="partyTime">
+        <option value="180">3 minutes</option>
+        <option value="300" selected>5 minutes</option>
+        <option value="600">10 minutes</option>
+        <option value="">No clock</option>
+      </select>
+      <div class="row" style="margin-top:14px">
+        <button id="partyCreateBtn">Start a session</button>
+      </div>
+    </div>
+
+    <div id="partyLobby" class="hidden">
+      <div style="text-align:center;margin-top:6px">
+        <div class="note">Join at <b id="partyJoinHost"></b> with code</div>
+        <div id="partyCode" style="font-size:38px;font-weight:900;letter-spacing:6px;margin:6px 0;color:var(--accent)"></div>
+        <div id="partyQr" style="width:190px;margin:10px auto;background:#fff;padding:8px;border-radius:12px"></div>
+        <div class="row" style="justify-content:center;margin-top:8px">
+          <button class="ghost" id="partyShareBtn" style="flex:0 0 auto">📲 Send link</button>
+        </div>
+      </div>
+      <div class="linkbox" style="margin-top:12px">
+        <input id="partyRename" placeholder="Your name" autocomplete="off" />
+        <button class="ghost" id="partyRenameBtn" style="flex:0 0 auto">Set</button>
+      </div>
+      <div style="font-weight:700;margin-top:14px">In the room <span class="note" id="partyMemberCount"></span></div>
+      <div id="partyMembers"></div>
+      <div class="row" style="margin-top:14px">
+        <button id="partyStartBtn">Start the clock</button>
+      </div>
+    </div>
+    <div class="err" id="partyHostErr"></div>
+  </div>
+
+  <div id="partyPlay" class="card hidden">
+    <div class="head">
+      <div style="font-weight:700;font-size:16px" id="partyPlayPrompt"></div>
+      <div id="partyClock" style="flex:0 0 auto;font-weight:900;font-size:18px"></div>
+    </div>
+    <div style="margin-top:6px">
+      <div style="height:10px;background:var(--panel2);border-radius:99px;overflow:hidden">
+        <div id="partyBar" style="height:100%;width:0%;background:linear-gradient(90deg,var(--accent),var(--gold));transition:width .3s"></div>
+      </div>
+      <div class="note" style="margin-top:4px"><b id="partyCount">0</b> of <span id="partyTarget">0</span> · <span id="partyMisses">0</span> misses</div>
+    </div>
+    <div class="linkbox" style="margin-top:12px">
+      <div style="position:relative;flex:1">
+        <input id="partyGuess" placeholder="Shout a name…" autocomplete="off" autocapitalize="words" />
+        <div id="partyAc" class="acdrop hidden"></div>
+      </div>
+      <button class="sky" id="partyGuessBtn" style="flex:0 0 auto">Add</button>
+    </div>
+    <div id="partyFlash" style="min-height:24px;margin-top:8px;font-weight:700"></div>
+    <div id="partyBoard" style="margin-top:6px"></div>
+    <div class="row" style="margin-top:12px">
+      <button class="ghost" id="partyEndBtn" style="flex:0 0 auto">End session</button>
+      <button class="ghost" id="partyPlayBack" style="flex:0 0 auto">Leave</button>
+    </div>
+    <div class="err" id="partyPlayErr"></div>
+  </div>
+
+  <div id="partyRecap" class="card hidden">
+    <div class="head">
+      <div style="font-weight:700;font-size:18px">🏀 Final tally</div>
+      <button class="ghost" id="partyRecapBack" style="flex:0 0 auto;padding:6px 12px">Home</button>
+    </div>
+    <div id="partyRecapBody"></div>
+    <div class="row" style="margin-top:14px">
+      <button id="partyAgainBtn">🔁 Run it back</button>
+      <button class="ghost" id="partyRecapShare" style="flex:0 0 auto">📸 Share</button>
+    </div>
+  </div>
+
   <div id="crewHome" class="card hidden">
     <div class="head">
       <div style="font-weight:700;font-size:18px">👥 Crews</div>
@@ -603,7 +693,7 @@ let ST = { challenge_id:null, share_token:null, attempt_id:null, attempt_token:n
            filled:{}, strikes:0, correct:0, finished:false, sheet_id:null };
 let timerInt=null;
 
-function show(id){ ["lobby","share","preview","play","results","leaderboard","listsHome","listBuild","listCompare","listBrowse","tierHome","tierBoard","tierCompare","tierBrowse","crewHome","crewRoom"].forEach(s=>$(s).classList.toggle("hidden", s!==id)); }
+function show(id){ ["lobby","share","preview","play","results","leaderboard","listsHome","listBuild","listCompare","listBrowse","tierHome","tierBoard","tierCompare","tierBrowse","partyHost","partyPlay","partyRecap","crewHome","crewRoom"].forEach(s=>$(s).classList.toggle("hidden", s!==id)); }
 function toast(msg){ $("lobbyErr").style.color="var(--muted)"; $("lobbyErr").textContent=msg; }
 function fmt(ms){ if(ms==null) return "—"; const s=ms/1000; const m=Math.floor(s/60);
   const r=(s-m*60); return m+":"+r.toFixed(1).padStart(4,"0"); }
@@ -637,6 +727,12 @@ $("opponent").onchange = e => {
   $("createBtn").textContent = vsComp ? "Play vs computer" : "Create challenge";
   $("modePill").textContent = vsComp ? "vs computer" : $("mode").value;
 };
+// Restores the pill to whatever the lobby form is set to, after a mode that
+// overrides it (Pickup) exits.
+function syncModePill(){
+  const vsComp = $("opponent").value === "computer";
+  $("modePill").textContent = vsComp ? "vs computer" : $("mode").value;
+}
 
 $("createBtn").onclick = ()=>{ const o=$("sheet").selectedOptions[0]; createChallenge(o?o.value:null, o?o.dataset.kind:null); };
 $("randomBtn").onclick = ()=>{ const s=SHEETS[Math.floor(Math.random()*SHEETS.length)]; createChallenge(s?s.id:null, s?s.kind:null); };
@@ -804,6 +900,9 @@ let POOL=[];        // [{v, label, key}]  key = normalized search string
 let acItems=[];     // current filtered items
 let acIdx=-1;       // highlighted index
 function normStr(s){ return (s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9 ]/g,""); }
+// Pickup renders labels typed by *other people* in the room, so those need
+// escaping before they hit innerHTML.
+function esc(s){ return String(s??"").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 
 async function loadSuggestPool(){
   POOL=[]; acHide();
@@ -1011,7 +1110,7 @@ async function openListTopic(token, dest){
   if(!r.ok){ $("listsErr").textContent="Error: "+r.error; show("listsHome"); return; }
   LIST={ topic_id:r.topic.id, share_token:r.topic.share_token, prompt:r.topic.prompt, ranked:r.topic.ranked, max_items:r.topic.max_items, entry_type:r.topic.entry_type||"player", review_status:r.topic.review_status,
          items:(r.your_list&&r.your_list.items)? r.your_list.items.map(it=>({label:it.label,note:it.note||null,player_key:it.player_key||null})):[] };
-  if(dest==="compare") showListCompare(); else openBuilder();
+  if(dest==="compare" || LIST.items.length) showListCompare(); else openBuilder();
 }
 async function openBuilder(){
   show("listBuild");
@@ -1121,7 +1220,10 @@ async function openBrowse(){
      <div class="n">${ENTRY_ICON[t.entry_type]||"🏀"}</div>
      <div class="name">${t.prompt}</div>
      <div class="ctx">${t.author_count} list${t.author_count===1?"":"s"}</div></div>`).join("");
-  Array.from(box.children).forEach(el=>el.onclick=()=>openListTopic(el.dataset.t,"compare"));
+  // Rank first: landing on the consensus spoils the set and leaves you no stake
+  // in it. openListTopic sends you straight to compare if you already have one.
+  window.FROM_BROWSE = true;
+  Array.from(box.children).forEach(el=>el.onclick=()=>openListTopic(el.dataset.t,"build"));
 }
 
 // ------------------------------------------------------------------ tier lists
@@ -1162,7 +1264,9 @@ async function openTierTopic(token,dest){
   TIER={ topic_id:r.topic.id, share_token:r.topic.share_token, prompt:r.topic.prompt, item_type:r.topic.item_type,
          tiers:r.topic.tiers, item_set:r.topic.item_set, assign:{...(r.your_assignments||{})}, is_creator:r.topic.is_creator };
   if(/^daily_/.test(token)){ TIER.isDaily=true; TIER.date=token.slice(6); }
-  if(dest==="compare") showTierCompare(); else openTierBoard();
+  // Already tiered this set? The reveal is the point of coming back.
+  const hasEntry = Object.keys(r.your_assignments||{}).length > 0;
+  if(dest==="compare" || hasEntry) showTierCompare(); else openTierBoard();
 }
 function openTierBoard(){
   show("tierBoard");
@@ -1171,6 +1275,9 @@ function openTierBoard(){
   $("tierRespin").style.display=TIER.is_creator?"":"none";
   $("tierShareRow").classList.add("hidden"); $("tierBoardErr").textContent="";
   $("tierShareHook").classList.toggle("hidden", !(window.FROM_SHARE && !TIER.is_creator));
+  // Arriving from Browse you were only curious — let curiosity win without a
+  // board, but make ranking first the default path.
+  $("tierSkipHook").classList.toggle("hidden", !window.FROM_BROWSE);
   // Arriving from a crew room, saving is the way back — say so instead of "Save".
   $("tierSaveBtn").textContent=(CREW_RETURN&&TIER.isDaily)?"Save & back to crew":"Save";
   renderTierBoard();
@@ -1210,7 +1317,12 @@ $("tierSaveBtn").onclick=async()=>{
 };
 $("tierCopyBtn").onclick=()=>{ $("tierShareUrl").select(); navigator.clipboard?.writeText($("tierShareUrl").value); $("tierCopyBtn").textContent="Copied!"; setTimeout(()=>$("tierCopyBtn").textContent="Copy",1200); };
 $("tierBoardBack").onclick=()=>{ if(CREW_RETURN){ const c=CREW_RETURN; CREW_RETURN=null; openCrew(c); } else openTierHome(); };
-$("tierCompareBtn").onclick=async()=>{ await saveTier(); showTierCompare(); };
+// Skips the board entirely — deliberately does NOT save, so browsing doesn't
+// inflate author_count with empty entries.
+$("tierSkipBtn").onclick=()=>showTierCompare();
+// Guarded like the list equivalent: saving an empty board would count toward
+// author_count and pad the consensus with a non-opinion.
+$("tierCompareBtn").onclick=async()=>{ if(Object.keys(TIER.assign||{}).length) await saveTier(); showTierCompare(); };
 $("tierRespin").onclick=async()=>{
   const r=await api("tier_reroll",{ topic_id:TIER.topic_id, client_id:clientId() });
   if(!r.ok){ $("tierBoardErr").style.color="var(--bad)"; $("tierBoardErr").textContent="Error: "+r.error; return; }
@@ -1315,7 +1427,8 @@ async function openTierBrowse(){
   if(!r.ok){ $("tierBrowseErr").textContent="Error: "+r.error; box.innerHTML=""; return; }
   if(!r.topics.length){ box.innerHTML=`<div class="note">No public tier lists yet.</div>`; return; }
   box.innerHTML=r.topics.map(t=>`<div class="slot" style="cursor:pointer" data-t="${t.share_token}"><div class="n">${tierIcon(t.item_type)}</div><div class="name">${t.prompt}</div><div class="ctx">${t.author_count} tiered</div></div>`).join("");
-  Array.from(box.children).forEach(el=>el.onclick=()=>openTierTopic(el.dataset.t,"compare"));
+  window.FROM_BROWSE = true;
+  Array.from(box.children).forEach(el=>el.onclick=()=>openTierTopic(el.dataset.t,"board"));
 }
 
 // ------------------------------------------------------------------ daily + share card
@@ -1408,6 +1521,279 @@ function _dataUrlToBlob(dataUrl){
 }
 $("tierShareBtn").onclick=tierShareCard;
 $("tierShareBtn2").onclick=tierShareCard;
+
+// ------------------------------------------------------------------ pickup
+// In-person co-op. State lives on the server; this polls it. Interval adapts so
+// pocketed phones cost nothing: paused when hidden, slow in the lobby, quick
+// while live, quickest on the host device that's propped up as the display.
+let PARTY = null;      // {session, member_id, member_token, host_token, is_host, sinceId, seen:Map}
+let PARTY_TIMER = null;
+let PARTY_RECAP = null;
+
+// Never ensureName() here: it opens a blocking native prompt(), and on the ?p=
+// join path that would land in front of someone standing in a bar before they
+// have seen anything. Empty is fine — the server defaults to "Player" and the
+// lobby offers an inline rename.
+function partyName(){ return (($("partyName") && $("partyName").value) || store.get("mp_name","")).trim(); }
+function partyStash(sessionId, v){ store.set("mp_party_"+sessionId, JSON.stringify(v)); }
+function partyRecall(sessionId){ try{ return JSON.parse(store.get("mp_party_"+sessionId,"")||"null"); }catch{ return null; } }
+function partyJoinUrl(code){ return location.origin+location.pathname+"?p="+code; }
+
+function partyInterval(){
+  if(!PARTY || document.hidden) return null;
+  const st = PARTY.session.status;
+  if(st==="ended") return null;
+  if(st==="lobby") return 10000;
+  return PARTY.is_host ? 1000 : 2000;
+}
+function partySchedule(){
+  clearTimeout(PARTY_TIMER); PARTY_TIMER=null;
+  const ms = partyInterval();
+  if(ms==null) return;
+  PARTY_TIMER = setTimeout(partyPoll, ms);
+}
+document.addEventListener("visibilitychange", ()=>{ if(document.hidden) { clearTimeout(PARTY_TIMER); PARTY_TIMER=null; } else partySchedule(); });
+
+async function partyPoll(){
+  if(!PARTY) return;
+  const r = await api("party_state",{ session_id:PARTY.session.id, since_id:PARTY.sinceId });
+  if(r && r.ok) partyApply(r);
+  partySchedule();
+}
+
+// One place applies every server response — the poll and the guess piggyback
+// share it, so the typer's own answer lands without waiting for the next tick.
+function partyApply(r){
+  if(!PARTY) return;
+  if(r.session) PARTY.session = r.session;
+  if(Array.isArray(r.members)) PARTY.members = r.members;
+  if(Array.isArray(r.answers)) partyAppend(r.answers);
+  // Self-heal: if the server's count disagrees with what we've rendered, our
+  // cursor missed something (or we optimistically rendered a loser). Refetch.
+  if(typeof r.count === "number" && r.count !== PARTY.seen.size){
+    if(r.count < PARTY.seen.size || PARTY.sinceId > 0){ PARTY.sinceId = 0; PARTY.seen.clear(); }
+  }
+  if(r.recap) PARTY_RECAP = r.recap;
+  partyRender();
+  if(PARTY.session.status==="ended") partyShowRecap();
+}
+function partyAppend(rows){
+  for(const a of rows){
+    if(a.id!=null && a.id > PARTY.sinceId) PARTY.sinceId = a.id;
+    PARTY.seen.set(a.player_key, a);
+  }
+}
+
+function partyRender(){
+  if(!PARTY) return;
+  const s = PARTY.session;
+  if(!$("partyHost").classList.contains("hidden")){
+    $("partyMembers").innerHTML = (PARTY.members||[]).map(m=>`<div class="slot"><div class="n">🏀</div><div class="name">${esc(m.label)}</div></div>`).join("")
+      || `<div class="note">Nobody's joined yet.</div>`;
+    $("partyMemberCount").textContent = `· ${(PARTY.members||[]).length}`;
+    if(s.status==="live" || s.status==="ended") partyOpenPlay();
+    return;
+  }
+  $("partyPlayPrompt").textContent = s.prompt;
+  $("partyTarget").textContent = s.target;
+  $("partyCount").textContent = PARTY.seen.size;
+  $("partyMisses").textContent = s.misses||0;
+  $("partyBar").style.width = Math.min(100, Math.round(100*PARTY.seen.size/Math.max(1,s.target)))+"%";
+  $("partyClock").textContent = s.seconds_left==null ? "" :
+    Math.floor(s.seconds_left/60)+":"+String(s.seconds_left%60).padStart(2,"0");
+  $("partyEndBtn").style.display = PARTY.is_host ? "" : "none";
+  const rows = Array.from(PARTY.seen.values()).reverse();
+  $("partyBoard").innerHTML = rows.length ? rows.map(a=>{
+    const e = a.rarity_tier==="deep_cut"?"🔥 ":a.rarity_tier==="rare"?"💎 ":"";
+    return `<div class="slot"><div class="n">${e||"✓"}</div><div class="name">${esc(a.display_name)}</div><div class="ctx">${esc(a.member_label||"")}</div></div>`;
+  }).join("") : `<div class="note">Nothing yet — start shouting.</div>`;
+}
+
+function partyFlash(html, good){
+  const el=$("partyFlash"); el.style.color = good?"var(--good)":"var(--muted)";
+  el.innerHTML=html; setTimeout(()=>{ if(el.innerHTML===html) el.innerHTML=""; }, 2200);
+}
+
+$("partyBtn") && ($("partyBtn").onclick = openPartyHome);
+async function openPartyHome(){
+  show("partyHost"); $("partyHostErr").textContent="";
+  $("modePill").textContent = "pickup";
+  $("partySetup").classList.remove("hidden"); $("partyLobby").classList.add("hidden");
+  $("partyName").value = store.get("mp_name","");
+  $("partyStartBtn").style.display = ""; $("partyShareBtn").style.display = "";
+  const r = await api("party_prompts",{});
+  if(!r.ok){ $("partyHostErr").textContent="Error: "+r.error; return; }
+  $("partyPrompt").innerHTML = r.prompts.map(p=>`<option value="${p.slug}">${esc(p.prompt)} · name ${p.target}</option>`).join("");
+}
+$("partyHostBack").onclick = ()=>{ partyLeave(); show("lobby"); };
+$("partyPlayBack").onclick = ()=>{ partyLeave(); show("lobby"); };
+$("partyRecapBack").onclick = ()=>{ partyLeave(); show("lobby"); };
+function partyLeave(){ clearTimeout(PARTY_TIMER); PARTY_TIMER=null; PARTY=null; PARTY_RECAP=null; syncModePill(); }
+
+$("partyCreateBtn").onclick = async ()=>{
+  const slug=$("partyPrompt").value, tv=$("partyTime").value;
+  const name = partyName();
+  if(name) store.set("mp_name", name);
+  const r = await api("party_create",{ slug, time_limit_s: tv===""?null:Number(tv), client_id:clientId(), label:name });
+  if(!r.ok){ $("partyHostErr").textContent="Error: "+r.error; return; }
+  PARTY = { session:r.session, member_id:r.member_id, member_token:r.member_token,
+            host_token:r.host_token, is_host:true, members:r.members||[], sinceId:0, seen:new Map() };
+  partyStash(r.session.id, { member_id:r.member_id, member_token:r.member_token, host_token:r.host_token });
+  $("partySetup").classList.add("hidden"); $("partyLobby").classList.remove("hidden");
+  $("partyCode").textContent = r.session.code;
+  $("partyJoinHost").textContent = (location.host + location.pathname).replace(/\/$/,"");
+  const q = await api("qr",{ url: partyJoinUrl(r.session.code) });
+  $("partyQr").innerHTML = q.ok ? q.svg : "";
+  partyRender(); partySchedule();
+};
+
+$("partyShareBtn").onclick = ()=>{
+  if(!PARTY) return;
+  const text = `Pickup: ${PARTY.session.prompt}\nJoin with code ${PARTY.session.code}\n${partyJoinUrl(PARTY.session.code)}`;
+  if(navigator.share){ navigator.share({text}).catch(()=>{}); return; }
+  try{ navigator.clipboard?.writeText(text); $("partyShareBtn").textContent="Copied!";
+       setTimeout(()=>$("partyShareBtn").textContent="📲 Send link",1200); }catch(e){}
+};
+
+// Rename = re-join with a label. party_join is idempotent, so this updates the
+// member and back-fills the label on anything they already got.
+$("partyRenameBtn").onclick = async ()=>{
+  if(!PARTY) return;
+  const v = $("partyRename").value.trim();
+  if(!v) return;
+  store.set("mp_name", v);
+  const r = await api("party_join",{ code:PARTY.session.code, client_id:clientId(), label:v, member_token:PARTY.member_token });
+  if(r.ok){ PARTY.members = r.members||PARTY.members; $("partyRenameBtn").textContent="✓"; setTimeout(()=>$("partyRenameBtn").textContent="Set",1200); partyRender(); }
+};
+
+$("partyStartBtn").onclick = async ()=>{
+  if(!PARTY) return;
+  const r = await api("party_start",{ session_id:PARTY.session.id, host_token:PARTY.host_token });
+  if(!r.ok){ $("partyHostErr").textContent="Error: "+r.error; return; }
+  PARTY.session = r.session; partyOpenPlay(); partySchedule();
+};
+
+function partyOpenPlay(){
+  show("partyPlay"); $("partyPlayErr").textContent="";
+  partyRender(); partyLoadPool(); $("partyGuess").focus();
+}
+
+// Joining from a ?p= link or a typed code. Resumes rather than re-joining when
+// this device already has a member token for the session.
+async function partyJoinByCode(code, label){
+  const r = await api("party_join",{ code, client_id:clientId(), label: label ?? partyName() });
+  if(!r.ok){
+    show("partyHost"); $("partySetup").classList.remove("hidden"); $("partyLobby").classList.add("hidden");
+    $("partyHostErr").textContent = r.error==="session_ended" ? "That session already wrapped up."
+      : r.error==="unknown_session" ? "No session with that code." : "Error: "+r.error;
+    return;
+  }
+  const stash = partyRecall(r.session.id) || {};
+  PARTY = { session:r.session, member_id:r.member_id, member_token:r.member_token,
+            host_token:stash.host_token||null, is_host:r.is_host, members:r.members||[],
+            sinceId:0, seen:new Map() };
+  partyStash(r.session.id, { member_id:r.member_id, member_token:r.member_token, host_token:PARTY.host_token });
+  partyAppend(r.board||[]);
+  if(r.session.status==="lobby" && !r.is_host){
+    show("partyHost");
+    $("partySetup").classList.add("hidden"); $("partyLobby").classList.remove("hidden");
+    $("partyCode").textContent = r.session.code;
+    $("partyJoinHost").textContent = (location.host + location.pathname).replace(/\/$/,"");
+    $("partyStartBtn").style.display = "none";
+    $("partyQr").innerHTML = ""; $("partyShareBtn").style.display="none";
+  } else partyOpenPlay();
+  partyRender(); partySchedule();
+}
+
+let PARTY_POOL = [];
+async function partyLoadPool(){
+  if(PARTY_POOL.length) return;
+  const r = await api("suggest",{ pool:"players" });
+  if(r && r.ok && r.items) PARTY_POOL = r.items.map(n=>({v:n, label:n, key:normStr(n)}));
+}
+function partyAcHide(){ $("partyAc").classList.add("hidden"); $("partyAc").innerHTML=""; }
+$("partyGuess").addEventListener("input", ()=>{
+  const q=normStr($("partyGuess").value).trim();
+  if(q.length<2 || !PARTY_POOL.length) return partyAcHide();
+  const hits=PARTY_POOL.filter(p=>p.key.startsWith(q)).slice(0,6);
+  if(!hits.length) return partyAcHide();
+  $("partyAc").innerHTML = hits.map(h=>`<div class="acitem" data-v="${esc(h.v)}">${esc(h.label)}</div>`).join("");
+  $("partyAc").classList.remove("hidden");
+  Array.from($("partyAc").children).forEach(el=>el.onclick=()=>{ $("partyGuess").value=el.dataset.v; partyAcHide(); partySubmit(); });
+});
+$("partyGuess").addEventListener("keydown", e=>{ if(e.key==="Enter"){ e.preventDefault(); partyAcHide(); partySubmit(); } });
+$("partyGuessBtn").onclick = ()=>{ partyAcHide(); partySubmit(); };
+
+async function partySubmit(){
+  if(!PARTY) return;
+  const guess = $("partyGuess").value.trim();
+  if(!guess) return;
+  $("partyGuess").value = "";
+  const r = await api("party_guess",{ session_id:PARTY.session.id, member_id:PARTY.member_id,
+    member_token:PARTY.member_token, guess, since_id:PARTY.sinceId });
+  if(!r.ok){
+    if(r.error==="session_not_live"){ partyPoll(); return; }
+    $("partyPlayErr").textContent="Error: "+r.error; return;
+  }
+  if(r.result==="correct"){
+    const e = r.rarity_tier==="deep_cut"?"🔥 ":r.rarity_tier==="rare"?"💎 ":"✅ ";
+    partyFlash(`${e}${esc(r.display_name)}`, true);
+  } else if(r.result==="duplicate"){
+    partyFlash(`${esc(r.claimed_by||"Someone")} already got ${esc(r.display_name)}`, false);
+  } else {
+    partyFlash(`Not in this one`, false);
+  }
+  // Server sends the delta with the response, so this renders before the next poll.
+  partyApply(r);
+  $("partyGuess").focus();
+}
+
+$("partyEndBtn").onclick = async ()=>{
+  if(!PARTY || !PARTY.host_token) return;
+  const r = await api("party_end",{ session_id:PARTY.session.id, host_token:PARTY.host_token });
+  if(!r.ok){ $("partyPlayErr").textContent="Error: "+r.error; return; }
+  PARTY.session=r.session; PARTY_RECAP=r.recap; partyShowRecap();
+};
+
+function partyShowRecap(){
+  clearTimeout(PARTY_TIMER); PARTY_TIMER=null;
+  if(!PARTY_RECAP){ api("party_state",{session_id:PARTY.session.id, since_id:0}).then(r=>{ if(r.ok&&r.recap){ PARTY_RECAP=r.recap; partyShowRecap(); } }); return; }
+  const R = PARTY_RECAP;
+  show("partyRecap");
+  const hit = R.count >= R.target;
+  let h = `<div style="text-align:center;margin:6px 0 12px">
+    <div style="font-size:40px;font-weight:900;color:${hit?"var(--good)":"var(--ink)"}">${R.count}<span class="note" style="font-size:18px"> / ${R.target}</span></div>
+    <div class="note">${esc(R.prompt)}</div>
+    <div class="note" style="margin-top:4px">${R.count + (R.misses||0)} shouted · ${R.count} landed</div></div>`;
+  if((R.contributors||[]).length){
+    const top = R.contributors[0].n || 1;
+    h += `<div style="font-weight:700;font-size:12px;color:var(--muted);letter-spacing:.5px">WHO GOT WHAT</div>`;
+    h += R.contributors.map(c=>`<div style="margin-top:6px">
+      <div style="display:flex;justify-content:space-between;font-size:14px"><span>${esc(c.label)}</span><b>${c.n}</b></div>
+      <div style="height:6px;background:var(--panel2);border-radius:99px;overflow:hidden;margin-top:2px">
+        <div style="height:100%;width:${Math.round(100*c.n/top)}%;background:var(--accent)"></div></div></div>`).join("");
+  }
+  if((R.deep_cuts||[]).length){
+    h += `<div style="font-weight:700;font-size:12px;color:var(--muted);letter-spacing:.5px;margin-top:14px">DEEP CUTS 🔥</div>
+          <div style="margin-top:5px">${R.deep_cuts.map(esc).join(", ")}</div>`;
+  }
+  if((R.missed||[]).length){
+    h += `<div style="font-weight:700;font-size:12px;color:var(--muted);letter-spacing:.5px;margin-top:14px">YOU MISSED</div>
+          <div style="margin-top:5px">${R.missed.map(m=>esc(m.display_name)).join(", ")}</div>`;
+  }
+  $("partyRecapBody").innerHTML = h;
+}
+
+$("partyAgainBtn").onclick = ()=>{ const s=PARTY&&PARTY.session; partyLeave(); openPartyHome().then(()=>{ if(s) $("partyPrompt").value = $("partyPrompt").value; }); };
+$("partyRecapShare").onclick = ()=>{
+  if(!PARTY_RECAP) return;
+  const R=PARTY_RECAP;
+  const text = `🏀 Pickup — ${R.prompt}\nWe got ${R.count}/${R.target}`
+    + ((R.missed||[]).length?`\nMissed: ${R.missed.map(m=>m.display_name).join(", ")}`:"")
+    + `\n${location.origin+location.pathname}`;
+  if(navigator.share){ navigator.share({text}).catch(()=>{}); return; }
+  try{ navigator.clipboard?.writeText(text); }catch(e){}
+};
 
 // ------------------------------------------------------------------ crews
 const REACTIONS = ["🔥","💀","🧢","👑","😂"];
@@ -1528,9 +1914,11 @@ loadSheets();
 const urlToken = new URLSearchParams(location.search).get("ch");
 const urlList = new URLSearchParams(location.search).get("list");
 const urlTier = new URLSearchParams(location.search).get("tier");
+const urlParty = new URLSearchParams(location.search).get("p");
 window.FROM_SHARE = !!(urlTier || urlList);
-track("landing", { from: window.FROM_SHARE ? "share" : "direct" });
-if(urlTier){ $("playerName").value = store.get("mp_name",""); openTierTopic(urlTier,"board"); }
+track("landing", { from: urlParty ? "party" : (window.FROM_SHARE ? "share" : "direct") });
+if(urlParty){ $("playerName").value = store.get("mp_name",""); partyJoinByCode(urlParty); }
+else if(urlTier){ $("playerName").value = store.get("mp_name",""); openTierTopic(urlTier,"board"); }
 else if(urlList){ $("playerName").value = store.get("mp_name",""); openListTopic(urlList,"build"); }
 else if(urlToken){ $("playerName").value = store.get("mp_name",""); openChallenge(urlToken); }
 $("playerName").addEventListener("change",e=>store.set("mp_name",e.target.value));
@@ -1538,7 +1926,9 @@ $("playerName").value = store.get("mp_name","");
 
 // ------------------------------------------------------------------ first run
 (function(){
-  const hasShare = urlToken || urlList || urlTier;
+  // A party joiner is standing in a room waiting on their friends — never put
+  // an onboarding overlay in front of them.
+  const hasShare = urlToken || urlList || urlTier || urlParty;
   if(hasShare || store.get("tc_seen","")) return;
   const w = $("welcome"); w.classList.add("show");
   const done = go => { w.classList.remove("show"); store.set("tc_seen","1"); if(go) $("dailyBtn").click(); };

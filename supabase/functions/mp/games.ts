@@ -2,6 +2,7 @@ import {
   db, ok, err, authedUserId, normalize, randomToken,
   buildSnapshot, revealedAnswers, strikeContext, rankCompare, leaderboardCompare, isBotClient,
   ARENA_POOL, TEAM_POOL, insertBot, insertRosterBot, loadRosterPool, rosterReveal, RARITY_LABEL,
+  matchPoolGuess,
 } from "./shared.ts";
 import type { SnapshotSlot, PoolEntry } from "./shared.ts";
 
@@ -483,7 +484,7 @@ export async function actionGuess(_req: Request, body: any) {
   if (isRoster) {
     // pool game: any un-used pool member fills the next open slot (1..target)
     const usedKeys = new Set(Object.values(filled).map((f: any) => f.player_key));
-    const hit = (snapshot as PoolEntry[]).find((p) => p.accepted.includes(norm));
+    const hit = matchPoolGuess(snapshot as PoolEntry[], norm);
     if (hit) {
       if (usedKeys.has(hit.player_key)) {
         result = "duplicate"; matchedName = hit.display_name;

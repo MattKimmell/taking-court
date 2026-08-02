@@ -418,6 +418,19 @@ export async function insertRosterBot(challengeId: string, mode: string, pool: P
   return sim.label;
 }
 
+// Find the pool entry a normalized guess matches, or null. Shared by the roster
+// game and Pickup so "is this a valid name" has exactly one definition.
+// Builds a Map per call: pools run to a few hundred entries with several aliases
+// each, and the party path hits this on every keystroke-submit from every phone.
+export function matchPoolGuess(pool: PoolEntry[], norm: string): PoolEntry | null {
+  if (!norm) return null;
+  const byAlias = new Map<string, PoolEntry>();
+  for (const p of pool) {
+    for (const a of p.accepted) if (!byAlias.has(a)) byAlias.set(a, p);
+  }
+  return byAlias.get(norm) ?? null;
+}
+
 export async function loadRosterPool(rosterSheetId: string): Promise<PoolEntry[]> {
   const { data } = await db.from("mp_roster_pool")
     .select("player_key, display_name, accepted, rarity_tier, rarity_score")

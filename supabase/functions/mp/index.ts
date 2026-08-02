@@ -6,6 +6,8 @@ import { actionListCreate, actionListSave, actionListOpen, actionListCompare, ac
 import { actionTierCreate, actionTierReroll, actionTierOpen, actionTierSave, actionTierCompare, actionTierMine, actionTierBrowse, actionTierSubmit, actionDaily } from "./tiers.ts";
 import { actionCrewCreate, actionCrewJoin, actionCrewMine, actionCrewDaily, actionCrewReact } from "./crews.ts";
 import { actionTrack } from "./events.ts";
+import { actionPartyPrompts, actionPartyCreate, actionPartyJoin, actionPartyStart, actionPartyGuess, actionPartyState, actionPartyEnd } from "./party.ts";
+import { actionQr } from "./qr.ts";
 
 // -----------------------------------------------------------------------------
 // Router
@@ -85,6 +87,22 @@ Deno.serve(async (req: Request) => {
         return await actionCrewReact(req, body);
       case "track":
         return await actionTrack(req, body);
+      case "party_prompts":
+        return await actionPartyPrompts();
+      case "party_create":
+        return await actionPartyCreate(req, body);
+      case "party_join":
+        return await actionPartyJoin(req, body);
+      case "party_start":
+        return await actionPartyStart(req, body);
+      case "party_guess":
+        return await actionPartyGuess(req, body);
+      case "party_state":
+        return await actionPartyState(req, body);
+      case "party_end":
+        return await actionPartyEnd(req, body);
+      case "qr":
+        return await actionQr(req, body);
       default:
         return err("unknown_action", 400);
     }
