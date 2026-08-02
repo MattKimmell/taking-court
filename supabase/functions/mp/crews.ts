@@ -1,4 +1,4 @@
-import { db, ok, err, authedUserId } from "./shared.ts";
+import { db, ok, err, authedUserId, consensusFor } from "./shared.ts";
 import { getOrCreateDailyTopic } from "./tiers.ts";
 
 // -----------------------------------------------------------------------------
@@ -118,17 +118,18 @@ export async function actionCrewDaily(req: Request, body: any) {
     e.count++; if (r.user_id === userId) e.mine = true; m.set(r.emoji, e);
   }
 
-  // crew consensus (modal + avg tier) among those who played
-  const consensus = items.map((it) => {
-    const dist: Record<string, number> = {}; let sum = 0, cnt = 0;
-    for (const b of played) { const t = (b.assignments || {})[it.key]; if (t && tierIndex.has(t)) { dist[t] = (dist[t] || 0) + 1; sum += tierIndex.get(t)!; cnt++; } }
-    let modal: string | null = null, best = 0;
-    for (const t of tiers) { const c = dist[t] || 0; if (c > best) { best = c; modal = t; } }
-    return { key: it.key, label: it.label, modal, avg_tier: cnt ? tiers[Math.round(sum / cnt)] : null, count: cnt, distribution: dist };
-  });
-  const modalBy = new Map(consensus.map((c) => [c.key, c.modal]));
+  // Crew consensus among those who played — note the population is crew members
+  // only, which is why consensusFor takes boards rather than querying. Left
+  // unsorted: tiers.ts sorts for its consensus column, this one keeps item_set
+  // order.
+  const consensus = consensusFor(items, played, tiers);
+  const modalBy = new Map(consensus.map((c) => [c.key, c.modal_tier]));
 
-  // Hottest Take: biggest average divergence from the crew's modal (needs >=2 players)
+  // Hottest Take: biggest average divergence from the crew's modal (needs >=2 players).
+  // The divisor is the RATER's item count, not the item-set count — deliberately.
+  // Someone who rates one item four tiers off (4.0) beats someone who rated ten
+  // items one tier off (1.0). "Fixing" that to divide by items.length changes who
+  // wins, so leave it alone.
   let hottest: { user_id: string; score: number } | null = null;
   if (played.length >= 2) {
     for (const b of played) {

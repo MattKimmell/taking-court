@@ -3,7 +3,7 @@
 import { CORS, err } from "./shared.ts";
 import { actionSheets, actionCreate, actionOpen, actionStart, actionGuess, actionResults, actionAddBot, actionLeaderboard, actionSuggest } from "./games.ts";
 import { actionListCreate, actionListSave, actionListOpen, actionListCompare, actionListMine, actionListBrowse, actionListSubmit } from "./lists.ts";
-import { actionTierCreate, actionTierReroll, actionTierOpen, actionTierSave, actionTierCompare, actionTierMine, actionTierBrowse, actionTierSubmit, actionDaily } from "./tiers.ts";
+import { actionTierCreate, actionTierReroll, actionTierOpen, actionTierSave, actionTierCompare, actionTierMine, actionTierBrowse, actionTierSubmit, actionTierThemes, actionDaily } from "./tiers.ts";
 import { actionCrewCreate, actionCrewJoin, actionCrewMine, actionCrewDaily, actionCrewReact } from "./crews.ts";
 import { actionTrack } from "./events.ts";
 import { actionPartyPrompts, actionPartyCreate, actionPartyJoin, actionPartyStart, actionPartyGuess, actionPartyState, actionPartyEnd } from "./party.ts";
@@ -73,6 +73,8 @@ Deno.serve(async (req: Request) => {
         return await actionTierBrowse(req, body);
       case "tier_submit":
         return await actionTierSubmit(req, body);
+      case "tier_themes":
+        return await actionTierThemes();
       case "daily":
         return await actionDaily(req, body);
       case "crew_create":

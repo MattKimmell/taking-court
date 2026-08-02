@@ -1,4 +1,4 @@
-import { db, ok, err, authedUserId, randomToken, tierPool, drawSet, POOL_TYPE, DAILY_ROTATION, ownerFilter, creatorFilter } from "./shared.ts";
+import { db, ok, err, authedUserId, randomToken, tierPool, drawSet, POOL_TYPE, DAILY_ROTATION, ownerFilter, creatorFilter, safeClientId, consensusFor, scoreBoard, minBoardsFor } from "./shared.ts";
 
 // ---------------------------------------------------------------------------
 // Tier-list mode (spin a set from a pool, sort into S/A/B/C/D/F, compare).
@@ -62,14 +62,23 @@ export async function actionTierSubmit(req: Request, body: any) {
 export async function actionTierReroll(req: Request, body: any) {
   const { topic, error } = await loadTierTopic(body);
   if (error) return err(error, 404);
+  // Structural, and BEFORE the identity check on purpose. A curated set is the
+  // whole point of a theme, and a reroll both redraws the set and deletes every
+  // board on the topic — for a globally-pooled theme that wipes the consensus.
+  // The identity check below cannot carry this: client_id is read raw from the
+  // body, so {client_id:"daily"} used to match the Daily's creator_client_id and
+  // let anyone redraw the Daily before the first player of the day saved.
+  if ((topic.kind ?? "user") !== "user") return err("cannot_reroll_curated", 403);
   const userId = authedUserId(req);
-  const clientId: string | null = body.client_id ?? null;
+  const clientId = safeClientId(body.client_id);
   const isCreator = (userId && topic.creator_user_id === userId) || (clientId && topic.creator_client_id === clientId);
   if (!isCreator) return err("only_creator_can_reroll", 403);
   const { data: others } = await db.from("mp_tier_lists").select("id, author_client_id, author_user_id").eq("topic_id", topic.id);
   const nonCreator = (others ?? []).filter((l) => !((userId && l.author_user_id === userId) || (clientId && l.author_client_id === clientId)));
   if (nonCreator.length > 0) return err("others_already_tiered", 409);
-  const itemSet = drawSet(await tierPool(topic.pool_source, (topic.pool_params as any)?.era ?? null), topic.draw_size);
+  const pool = await tierPool(topic.pool_source, (topic.pool_params as any)?.era ?? null);
+  if (pool.length < 4) return err("pool_too_small", 500);   // mirrors actionTierCreate; never delete boards for a short draw
+  const itemSet = drawSet(pool, topic.draw_size);
   await db.from("mp_tier_topics").update({ item_set: itemSet }).eq("id", topic.id);
   await db.from("mp_tier_lists").delete().eq("topic_id", topic.id);   // set changed → clear old assignments
   return ok({ topic_id: topic.id, item_set: itemSet, tiers: topic.tiers, item_type: topic.item_type });
@@ -84,7 +93,7 @@ export async function actionTierOpen(req: Request, body: any) {
   const mine = (lists ?? []).find((l) => (userId && l.author_user_id === userId) || (clientId && l.author_client_id === clientId));
   const isCreator = (userId && topic.creator_user_id === userId) || (clientId && topic.creator_client_id === clientId);
   return ok({
-    topic: { id: topic.id, share_token: topic.share_token, prompt: topic.prompt, item_type: topic.item_type, tiers: topic.tiers, item_set: topic.item_set, author_count: (lists ?? []).length, is_creator: !!isCreator, review_status: topic.review_status ?? "unsubmitted" },
+    topic: { id: topic.id, share_token: topic.share_token, prompt: topic.prompt, item_type: topic.item_type, tiers: topic.tiers, item_set: topic.item_set, author_count: (lists ?? []).length, is_creator: !!isCreator, review_status: topic.review_status ?? "unsubmitted", kind: topic.kind ?? "user", invite: topic.invite ?? null },
     your_assignments: mine?.assignments ?? {},
   });
 }
@@ -113,6 +122,42 @@ export async function actionTierSave(req: Request, body: any) {
   return ok({ list_id: created.id, saved: true });
 }
 
+// Curated themes: the featured one is returned separately because it gets a
+// hero slot. Everyone playing a theme tiers the identical set, so author_count
+// is both social proof and the score-gate countdown.
+export async function actionTierThemes() {
+  const { data: themes } = await db.from("mp_tier_themes")
+    .select("slug, prompt, blurb, item_type, featured, sort_order")
+    .eq("status", "approved").order("sort_order", { ascending: true });
+  const rows = themes ?? [];
+  if (!rows.length) return ok({ featured: null, themes: [] });
+
+  const tokens = rows.map((t) => "theme_" + t.slug);
+  const { data: topics } = await db.from("mp_tier_topics")
+    .select("id, share_token, kind").in("share_token", tokens);
+  const idByToken = new Map((topics ?? []).map((t) => [t.share_token, t.id]));
+
+  const { data: boards } = await db.from("mp_tier_lists")
+    .select("topic_id").in("topic_id", Array.from(idByToken.values()));
+  const counts = new Map<string, number>();
+  for (const b of boards ?? []) counts.set(b.topic_id, (counts.get(b.topic_id) ?? 0) + 1);
+
+  const need = minBoardsFor("theme");
+  const out = rows.map((t) => {
+    const token = "theme_" + t.slug;
+    const have = counts.get(idByToken.get(token) ?? "") ?? 0;
+    return {
+      slug: t.slug, prompt: t.prompt, blurb: t.blurb, item_type: t.item_type,
+      share_token: token, author_count: have,
+      score_gate: { have, need, unlocked: have >= need },
+    };
+  });
+  return ok({
+    featured: out.find((_, i) => rows[i].featured) ?? null,
+    themes: out.filter((_, i) => !rows[i].featured),
+  });
+}
+
 export async function actionTierCompare(req: Request, body: any) {
   const { topic, error } = await loadTierTopic(body);
   if (error) return err(error, 404);
@@ -123,16 +168,25 @@ export async function actionTierCompare(req: Request, body: any) {
   const tiers = topic.tiers as string[];
   const tierIndex = new Map(tiers.map((t, i) => [t, i]));   // S=0 (best)
   const items = topic.item_set as any[];
-  const consensus = items.map((it) => {
-    const dist: Record<string, number> = {}; let sum = 0, cnt = 0;
-    for (const l of all) { const t = (l.assignments || {})[it.key]; if (t && tierIndex.has(t)) { dist[t] = (dist[t] || 0) + 1; sum += tierIndex.get(t)!; cnt++; } }
-    let modal: string | null = null, best = 0;
-    for (const t of tiers) { const c = dist[t] || 0; if (c > best) { best = c; modal = t; } }
-    const avgTier = cnt ? tiers[Math.round(sum / cnt)] : null;
-    return { key: it.key, label: it.label, modal_tier: modal, avg_tier: avgTier, count: cnt, distribution: dist };
-  }).sort((a, b) => (a.avg_tier == null ? 99 : tierIndex.get(a.avg_tier)!) - (b.avg_tier == null ? 99 : tierIndex.get(b.avg_tier)!) || a.label.localeCompare(b.label));
+  // Sort stays here, not in consensusFor: it's presentation for the consensus
+  // column, and crews.ts / the client's share grid must keep their own order.
+  const consensus = consensusFor(items, all, tiers)
+    .sort((a, b) => (a.avg_tier == null ? 99 : tierIndex.get(a.avg_tier)!) - (b.avg_tier == null ? 99 : tierIndex.get(b.avg_tier)!) || a.label.localeCompare(b.label));
   const listsOut = all.map((l) => ({ author_label: l.author_label, is_you: (userId && l.author_user_id === userId) || (clientId && l.author_client_id === clientId) || false, assignments: l.assignments }));
-  return ok({ topic: { id: topic.id, share_token: topic.share_token, prompt: topic.prompt, item_type: topic.item_type, tiers, item_set: items }, total_authors: all.length, consensus, lists: listsOut });
+
+  // Guess-the-consensus. Gated so a "score" is never computed against a room
+  // too small to be one; below the gate the client shows a share prompt.
+  const need = minBoardsFor(topic.kind);
+  const unlocked = all.length >= need;
+  const mine = all.find((l) => (userId && l.author_user_id === userId) || (clientId && l.author_client_id === clientId));
+  const yourScore = (unlocked && mine) ? scoreBoard(mine.assignments, consensus, tiers) : null;
+
+  return ok({
+    topic: { id: topic.id, share_token: topic.share_token, prompt: topic.prompt, item_type: topic.item_type, tiers, item_set: items, kind: topic.kind ?? "user", invite: topic.invite ?? null },
+    total_authors: all.length, consensus, lists: listsOut,
+    score_gate: { have: all.length, need, unlocked },
+    your_score: yourScore,
+  });
 }
 
 export async function actionTierMine(req: Request, body: any) {
@@ -161,7 +215,7 @@ export async function actionTierMine(req: Request, body: any) {
     const seen = new Set(rows.map((r) => r.topic_id));
     const { data: mineTopics } = await db.from("mp_tier_topics")
       .select("id, share_token, prompt, item_type, review_status, created_at")
-      .or(creator).neq("creator_client_id", "daily").order("created_at", { ascending: false });
+      .or(creator).eq("kind", "user").order("created_at", { ascending: false });
     for (const t of mineTopics ?? []) {
       if (seen.has(t.id)) continue;
       rows.push({
@@ -176,7 +230,10 @@ export async function actionTierMine(req: Request, body: any) {
 }
 
 export async function actionTierBrowse(_req: Request, _body: any) {
-  const { data: topics } = await db.from("mp_tier_topics").select("id, share_token, prompt, item_type, created_at").eq("review_status", "approved").neq("creator_client_id", "daily").order("created_at", { ascending: false }).limit(60);
+  // kind='user' rather than "not daily": themes are approved and not daily, so
+  // the old filter would have leaked every theme into Browse alongside
+  // user-made topics.
+  const { data: topics } = await db.from("mp_tier_topics").select("id, share_token, prompt, item_type, created_at").eq("review_status", "approved").eq("kind", "user").order("created_at", { ascending: false }).limit(60);
   const ids = (topics ?? []).map((t) => t.id);
   const { data: lists } = await db.from("mp_tier_lists").select("topic_id").in("topic_id", ids.length ? ids : ["00000000-0000-0000-0000-000000000000"]);
   const counts = new Map<string, number>();
@@ -195,25 +252,52 @@ export async function getOrCreateDailyTopic(): Promise<{ topic: any; date: strin
   const dayIndex = Math.floor(now.getTime() / 86400000);
   let { topic } = await loadTierTopic({ share_token: token });
   if (!topic) {
-    // Flashback Friday: a nostalgia decade (2000s and earlier). Other days: normal rotation.
-    const dow = now.getUTCDay();   // 5 = Friday (UTC)
-    let prompt: string, poolSource: string, drawSizeN: number, era: number | null = null;
-    if (dow === 5) {
-      const decades = [1980, 1990, 2000];
-      era = decades[Math.floor(dayIndex / 7) % decades.length];
-      prompt = `Flashback Friday: tier these ${era}s stars`;
-      poolSource = "star_players"; drawSizeN = 10;
-    } else {
-      const rot = DAILY_ROTATION[dayIndex % DAILY_ROTATION.length];
-      prompt = rot.prompt; poolSource = rot.pool_source; drawSizeN = rot.draw_size;
+    // Scheduled theme for today, if one is booked. The set is COPIED, never
+    // pointed at: the Daily's identity is its daily_<date> token, and sharing a
+    // theme's topic instead would mean anyone who played that theme already
+    // reads as done, with no streak bump and broken crew streak parsing.
+    let row: Record<string, unknown> | null = null;
+    const { data: sched } = await db.from("mp_daily_schedule")
+      .select("theme_slug").eq("day", date).maybeSingle();
+    if (sched?.theme_slug) {
+      const { data: th } = await db.from("mp_tier_themes")
+        .select("id, prompt, invite, item_type, item_set, status")
+        .eq("slug", sched.theme_slug).maybeSingle();
+      if (th && th.status === "approved") {
+        row = {
+          share_token: token, prompt: th.prompt, item_type: th.item_type,
+          pool_source: "curated", draw_size: (th.item_set as any[]).length,
+          item_set: th.item_set, pool_params: {}, visibility: "public",
+          review_status: "approved", kind: "daily", theme_id: th.id, invite: th.invite,
+          creator_client_id: "daily", creator_label: "Daily",
+        };
+      }
     }
-    const itemSet = drawSet(await tierPool(poolSource, era), drawSizeN);
-    const { data: created, error: cErr } = await db.from("mp_tier_topics").insert({
-      share_token: token, prompt, item_type: POOL_TYPE[poolSource], pool_source: poolSource,
-      draw_size: drawSizeN, item_set: itemSet, pool_params: era != null ? { era } : {}, visibility: "public",
-      review_status: "approved",   // first-party content; never enters the review queue
-      creator_client_id: "daily", creator_label: "Daily",
-    }).select("*").single();
+
+    if (!row) {
+      // Unscheduled — the common case, and byte-for-byte the previous behaviour.
+      // Flashback Friday: a nostalgia decade (2000s and earlier). Other days: normal rotation.
+      const dow = now.getUTCDay();   // 5 = Friday (UTC)
+      let prompt: string, poolSource: string, drawSizeN: number, era: number | null = null;
+      if (dow === 5) {
+        const decades = [1980, 1990, 2000];
+        era = decades[Math.floor(dayIndex / 7) % decades.length];
+        prompt = `Flashback Friday: tier these ${era}s stars`;
+        poolSource = "star_players"; drawSizeN = 10;
+      } else {
+        const rot = DAILY_ROTATION[dayIndex % DAILY_ROTATION.length];
+        prompt = rot.prompt; poolSource = rot.pool_source; drawSizeN = rot.draw_size;
+      }
+      const itemSet = drawSet(await tierPool(poolSource, era), drawSizeN);
+      row = {
+        share_token: token, prompt, item_type: POOL_TYPE[poolSource], pool_source: poolSource,
+        draw_size: drawSizeN, item_set: itemSet, pool_params: era != null ? { era } : {}, visibility: "public",
+        review_status: "approved",   // first-party content; never enters the review queue
+        kind: "daily", creator_client_id: "daily", creator_label: "Daily",
+      };
+    }
+
+    const { data: created, error: cErr } = await db.from("mp_tier_topics").insert(row).select("*").single();
     if (cErr) { const again = await loadTierTopic({ share_token: token }); topic = again.topic; }
     else topic = created;
   }

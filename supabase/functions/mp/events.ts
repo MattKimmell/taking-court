@@ -8,14 +8,15 @@
 import { db, ok, err } from "./shared.ts";
 
 const EVENTS = new Set([
-  "landing",         // app opened; props.from = share | direct
+  "landing",         // app opened; props.from = share | direct | party
   "board_complete",  // a tier board was saved
   "compare_view",    // the "You vs. the room" reveal was reached
   "share_click",     // share was tapped; props.scored = true | false
+  "theme_open",      // a curated theme was opened; props.theme = slug
 ]);
 
 // Only these prop keys are kept, and only as short scalars.
-const PROP_KEYS = new Set(["from", "scored", "daily", "authors"]);
+const PROP_KEYS = new Set(["from", "scored", "daily", "authors", "theme", "unlocked", "spice"]);
 
 function clampProps(raw: unknown): Record<string, unknown> {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};

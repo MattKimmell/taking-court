@@ -91,6 +91,12 @@
   .rxnbar{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
   .rxn{background:#0e1730;border:1px solid var(--line);border-radius:999px;padding:5px 11px;font-size:14px;cursor:pointer;color:var(--ink);min-height:34px}
   .rxn.on{background:rgba(249,115,22,.18);border-color:var(--accent)}
+  .hero{margin-top:10px;padding:16px;border-radius:14px;cursor:pointer;
+    background:linear-gradient(135deg,rgba(249,115,22,.16),rgba(250,204,21,.07));
+    border:1px solid var(--accent)}
+  .hero .t{font-weight:800;font-size:20px;line-height:1.2}
+  .hero .b{color:var(--muted);font-size:14px;margin-top:4px}
+  .hero .g{margin-top:10px;font-weight:700;font-size:13px;color:var(--accent)}
   .mine-f{padding:7px 12px;font-size:13px}
   .mine-f.on{background:rgba(249,115,22,.18);border-color:var(--accent);color:var(--ink)}
   .rxn.add{opacity:.6}
@@ -404,35 +410,41 @@
       <div style="font-weight:700;font-size:18px">🪜 Tier Lists</div>
       <button class="ghost" id="tierHomeBack" style="flex:0 0 auto;padding:6px 12px">Home</button>
     </div>
-    <div class="note">Spin a random set from a pool, sort it into S–F, and compare with friends.</div>
-    <div class="row">
-      <div><label>New tier list title</label>
-        <input id="tierTitle" placeholder="e.g. 1-on-1 tier list · Championship teams tier list" /></div>
-      <div style="flex:0 0 auto"><label>Pool</label>
-        <select id="tierPool">
-          <option value="star_players">Star players</option>
-          <option value="all_teams">All 30 teams</option>
-          <option value="champion_teams">Championship franchises</option>
-          <option value="notable_coaches">Notable coaches</option>
-        </select></div>
-      <div style="flex:0 0 auto" id="tierEraWrap"><label>Era</label>
-        <select id="tierEra">
-          <option value="">All‑time</option>
-          <option value="1980">1980s</option>
-          <option value="1990">1990s</option>
-          <option value="2000">2000s</option>
-          <option value="2010">2010s</option>
-          <option value="2020">2020s</option>
-        </select></div>
-      <div style="flex:0 0 auto"><label>Spin size</label>
-        <select id="tierDraw"><option>6</option><option selected>10</option><option>12</option><option>16</option></select></div>
-    </div>
-    <div class="row" style="margin-top:12px">
-      <button id="tierCreateBtn">🎲 Spin &amp; create</button>
-      <label class="pill" style="flex:0 0 auto;cursor:pointer"><input type="checkbox" id="tierDiscoverable" style="width:auto;margin-right:6px" /> Submit to Browse</label>
-    </div>
-    <div class="note" style="margin-top:6px">Your tier list is private to its share link. Submitting sends it for review — it shows up in Browse only once approved.</div>
+    <div class="note">Everyone tiers the same set, so your score counts against every player — not just your group.</div>
+    <div id="tierHero"></div>
+    <div style="font-weight:700;margin-top:16px">More themes</div>
+    <div id="tierThemes"></div>
     <div class="row" style="margin-top:10px"><button class="ghost" id="tierBrowseBtn">🔎 Browse tier lists</button></div>
+    <details style="margin-top:10px">
+      <summary>Or spin your own random set</summary>
+      <div class="row" style="margin-top:8px">
+        <div><label>New tier list title</label>
+          <input id="tierTitle" placeholder="e.g. 1-on-1 tier list · Championship teams tier list" /></div>
+        <div style="flex:0 0 auto"><label>Pool</label>
+          <select id="tierPool">
+            <option value="star_players">Star players</option>
+            <option value="all_teams">All 30 teams</option>
+            <option value="champion_teams">Championship franchises</option>
+            <option value="notable_coaches">Notable coaches</option>
+          </select></div>
+        <div style="flex:0 0 auto" id="tierEraWrap"><label>Era</label>
+          <select id="tierEra">
+            <option value="">All‑time</option>
+            <option value="1980">1980s</option>
+            <option value="1990">1990s</option>
+            <option value="2000">2000s</option>
+            <option value="2010">2010s</option>
+            <option value="2020">2020s</option>
+          </select></div>
+        <div style="flex:0 0 auto"><label>Spin size</label>
+          <select id="tierDraw"><option>6</option><option selected>10</option><option>12</option><option>16</option></select></div>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button id="tierCreateBtn">🎲 Spin &amp; create</button>
+        <label class="pill" style="flex:0 0 auto;cursor:pointer"><input type="checkbox" id="tierDiscoverable" style="width:auto;margin-right:6px" /> Submit to Browse</label>
+      </div>
+      <div class="note" style="margin-top:6px">A spun set is yours alone — nobody else gets the same items, so it has no global score. Private to its share link; submitting sends it for review.</div>
+    </details>
     <details style="margin-top:8px"><summary>Open a shared tier link</summary>
       <div class="linkbox"><input id="tierJoin" placeholder="Paste tier link or token" /><button class="sky" id="tierJoinBtn" style="flex:0 0 auto">Open</button></div>
     </details>
@@ -1238,12 +1250,45 @@ async function openBrowse(){
 // ------------------------------------------------------------------ tier lists
 let TIER = { topic_id:null, share_token:null, prompt:"", item_type:"player", tiers:[], item_set:[], assign:{}, is_creator:false };
 let TIER_RESULT = null;   // set by renderHotTakes once there's a room to compare against
+let TIER_GATE = null;     // {have, need, unlocked} from the server
 const TIER_COLORS = { S:"#fbbf24", A:"#4ade80", B:"#7dd3fc", C:"#aab6d8", D:"#fb923c", F:"#fca5a5" };
 const tierIcon = t => t==="team"?"🏟️":t==="coach"?"📋":"🏀";
 
 $("tierBtn").onclick = openTierHome;
 $("tierHomeBack").onclick = ()=>show("lobby");
-async function openTierHome(){ show("tierHome"); $("tierErr").textContent=""; syncTierEra(); await loadMyTiers(); }
+async function openTierHome(){
+  show("tierHome"); $("tierErr").textContent=""; syncTierEra();
+  await Promise.all([loadTierThemes(), loadMyTiers()]);
+}
+// The gate count does double duty: social proof once unlocked, and the ask
+// while locked. Same number, two jobs.
+function gateLine(g){
+  if(!g) return "";
+  if(g.unlocked) return `${g.have} take${g.have===1?"":"s"} so far`;
+  const n=g.need-g.have;
+  return `🔓 ${n} more take${n===1?"":"s"} unlock${n===1?"s":""} the score for everyone`;
+}
+async function loadTierThemes(){
+  const hero=$("tierHero"), box=$("tierThemes");
+  hero.innerHTML=`<div class="note">Loading…</div>`; box.innerHTML="";
+  const r=await api("tier_themes",{});
+  if(!r.ok){ hero.innerHTML=`<div class="note">Could not load themes.</div>`; return; }
+  if(r.featured){
+    const f=r.featured;
+    hero.innerHTML=`<div class="hero" data-t="${f.share_token}">
+      <div class="t">${esc(f.prompt)}</div>
+      ${f.blurb?`<div class="b">${esc(f.blurb)}</div>`:""}
+      <div class="g">${gateLine(f.score_gate)}</div></div>`;
+    hero.firstElementChild.onclick=()=>{ track("theme_open",{theme:f.slug}); openTierTopic(f.share_token,"board"); };
+  } else hero.innerHTML="";
+  box.innerHTML=(r.themes||[]).map(t=>`<div class="slot" style="cursor:pointer" data-t="${t.share_token}" data-s="${t.slug}">
+     <div class="n">${tierIcon(t.item_type)}</div>
+     <div class="name">${esc(t.prompt)}</div>
+     <div class="ctx">${t.author_count} take${t.author_count===1?"":"s"}</div></div>`).join("")
+    || `<div class="note">No other themes yet.</div>`;
+  Array.from(box.children).forEach(el=>{ if(!el.dataset.t) return;
+    el.onclick=()=>{ track("theme_open",{theme:el.dataset.s}); openTierTopic(el.dataset.t,"board"); }; });
+}
 async function loadMyTiers(){
   const box=$("myTiers"); box.innerHTML="Loading…";
   const r=await api("tier_mine",{client_id:clientId()});
@@ -1271,7 +1316,8 @@ async function openTierTopic(token,dest){
   const r=await api("tier_open",{share_token:token, client_id:clientId()});
   if(!r.ok){ $("tierErr").textContent="Error: "+r.error; show("tierHome"); return; }
   TIER={ topic_id:r.topic.id, share_token:r.topic.share_token, prompt:r.topic.prompt, item_type:r.topic.item_type,
-         tiers:r.topic.tiers, item_set:r.topic.item_set, assign:{...(r.your_assignments||{})}, is_creator:r.topic.is_creator };
+         tiers:r.topic.tiers, item_set:r.topic.item_set, assign:{...(r.your_assignments||{})}, is_creator:r.topic.is_creator,
+         kind:r.topic.kind||"user", invite:r.topic.invite||null };
   if(/^daily_/.test(token)){ TIER.isDaily=true; TIER.date=token.slice(6); }
   // Already tiered this set? The reveal is the point of coming back.
   const hasEntry = Object.keys(r.your_assignments||{}).length > 0;
@@ -1285,9 +1331,11 @@ function openTierBoard(){
   $("tierBoardErr").textContent=""; $("tierSaveState").textContent="";
   $("tierShareHook").classList.toggle("hidden", !(window.FROM_SHARE && !TIER.is_creator));
   // Arriving from Browse you were only curious — let curiosity win without a
-  // board, but make ranking first the default path.
+  // board, but make ranking first the default path. Consumed once: the flag was
+  // previously never cleared, so one Browse visit put the skip on every board
+  // for the rest of the session.
   $("tierSkipHook").classList.toggle("hidden", !window.FROM_BROWSE);
-  // Arriving from a crew room, saving is the way back — say so instead of "Save".
+  window.FROM_BROWSE = false;
   // Arriving from a crew room, locking in is the way back — say so.
   $("tierCompareBtn").textContent=(CREW_RETURN&&TIER.isDaily)?"Lock it in & back to crew":"Lock it in →";
   renderTierBoard();
@@ -1367,15 +1415,26 @@ function renderHotTakes(r){
   const box=$("tierHotTakes"); if(!box) return;
   const tiers=r.topic.tiers; const idx=t=>tiers.indexOf(t);
   const me=(r.lists||[]).find(l=>l.is_you);
-  if(!me || r.total_authors<2){
-    TIER_RESULT=null; syncShareLabels();
-    box.innerHTML=`<div class="banner wait" style="margin-top:10px">🌶️ You vs. the room — share the link to see how your takes stack up against everyone else's.</div>`;
+  // The gate now comes from the server (3 for themes, 2 otherwise) so the number
+  // lives in one place. Below it, the ask is framed as an unlock, not an error.
+  const gate = r.score_gate;
+  if(!me || !(gate && gate.unlocked)){
+    TIER_RESULT=null; TIER_GATE=gate||null; syncShareLabels();
+    const isTheme = (r.topic||{}).kind === "theme";
+    box.innerHTML = `<div class="banner wait" style="margin-top:10px">`+(
+      (isTheme && gate && !gate.unlocked)
+        ? `🔓 Be one of the first ${gate.need} — you unlock this theme's score for everyone. ${gate.need-gate.have} to go.`
+        : `🌶️ You vs. the room — share the link to see how your takes stack up against everyone else's.`
+    )+`</div>`;
     return;
   }
+  TIER_GATE=gate;
   const byKey={}; (r.consensus||[]).forEach(c=>byKey[c.key]=c);
+  // rows MUST iterate item_set, not r.consensus: the server sorts consensus by
+  // avg_tier, and iterating that would reorder the share card's emoji grid.
   const rows=(r.topic.item_set||[]).map(it=>{
     const myT=(me.assignments||{})[it.key], c=byKey[it.key]||{}, dist=c.distribution||{}, votes=c.count||0;
-    let modal=null,best=0; tiers.forEach(t=>{const n=dist[t]||0; if(n>best){best=n;modal=t;}});
+    const modal=c.modal_tier??null, best=modal?(dist[modal]||0):0;   // server already computed the modal
     const modalPct=votes?Math.round(100*best/votes):0;
     const gap=(myT&&modal)?Math.abs(idx(myT)-idx(modal)):-1;
     return {label:it.label,myT,modal,modalPct,votes,gap,distinct:Object.keys(dist).length};
@@ -1384,7 +1443,11 @@ function renderHotTakes(r){
   const unanimous=rows.filter(x=>x.votes>=2&&x.distinct===1).slice(0,3);
   const divisive=rows.filter(x=>x.votes>=2).slice().sort((a,b)=>a.modalPct-b.modalPct||b.distinct-a.distinct)[0];
   const rated=rows.filter(x=>x.myT); const agreed=rated.filter(x=>x.myT===x.modal).length;
+  const sc=r.your_score;
   let h=`<div class="card" style="margin-top:10px;background:var(--panel2);border-color:var(--accent)"><div style="font-weight:800;font-size:15px">🌶️ You vs. the room</div>`;
+  // Title leads. It comes from mean tier-distance, so it says something the
+  // "matched X/Y" line below doesn't — and it never calls a take wrong.
+  if(sc) h+=`<div style="margin-top:6px;font-size:19px;font-weight:800">${sc.emoji} ${esc(sc.title)}</div>`;
   if(bold.length){
     h+=`<div style="margin-top:8px;font-weight:700;color:var(--muted);font-size:12px;letter-spacing:.5px">YOUR BOLDEST TAKES</div>`;
     h+=bold.map(x=>{ const e=x.gap>=3?"🌶️":x.gap>=2?"🔥":"👀";
@@ -1403,29 +1466,48 @@ function renderHotTakes(r){
   h+=`<div class="note" style="margin-top:12px">You matched the room on ${agreed}/${rated.length}.</div></div>`;
   box.innerHTML=h;
   // Stash the reveal so the share card can carry the result, not just the board.
-  TIER_RESULT={ rows, bold, agreed, total:rated.length, authors:r.total_authors };
+  // title/emoji/divisive are additive — every previously-read field is untouched.
+  TIER_RESULT={ rows, bold, agreed, total:rated.length, authors:r.total_authors,
+                title:sc?sc.title:null, emoji:sc?sc.emoji:null, divisive:divisive||null };
   syncShareLabels();
 }
 // Divergence → heat square. Blocks stay legible at a glance where expressive emoji
 // blur together; cold→hot reads as "how spicy was my take", not right vs. wrong.
 function gapEmoji(gap){ return gap>=3?"🟥":gap>=2?"🟧":gap>=1?"🟨":"🟦"; }
 function shareLink(){ return location.origin+location.pathname+(TIER.isDaily?"":"?tier="+TIER.share_token); }
-// The Wordle-style line: spoiler-light shape of how contrarian you were, plus a score.
+// The invitation is the whole point of the card. A recipient who has never seen
+// this app must understand what is being asked of them from the first line — so
+// it names ONE specific item and centres their opinion, rather than describing
+// the sender's result. "Where is Vince Carter on your all-time dunker ranks?"
+// is a question you cannot read without answering it internally.
+function shareInvite(){
+  // Prefer the most-divided item: the one the room genuinely argues about.
+  // Falls back to the first of the set when there is no consensus yet.
+  const item = (TIER_RESULT && TIER_RESULT.divisive && TIER_RESULT.divisive.label)
+    || ((TIER.item_set||[])[0]||{}).label;
+  if(!item) return "🏀 " + (TIER.prompt || "Taking Court");
+  // Curated themes carry an authored question; everything else gets a template
+  // that still names the item.
+  if(TIER.invite) return "🏀 " + TIER.invite.replace("{item}", item);
+  const subject = TIER.isDaily ? "today's set" : (TIER.prompt || "this set");
+  return `🏀 Where does ${item} land in ${subject}?`;
+}
 function buildShareText(){
-  const title=(TIER.isDaily?"🏀 Taking Court — Daily"+(TIER.date?" "+TIER.date:""):"🏀 Taking Court — "+TIER.prompt);
-  if(!TIER_RESULT) return title+"\n"+shareLink();
-  const grid=TIER_RESULT.rows.filter(x=>x.myT).map(x=>gapEmoji(x.gap)).join("");
+  const lines=[shareInvite()];
+  if(!TIER_RESULT){ lines.push(shareLink()); return lines.join("\n"); }
+  lines.push(TIER_RESULT.rows.filter(x=>x.myT).map(x=>gapEmoji(x.gap)).join(""));
   const s=getStreak();
-  const lines=[title, grid, `Matched the room ${TIER_RESULT.agreed}/${TIER_RESULT.total}`
-    +(TIER.isDaily&&s.streak>0?` · 🔥 ${s.streak}`:"")];
-  const top=TIER_RESULT.bold[0];
-  if(top) lines.push(`Boldest: ${top.label} — me ${top.myT} · room ${top.modal}`);
+  lines.push(`I matched the room ${TIER_RESULT.agreed}/${TIER_RESULT.total}`
+    + (TIER_RESULT.title?` · ${TIER_RESULT.emoji} ${TIER_RESULT.title}`:"")
+    + (TIER.isDaily&&s.streak>0?` · 🔥 ${s.streak}`:""));
   lines.push(shareLink());
   return lines.join("\n");
 }
-// Compare screen has the reveal to share; the board only has the board.
+// Three states: a score to brag about, an unlock to recruit for, or just a board.
 function syncShareLabels(){
-  const b2=$("tierShareBtn2"); if(b2) b2.textContent=TIER_RESULT?"📸 Share my score":"📸 Share";
+  const b2=$("tierShareBtn2"); if(!b2) return;
+  b2.textContent = TIER_RESULT ? "📸 Share my score"
+    : (TIER_GATE && !TIER_GATE.unlocked) ? "📸 Share to unlock" : "📸 Share";
 }
 async function showTierCompare(){
   show("tierCompare"); $("tierCompareErr").textContent="";
@@ -1433,7 +1515,10 @@ async function showTierCompare(){
   if(!r.ok){ $("tierCompareErr").textContent="Error: "+r.error; return; }
   $("tierComparePrompt").textContent=(TIER.isDaily?"🗓️ Daily — ":"")+r.topic.prompt;
   $("tierCompareCount").textContent=`· ${r.total_authors} player${r.total_authors===1?"":"s"}`;
-  track("compare_view", { daily: !!TIER.isDaily, authors: r.total_authors });
+  track("compare_view", { daily: !!TIER.isDaily, authors: r.total_authors,
+    theme: TIER.kind==="theme" ? TIER.share_token.replace(/^theme_/,"") : undefined,
+    unlocked: !!(r.score_gate && r.score_gate.unlocked),
+    spice: r.your_score ? r.your_score.spice : undefined });
   renderHotTakes(r);
   $("tierConsensus").innerHTML = r.consensus.length ? r.consensus.map(c=>{
     const color=c.avg_tier?(TIER_COLORS[c.avg_tier]||"#2a3556"):"#2a3556";
@@ -1508,7 +1593,8 @@ function tierShareCard(){
 function tierShareCanvas(){
   const used=TIER.tiers.filter(t=>TIER.item_set.some(it=>TIER.assign[it.key]===t));
   // With a result to show, the header grows to carry the scoreboard band.
-  const res=TIER_RESULT, W=560, pad=18, headH=res?116:64, footH=38, labelW=54, lineH=22;
+  // Header carries the invitation always, plus the scoreboard band when scored.
+  const res=TIER_RESULT, W=560, pad=18, headH=res?150:74, footH=38, labelW=54, lineH=22;
   const meas=document.createElement("canvas").getContext("2d"); meas.font="600 15px system-ui,Segoe UI,sans-serif";
   const rows=used.map(t=>{
     const names=TIER.item_set.filter(it=>TIER.assign[it.key]===t).map(it=>it.label);
@@ -1521,17 +1607,29 @@ function tierShareCanvas(){
   const H=headH + rows.reduce((h,r)=>h+rowH(r)+8,0) + footH;
   const c=document.createElement("canvas"); c.width=W; c.height=H; const ctx=c.getContext("2d");
   ctx.fillStyle="#0b1020"; ctx.fillRect(0,0,W,H);
-  ctx.fillStyle="#eef2ff"; ctx.font="800 20px system-ui,Segoe UI,sans-serif";
-  ctx.fillText((TIER.isDaily?"🗓️ Daily — ":"")+_trunc(ctx,TIER.prompt,W-pad*2), pad, 32);
+  // Invitation leads, wrapped over up to two lines. A recipient who has never
+  // seen this app reads the ask first, not the sender's score.
+  ctx.fillStyle="#eef2ff"; ctx.font="800 21px system-ui,Segoe UI,sans-serif";
+  const inv=shareInvite(), invMax=W-pad*2;
+  const invWords=inv.split(" "); let l1="", l2="";
+  for(const w of invWords){
+    const t=l1?l1+" "+w:w;
+    if(ctx.measureText(t).width<=invMax && !l2) l1=t; else l2=l2?l2+" "+w:w;
+  }
+  ctx.fillText(l1, pad, 30);
+  if(l2) ctx.fillText(_trunc(ctx,l2,invMax), pad, 56);
+  const afterInv = l2 ? 56 : 30;
   if(res){
     ctx.font="22px system-ui,Segoe UI,sans-serif";
-    ctx.fillText(res.rows.filter(x=>x.myT).map(x=>gapEmoji(x.gap)).join(""), pad, 64);
+    ctx.fillText(res.rows.filter(x=>x.myT).map(x=>gapEmoji(x.gap)).join(""), pad, afterInv+30);
     const s=getStreak();
-    ctx.fillStyle="#f97316"; ctx.font="800 16px system-ui,Segoe UI,sans-serif";
-    ctx.fillText(`Matched the room ${res.agreed}/${res.total}`
-      +(TIER.isDaily&&s.streak>0?`   🔥 ${s.streak}`:""), pad, 94);
+    ctx.fillStyle="#f97316"; ctx.font="800 15px system-ui,Segoe UI,sans-serif";
+    ctx.fillText(`I matched the room ${res.agreed}/${res.total}`
+      +(res.title?`   ${res.emoji} ${res.title}`:"")
+      +(TIER.isDaily&&s.streak>0?`   🔥 ${s.streak}`:""), pad, afterInv+58);
   } else {
-    ctx.fillStyle="#95a2c8"; ctx.font="600 13px system-ui,Segoe UI,sans-serif"; ctx.fillText("my tier list", pad, 52);
+    ctx.fillStyle="#95a2c8"; ctx.font="600 13px system-ui,Segoe UI,sans-serif";
+    ctx.fillText("my tier list", pad, afterInv+20);
   }
   let y=headH;
   const COLORS={S:"#fbbf24",A:"#4ade80",B:"#7dd3fc",C:"#aab6d8",D:"#fb923c",F:"#fca5a5"};

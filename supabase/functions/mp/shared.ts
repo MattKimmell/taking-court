@@ -288,7 +288,13 @@ export const NOTABLE_COACHES = [
   "Nate McMillan","Mark Jackson",
 ];
 export const POOL_TYPE: Record<string, string> = { star_players: "player", all_teams: "team", champion_teams: "team", notable_coaches: "coach" };
+export const TIER_POOLS = Object.keys(POOL_TYPE);
 export async function tierPool(source: string, era?: number | null): Promise<{ key: string; label: string }[]> {
+  // Fail loudly on an unknown source. Curated themes carry pool_source='curated'
+  // and must never reach here; without this the function would fall through to
+  // the star_players branch and hand back a plausible-looking WRONG set, which
+  // for a reroll means silently replacing a hand-authored theme with randoms.
+  if (!TIER_POOLS.includes(source)) return [];
   const mk = (arr: string[]) => arr.map((n) => ({ key: normalize(n), label: n }));
   if (source === "all_teams") return mk(TEAM_POOL.map((t) => t.v));
   if (source === "champion_teams") return mk(CHAMPION_TEAMS);
@@ -313,6 +319,88 @@ export function drawSet<T>(pool: T[], n: number): T[] {
   for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
   return a.slice(0, Math.min(n, a.length));
 }
+// ---------------------------------------------------------------------------
+// Tier consensus + scoring. Shared by tiers.ts and crews.ts.
+// ---------------------------------------------------------------------------
+export type TierItem = { key: string; label: string };
+export type TierBoard = { assignments?: Record<string, string> | null };
+export type ConsensusRow = {
+  key: string; label: string; modal_tier: string | null; avg_tier: string | null;
+  count: number; distribution: Record<string, number>;
+};
+
+export function tierIndexOf(tiers: string[]): Map<string, number> {
+  return new Map(tiers.map((t, i) => [t, i]));   // index 0 = best tier
+}
+
+// Deliberately UNSORTED: tiers.ts sorts by avg_tier for the consensus column,
+// crews.ts keeps item_set order, and the client's share grid depends on
+// item_set order. Sorting in here would silently reorder two of the three.
+//
+// Takes boards as a parameter and never queries — the callers score against
+// different populations (every author on the topic vs. crew members only), and
+// that difference has to stay visible at the call site.
+export function consensusFor(items: TierItem[], boards: TierBoard[], tiers: string[]): ConsensusRow[] {
+  const tierIndex = tierIndexOf(tiers);
+  return items.map((it) => {
+    const dist: Record<string, number> = {}; let sum = 0, cnt = 0;
+    for (const b of boards) {
+      const t = (b.assignments || {})[it.key];
+      if (t && tierIndex.has(t)) { dist[t] = (dist[t] || 0) + 1; sum += tierIndex.get(t)!; cnt++; }
+    }
+    // Ties resolve to the better tier (strict >), matching every prior copy.
+    let modal: string | null = null, best = 0;
+    for (const t of tiers) { const c = dist[t] || 0; if (c > best) { best = c; modal = t; } }
+    // Math.round is half-up on purpose — changing it shifts the consensus
+    // column by a tier for every evenly-split item.
+    const avgTier = cnt ? tiers[Math.round(sum / cnt)] : null;
+    return { key: it.key, label: it.label, modal_tier: modal, avg_tier: avgTier, count: cnt, distribution: dist };
+  });
+}
+
+// Titles come from mean tier-distance, NOT from the match count, so the title
+// says something the "matched 7/10" line doesn't: you can match 8 of 10 and
+// still be a Menace if the two misses are four tiers off. Nothing here calls a
+// take wrong — the room is not an answer key.
+export const SPICE_TITLES: { max: number; emoji: string; title: string }[] = [
+  { max: 0.5,      emoji: "📋", title: "The Analyst" },
+  { max: 1.0,      emoji: "🎙️", title: "Take Haver" },
+  { max: 1.75,     emoji: "🌶️", title: "Certified Hot Take" },
+  { max: Infinity, emoji: "🚨", title: "Menace to Consensus" },
+];
+
+export function scoreBoard(
+  assignments: Record<string, string> | null | undefined,
+  consensus: ConsensusRow[],
+  tiers: string[],
+) {
+  const tierIndex = tierIndexOf(tiers);
+  let matched = 0, rated = 0, gapSum = 0;
+  for (const c of consensus) {
+    const mine = assignments?.[c.key];
+    if (!mine || !c.modal_tier || !tierIndex.has(mine)) continue;
+    rated++;
+    const gap = Math.abs(tierIndex.get(mine)! - tierIndex.get(c.modal_tier)!);
+    gapSum += gap;
+    if (gap === 0) matched++;
+  }
+  if (!rated) return null;
+  const spice = gapSum / rated;
+  const band = matched === rated
+    ? { emoji: "🧊", title: "Pure Chalk" }
+    : SPICE_TITLES.find((b) => spice < b.max)!;
+  return { matched, rated, spice: Math.round(spice * 100) / 100, emoji: band.emoji, title: band.title };
+}
+
+// Themes pool globally and their score is a claim about the world, so they need
+// a real plurality: with two boards every item is unanimous or a 1-1 tie
+// resolving to the better tier, and "the room" would be a lie. Everything else
+// stays at 2 — raising it would break the two-friend private-share flow, which
+// is the one that actually happens today.
+export function minBoardsFor(kind?: string | null): number {
+  return kind === "theme" ? 3 : 2;
+}
+
 // Rotating daily tier debate (one shared set per calendar day).
 export const DAILY_ROTATION = [
   { prompt: "Daily 1-on-1: tier these players", pool_source: "star_players", draw_size: 10 },
