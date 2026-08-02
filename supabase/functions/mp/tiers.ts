@@ -1,4 +1,4 @@
-import { db, ok, err, authedUserId, randomToken, tierPool, drawSet, POOL_TYPE, DAILY_ROTATION } from "./shared.ts";
+import { db, ok, err, authedUserId, randomToken, tierPool, drawSet, POOL_TYPE, DAILY_ROTATION, ownerFilter, creatorFilter } from "./shared.ts";
 
 // ---------------------------------------------------------------------------
 // Tier-list mode (spin a set from a pool, sort into S/A/B/C/D/F, compare).
@@ -139,15 +139,40 @@ export async function actionTierMine(req: Request, body: any) {
   const userId = authedUserId(req);
   const clientId: string | null = body.client_id ?? null;
   if (!userId && !clientId) return err("identity_required", 400);
-  let q = db.from("mp_tier_lists").select("id, updated_at, author_client_id, author_user_id, topic:mp_tier_topics!inner(id, share_token, prompt, item_type, review_status, creator_client_id, creator_user_id)").order("updated_at", { ascending: false });
-  q = userId ? q.eq("author_user_id", userId) : q.eq("author_client_id", clientId);
-  const { data, error } = await q;
+  const owner = ownerFilter(userId, clientId);
+  if (!owner) return err("identity_required", 400);
+  const { data, error } = await db.from("mp_tier_lists")
+    .select("id, updated_at, assignments, author_client_id, author_user_id, topic:mp_tier_topics!inner(id, share_token, prompt, item_type, review_status, creator_client_id, creator_user_id)")
+    .or(owner).order("updated_at", { ascending: false });
   if (error) return err(error.message, 500);
-  return ok({ lists: (data ?? []).map((l: any) => ({
+
+  const rows = (data ?? []).map((l: any) => ({
     topic_id: l.topic?.id, share_token: l.topic?.share_token, prompt: l.topic?.prompt, item_type: l.topic?.item_type, updated_at: l.updated_at,
+    item_count: Object.keys(l.assignments ?? {}).length,
     review_status: l.topic?.review_status ?? "unsubmitted",
     is_creator: !!((userId && l.topic?.creator_user_id === userId) || (clientId && l.topic?.creator_client_id === clientId)),
-  })) });
+    started: true,
+  }));
+
+  // Topics you created but never saved a board for have no mp_tier_lists row,
+  // so the join above can't see them and the share token is gone forever.
+  const creator = creatorFilter(userId, clientId);
+  if (creator) {
+    const seen = new Set(rows.map((r) => r.topic_id));
+    const { data: mineTopics } = await db.from("mp_tier_topics")
+      .select("id, share_token, prompt, item_type, review_status, created_at")
+      .or(creator).neq("creator_client_id", "daily").order("created_at", { ascending: false });
+    for (const t of mineTopics ?? []) {
+      if (seen.has(t.id)) continue;
+      rows.push({
+        topic_id: t.id, share_token: t.share_token, prompt: t.prompt, item_type: t.item_type,
+        updated_at: t.created_at, item_count: 0,
+        review_status: t.review_status ?? "unsubmitted", is_creator: true, started: false,
+      });
+    }
+    rows.sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at)));
+  }
+  return ok({ lists: rows });
 }
 
 export async function actionTierBrowse(_req: Request, _body: any) {

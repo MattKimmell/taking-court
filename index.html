@@ -91,6 +91,8 @@
   .rxnbar{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
   .rxn{background:#0e1730;border:1px solid var(--line);border-radius:999px;padding:5px 11px;font-size:14px;cursor:pointer;color:var(--ink);min-height:34px}
   .rxn.on{background:rgba(249,115,22,.18);border-color:var(--accent)}
+  .mine-f{padding:7px 12px;font-size:13px}
+  .mine-f.on{background:rgba(249,115,22,.18);border-color:var(--accent);color:var(--ink)}
   .rxn.add{opacity:.6}
   .tbtn.on{background:var(--accent);color:#0b1020}
   .banner{border-radius:12px;padding:16px;text-align:center;font-weight:700;font-size:20px}
@@ -210,6 +212,9 @@
     </div>
     <div class="row" style="margin-top:8px">
       <button class="ghost" id="partyBtn" style="border-color:var(--accent)">🏀 Pickup — play in person</button>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button class="ghost" id="mineBtn">🗂️ My takes</button>
     </div>
 
     <details>
@@ -366,11 +371,10 @@
     <input id="listNote" placeholder="Optional note for the next pick — why?" style="margin-top:8px;font-size:13px" />
     <div class="slots" id="listItems" style="margin-top:12px"></div>
     <div class="row" style="margin-top:14px">
-      <button id="listSaveBtn">Save list</button>
-      <button class="ghost" id="listCompareBtn" style="flex:0 0 auto">Lock in my list</button>
+      <button id="listCompareBtn">Lock it in →</button>
       <button class="ghost" id="listBuildBack" style="flex:0 0 auto">Back</button>
     </div>
-    <div class="linkbox hidden" id="listShareRow"><input id="listShareUrl" readonly /><button class="sky" id="listCopyBtn" style="flex:0 0 auto">Copy</button></div>
+    <div class="note" id="listSaveState" style="margin-top:6px;min-height:16px"></div>
     <div class="err" id="listBuildErr"></div>
   </div>
 
@@ -386,9 +390,10 @@
     <div id="listAllLists"></div>
     <div class="row" style="margin-top:14px">
       <button id="listMyEntry">Make / edit my list</button>
-      <button class="ghost" id="listAddTake" style="flex:0 0 auto">➕ Add another take</button>
+      <button class="ghost" id="listShareBtn2" style="flex:0 0 auto">🔗 Share</button>
       <button class="ghost" id="listCompareRefresh" style="flex:0 0 auto">Refresh</button>
     </div>
+    <div class="linkbox hidden" id="listCompareShareRow"><input id="listCompareShareUrl" readonly /><button class="sky" id="listCompareCopyBtn" style="flex:0 0 auto">Copy</button></div>
     <div class="note" style="margin-top:6px">Friends join by opening the share link. To add another take yourself, use ➕.</div>
     <div class="err" id="listCompareErr"></div>
   </div>
@@ -447,12 +452,11 @@
     <div id="tierSkipHook" class="hidden" style="margin-top:8px"><button class="ghost" id="tierSkipBtn" style="width:100%">👀 Just show me the results</button></div>
     <div id="tierBoardRows" style="margin-top:12px"></div>
     <div class="row" style="margin-top:14px">
-      <button id="tierCompareBtn">Lock in my take</button>
-      <button class="ghost" id="tierSaveBtn" style="flex:0 0 auto">Save</button>
+      <button id="tierCompareBtn">Lock it in →</button>
       <button class="ghost" id="tierShareBtn" style="flex:0 0 auto">📸 Share</button>
       <button class="ghost" id="tierBoardBack" style="flex:0 0 auto">Back</button>
     </div>
-    <div class="linkbox hidden" id="tierShareRow"><input id="tierShareUrl" readonly /><button class="sky" id="tierCopyBtn" style="flex:0 0 auto">Copy</button></div>
+    <div class="note" id="tierSaveState" style="margin-top:6px;min-height:16px"></div>
     <div class="err" id="tierBoardErr"></div>
   </div>
 
@@ -470,7 +474,6 @@
     <div id="tierAllLists"></div>
     <div class="row" style="margin-top:14px">
       <button id="tierMyEntry">Edit my board</button>
-      <button class="ghost" id="tierAddTake" style="flex:0 0 auto">➕ Add another take</button>
       <button class="ghost" id="tierShareBtn2" style="flex:0 0 auto">📸 Share</button>
       <button class="ghost" id="tierCompareRefresh" style="flex:0 0 auto">Refresh</button>
     </div>
@@ -490,6 +493,22 @@
   </div>
 
   <!-- ===================== CREW HOME ===================== -->
+  <!-- One place for everything you've made, across modes. A scrapbook of your
+       takes, not a profile page — no badges, no activity score. -->
+  <div id="mine" class="card hidden">
+    <div class="head">
+      <div style="font-weight:700;font-size:18px">🗂️ My takes</div>
+      <button class="ghost" id="mineBack" style="flex:0 0 auto;padding:6px 12px">Back</button>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button class="ghost mine-f on" data-f="all" style="flex:0 0 auto">All</button>
+      <button class="ghost mine-f" data-f="tier" style="flex:0 0 auto">🪜 Tier lists</button>
+      <button class="ghost mine-f" data-f="list" style="flex:0 0 auto">📝 Lists</button>
+    </div>
+    <div id="mineList" style="margin-top:10px"></div>
+    <div class="err" id="mineErr"></div>
+  </div>
+
   <!-- Pickup: in-person co-op. Host screen doubles as the shared display. -->
   <div id="partyHost" class="card hidden">
     <div class="head">
@@ -649,7 +668,6 @@ function clientId(){
   if(!id){ id = "c_"+Math.random().toString(36).slice(2)+Date.now().toString(36); store.set("mp_client_id",id); }
   return id;
 }
-function switchIdentity(){ store.set("mp_client_id",""); clientId(); }
 // Ask for a display name once, on the first save. Skippable — never an account.
 function ensureName(){
   let n = ($("playerName").value || store.get("mp_name","")).trim();
@@ -660,15 +678,6 @@ function ensureName(){
     if(v){ store.set("mp_name", v); $("playerName").value = v; return v; }
   }
   return "You";
-}
-let TAKE_N = 1;
-function addTake(kind){
-  TAKE_N++;
-  const n = prompt("Save this take under a name:", "Player "+TAKE_N);
-  if(n===null) return;
-  store.set("mp_name", n); $("playerName").value = n;
-  switchIdentity();
-  if(kind==="tier") openTierTopic(TIER.share_token,"board"); else openListTopic(LIST.share_token,"build");
 }
 
 // Analytics: strictly fire-and-forget. Never awaited, never surfaces an error —
@@ -693,7 +702,7 @@ let ST = { challenge_id:null, share_token:null, attempt_id:null, attempt_token:n
            filled:{}, strikes:0, correct:0, finished:false, sheet_id:null };
 let timerInt=null;
 
-function show(id){ ["lobby","share","preview","play","results","leaderboard","listsHome","listBuild","listCompare","listBrowse","tierHome","tierBoard","tierCompare","tierBrowse","partyHost","partyPlay","partyRecap","crewHome","crewRoom"].forEach(s=>$(s).classList.toggle("hidden", s!==id)); }
+function show(id){ ["lobby","share","preview","play","results","leaderboard","listsHome","listBuild","listCompare","listBrowse","tierHome","tierBoard","tierCompare","tierBrowse","partyHost","partyPlay","partyRecap","mine","crewHome","crewRoom"].forEach(s=>$(s).classList.toggle("hidden", s!==id)); }
 function toast(msg){ $("lobbyErr").style.color="var(--muted)"; $("lobbyErr").textContent=msg; }
 function fmt(ms){ if(ms==null) return "—"; const s=ms/1000; const m=Math.floor(s/60);
   const r=(s-m*60); return m+":"+r.toFixed(1).padStart(4,"0"); }
@@ -1118,7 +1127,7 @@ async function openBuilder(){
   $("listBuildMeta").textContent=`${ENTRY_ICON[LIST.entry_type]||""} ${LIST.entry_type} · ${LIST.ranked?"ranked":"unordered"} · up to ${LIST.max_items}`
     + (reviewTag(LIST.review_status)?" · "+reviewTag(LIST.review_status):"");
   $("listAddInput").placeholder=ENTRY_PH[LIST.entry_type]||"Add…";
-  $("listShareRow").classList.add("hidden"); $("listBuildErr").textContent="";
+  $("listBuildErr").textContent=""; $("listSaveState").textContent="";
   $("listShareHook").classList.toggle("hidden", !window.FROM_SHARE);
   $("listAddInput").value=""; $("listNote").value="";
   renderListItems(); await loadListPool(); $("listAddInput").focus();
@@ -1139,6 +1148,7 @@ function addListItem(){
   LIST.items.push({label, note:note||null});
   $("listAddInput").value=""; $("listNote").value=""; $("listBuildErr").textContent="";
   $("listAddDrop").classList.add("hidden"); renderListItems(); $("listAddInput").focus();
+  autosaveMark(saveList, "listSaveState");
 }
 $("listAddBtn").onclick=addListItem;
 $("listAddInput").addEventListener("input",e=>listAcRender(e.target.value));
@@ -1161,8 +1171,8 @@ function listAcRender(q){
   drop.classList.remove("hidden");
   Array.from(drop.children).forEach(el=>el.onmousedown=ev=>{ ev.preventDefault(); $("listAddInput").value=el.dataset.n; drop.classList.add("hidden"); addListItem(); });
 }
-function moveItem(i,d){ const j=i+d; if(j<0||j>=LIST.items.length) return; const t=LIST.items[i]; LIST.items[i]=LIST.items[j]; LIST.items[j]=t; renderListItems(); }
-function removeItem(i){ LIST.items.splice(i,1); renderListItems(); }
+function moveItem(i,d){ const j=i+d; if(j<0||j>=LIST.items.length) return; const t=LIST.items[i]; LIST.items[i]=LIST.items[j]; LIST.items[j]=t; renderListItems(); autosaveMark(saveList,"listSaveState"); }
+function removeItem(i){ LIST.items.splice(i,1); renderListItems(); if(LIST.items.length) autosaveMark(saveList,"listSaveState"); }
 function renderListItems(){
   const box=$("listItems");
   if(!LIST.items.length){ box.innerHTML=`<div class="note">No picks yet — add players above.</div>`; return; }
@@ -1175,17 +1185,8 @@ function renderListItems(){
   Array.from(box.querySelectorAll("button")).forEach(b=>b.onclick=()=>{ const i=+b.dataset.i,a=b.dataset.a; if(a==="up")moveItem(i,-1); else if(a==="down")moveItem(i,1); else removeItem(i); });
 }
 async function saveList(){ return api("list_save",{ topic_id:LIST.topic_id, items:LIST.items, client_id:clientId(), label:ensureName() }); }
-$("listSaveBtn").onclick=async()=>{
-  if(!LIST.items.length){ $("listBuildErr").textContent="Add at least one pick."; return; }
-  const r=await saveList();
-  if(!r.ok){ $("listBuildErr").style.color="var(--bad)"; $("listBuildErr").textContent="Error: "+r.error; return; }
-  $("listShareUrl").value=location.origin+location.pathname+"?list="+LIST.share_token; $("listShareRow").classList.remove("hidden");
-  $("listBuildErr").style.color="var(--good)"; $("listBuildErr").textContent="Saved! Share the link so friends add theirs.";
-  setTimeout(()=>{$("listBuildErr").style.color="var(--bad)";$("listBuildErr").textContent="";},2500);
-};
-$("listCopyBtn").onclick=()=>{ $("listShareUrl").select(); navigator.clipboard?.writeText($("listShareUrl").value); $("listCopyBtn").textContent="Copied!"; setTimeout(()=>$("listCopyBtn").textContent="Copy",1200); };
-$("listBuildBack").onclick=openListsHome;
-$("listCompareBtn").onclick=async()=>{ if(LIST.items.length) await saveList(); showListCompare(); };
+$("listBuildBack").onclick=async()=>{ await autosaveFlush("listSaveState"); openListsHome(); };
+$("listCompareBtn").onclick=async()=>{ await autosaveFlush("listSaveState"); showListCompare(); };
 async function showListCompare(){
   show("listCompare"); $("listCompareErr").textContent="";
   const r=await api("list_compare",{ topic_id:LIST.topic_id, share_token:LIST.share_token, client_id:clientId() });
@@ -1205,7 +1206,15 @@ async function showListCompare(){
 $("listCompareBack").onclick=()=>show("lobby");
 $("listCompareRefresh").onclick=showListCompare;
 $("listMyEntry").onclick=openBuilder;
-$("listAddTake").onclick=()=>addTake("list");
+$("listShareBtn2").onclick=()=>{
+  $("listCompareShareUrl").value = location.origin+location.pathname+"?list="+LIST.share_token;
+  $("listCompareShareRow").classList.remove("hidden");
+  track("share_click", { scored:false, daily:false });
+};
+$("listCompareCopyBtn").onclick=()=>{
+  $("listCompareShareUrl").select(); navigator.clipboard?.writeText($("listCompareShareUrl").value);
+  $("listCompareCopyBtn").textContent="Copied!"; setTimeout(()=>$("listCompareCopyBtn").textContent="Copy",1200);
+};
 
 // browse public topics
 $("listBrowseBtn").onclick=openBrowse;
@@ -1273,13 +1282,14 @@ function openTierBoard(){
   TIER_RESULT=null;   // don't let a previous topic's score ride along on this board's card
   $("tierBoardPrompt").textContent=(TIER.isDaily?"🗓️ Daily — ":"")+TIER.prompt;
   $("tierRespin").style.display=TIER.is_creator?"":"none";
-  $("tierShareRow").classList.add("hidden"); $("tierBoardErr").textContent="";
+  $("tierBoardErr").textContent=""; $("tierSaveState").textContent="";
   $("tierShareHook").classList.toggle("hidden", !(window.FROM_SHARE && !TIER.is_creator));
   // Arriving from Browse you were only curious — let curiosity win without a
   // board, but make ranking first the default path.
   $("tierSkipHook").classList.toggle("hidden", !window.FROM_BROWSE);
   // Arriving from a crew room, saving is the way back — say so instead of "Save".
-  $("tierSaveBtn").textContent=(CREW_RETURN&&TIER.isDaily)?"Save & back to crew":"Save";
+  // Arriving from a crew room, locking in is the way back — say so.
+  $("tierCompareBtn").textContent=(CREW_RETURN&&TIER.isDaily)?"Lock it in & back to crew":"Lock it in →";
   renderTierBoard();
 }
 function renderTierBoard(){
@@ -1293,6 +1303,7 @@ function renderTierBoard(){
   }).join("");
   Array.from(board.querySelectorAll(".tbtn")).forEach(b=>b.onclick=()=>{
     const k=b.dataset.k,t=b.dataset.t; if(t==="__clear") delete TIER.assign[k]; else TIER.assign[k]=t; renderTierBoard();
+    if(Object.keys(TIER.assign).length) autosaveMark(saveTier, "tierSaveState");
   });
 }
 function tierChip(it){
@@ -1307,22 +1318,45 @@ async function saveTier(){
   if(r.ok) track("board_complete", { daily: !!TIER.isDaily });
   return r;
 }
-$("tierSaveBtn").onclick=async()=>{
-  const r=await saveTier();
-  if(!r.ok){ $("tierBoardErr").style.color="var(--bad)"; $("tierBoardErr").textContent="Error: "+r.error; return; }
-  if(CREW_RETURN && TIER.isDaily){ const c=CREW_RETURN; CREW_RETURN=null; $("tierBoardErr").style.color="var(--good)"; $("tierBoardErr").textContent="Saved! Back to your crew…"; setTimeout(()=>openCrew(c),700); return; }
-  $("tierShareUrl").value=location.origin+location.pathname+"?tier="+TIER.share_token; $("tierShareRow").classList.remove("hidden");
-  $("tierBoardErr").style.color="var(--good)"; $("tierBoardErr").textContent="Saved! Share so friends tier the same set.";
-  setTimeout(()=>{$("tierBoardErr").style.color="var(--bad)";$("tierBoardErr").textContent="";},2500);
+
+// ---- autosave -------------------------------------------------------------
+// One save a short beat after you stop tapping, instead of a Save button people
+// forget to press. Two buttons that both saved was the confusing part; losing a
+// board because you never pressed either was the expensive part.
+let AUTOSAVE_T = null, AUTOSAVE_FN = null, AUTOSAVE_PENDING = false;
+function autosaveMark(fn, stateEl){
+  AUTOSAVE_FN = fn; AUTOSAVE_PENDING = true;
+  const el = $(stateEl); if(el) el.textContent = "Saving…";
+  clearTimeout(AUTOSAVE_T);
+  AUTOSAVE_T = setTimeout(()=>autosaveFlush(stateEl), 800);
+}
+async function autosaveFlush(stateEl){
+  clearTimeout(AUTOSAVE_T); AUTOSAVE_T=null;
+  if(!AUTOSAVE_PENDING || !AUTOSAVE_FN) return;
+  AUTOSAVE_PENDING = false;
+  const fn = AUTOSAVE_FN;
+  const r = await fn();
+  const el = stateEl ? $(stateEl) : null;
+  if(el) el.textContent = (r && r.ok) ? "Saved" : "Not saved — check your connection";
+}
+// A locked phone or a closed tab shouldn't cost you the board.
+document.addEventListener("visibilitychange", ()=>{ if(document.hidden) autosaveFlush(); });
+$("tierBoardBack").onclick=async()=>{
+  await autosaveFlush();
+  if(CREW_RETURN){ const c=CREW_RETURN; CREW_RETURN=null; openCrew(c); } else openTierHome();
 };
-$("tierCopyBtn").onclick=()=>{ $("tierShareUrl").select(); navigator.clipboard?.writeText($("tierShareUrl").value); $("tierCopyBtn").textContent="Copied!"; setTimeout(()=>$("tierCopyBtn").textContent="Copy",1200); };
-$("tierBoardBack").onclick=()=>{ if(CREW_RETURN){ const c=CREW_RETURN; CREW_RETURN=null; openCrew(c); } else openTierHome(); };
 // Skips the board entirely — deliberately does NOT save, so browsing doesn't
 // inflate author_count with empty entries.
 $("tierSkipBtn").onclick=()=>showTierCompare();
 // Guarded like the list equivalent: saving an empty board would count toward
 // author_count and pad the consensus with a non-opinion.
-$("tierCompareBtn").onclick=async()=>{ if(Object.keys(TIER.assign||{}).length) await saveTier(); showTierCompare(); };
+$("tierCompareBtn").onclick=async()=>{
+  // Autosave has either already written this board or has one pending; flushing
+  // covers both without a redundant request.
+  await autosaveFlush("tierSaveState");
+  if(CREW_RETURN && TIER.isDaily){ const c=CREW_RETURN; CREW_RETURN=null; openCrew(c); return; }
+  showTierCompare();
+};
 $("tierRespin").onclick=async()=>{
   const r=await api("tier_reroll",{ topic_id:TIER.topic_id, client_id:clientId() });
   if(!r.ok){ $("tierBoardErr").style.color="var(--bad)"; $("tierBoardErr").textContent="Error: "+r.error; return; }
@@ -1417,7 +1451,6 @@ async function showTierCompare(){
 $("tierCompareBack").onclick=()=>show("lobby");
 $("tierCompareRefresh").onclick=showTierCompare;
 $("tierMyEntry").onclick=openTierBoard;
-$("tierAddTake").onclick=()=>addTake("tier");
 $("tierBrowseBtn").onclick=openTierBrowse;
 $("tierBrowseBack").onclick=openTierHome;
 async function openTierBrowse(){
@@ -1521,6 +1554,69 @@ function _dataUrlToBlob(dataUrl){
 }
 $("tierShareBtn").onclick=tierShareCard;
 $("tierShareBtn2").onclick=tierShareCard;
+
+// ------------------------------------------------------------------ my takes
+// Both modes in one list. Reuses list_mine + tier_mine rather than adding an
+// endpoint; they're independent so they go out in parallel.
+let MINE_ROWS = [], MINE_FILTER = "all";
+$("mineBtn").onclick = openMine;
+$("mineBack").onclick = ()=>show("lobby");
+Array.from(document.querySelectorAll(".mine-f")).forEach(b=>b.onclick=()=>{
+  MINE_FILTER = b.dataset.f;
+  Array.from(document.querySelectorAll(".mine-f")).forEach(x=>x.classList.toggle("on", x===b));
+  renderMine();
+});
+
+async function openMine(){
+  show("mine"); $("mineErr").textContent="";
+  $("mineList").innerHTML = `<div class="note">Loading…</div>`;
+  const [t, l] = await Promise.all([
+    api("tier_mine",{ client_id:clientId() }),
+    api("list_mine",{ client_id:clientId() }),
+  ]);
+  if(!t.ok && !l.ok){ $("mineErr").textContent="Error: "+(t.error||l.error); $("mineList").innerHTML=""; return; }
+  MINE_ROWS = [
+    ...((t.lists)||[]).map(r=>({...r, kind:"tier"})),
+    ...((l.lists)||[]).map(r=>({...r, kind:"list"})),
+  ].sort((a,b)=>String(b.updated_at).localeCompare(String(a.updated_at)));
+  renderMine();
+}
+
+function mineWhen(iso){
+  if(!iso) return "";
+  const d = new Date(iso), now = new Date();
+  const days = Math.floor((now - d) / 86400000);
+  if(days <= 0) return "today";
+  if(days === 1) return "yesterday";
+  if(days < 7) return days+" days ago";
+  return d.toISOString().slice(0,10);
+}
+
+function renderMine(){
+  const rows = MINE_ROWS.filter(r => MINE_FILTER==="all" || r.kind===MINE_FILTER);
+  const box = $("mineList");
+  if(!rows.length){
+    box.innerHTML = `<div class="note">Nothing here yet. Play the Daily or spin a tier list and it'll show up.</div>`;
+    return;
+  }
+  box.innerHTML = rows.map((r,i)=>{
+    const icon = r.kind==="tier" ? tierIcon(r.item_type) : (ENTRY_ICON[r.entry_type]||"📝");
+    const tag = reviewTag(r.review_status);
+    // A topic you spun but never filled in used to be unreachable entirely.
+    const state = !r.started ? "not started yet"
+      : r.kind==="tier" ? `${r.item_count} tiered`
+      : `${r.item_count} pick${r.item_count===1?"":"s"}`;
+    return `<div class="slot" style="cursor:pointer" data-i="${i}">
+      <div class="n">${icon}</div>
+      <div class="name">${esc(r.prompt||"Untitled")}</div>
+      <div class="ctx">${state} · ${mineWhen(r.updated_at)}${tag?" · "+tag:""}</div></div>`;
+  }).join("");
+  Array.from(box.children).forEach(el=>el.onclick=()=>{
+    const r = rows[+el.dataset.i];
+    if(r.kind==="tier") openTierTopic(r.share_token, r.started ? "compare" : "board");
+    else openListTopic(r.share_token, r.started ? "compare" : "build");
+  });
+}
 
 // ------------------------------------------------------------------ pickup
 // In-person co-op. State lives on the server; this polls it. Interval adapts so

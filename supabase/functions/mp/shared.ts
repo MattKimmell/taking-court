@@ -65,6 +65,36 @@ export function randomToken(bytes = 16): string {
 // Pull an authenticated user id out of the caller's JWT, if present.
 // The public anon key has role "anon" (=> no user). A logged-in Supabase user
 // token has role "authenticated" and sub = user id.
+// PostgREST's .or() takes a raw filter string, so anything interpolated into it
+// has to be constrained first — client_id comes straight from the client.
+export function safeClientId(v: unknown): string | null {
+  const s = String(v ?? "");
+  return /^[A-Za-z0-9_-]{1,64}$/.test(s) ? s : null;
+}
+function safeUuid(v: unknown): string | null {
+  const s = String(v ?? "");
+  return /^[0-9a-fA-F-]{1,40}$/.test(s) ? s : null;
+}
+
+// "Work owned by me" = EITHER identity, never one or the other. The old
+// `userId ? byUser : byClient` meant signing in for crews stopped the query
+// looking for this device's anonymous boards at all, so they vanished from
+// "My lists" rather than merely failing to be claimed.
+export function ownerFilter(userId: string | null, clientId: string | null): string | null {
+  const parts: string[] = [];
+  const u = safeUuid(userId), c = safeClientId(clientId);
+  if (u) parts.push(`author_user_id.eq.${u}`);
+  if (c) parts.push(`author_client_id.eq.${c}`);
+  return parts.length ? parts.join(",") : null;
+}
+export function creatorFilter(userId: string | null, clientId: string | null): string | null {
+  const parts: string[] = [];
+  const u = safeUuid(userId), c = safeClientId(clientId);
+  if (u) parts.push(`creator_user_id.eq.${u}`);
+  if (c) parts.push(`creator_client_id.eq.${c}`);
+  return parts.length ? parts.join(",") : null;
+}
+
 export function authedUserId(req: Request): string | null {
   const auth = req.headers.get("authorization") ?? "";
   const t = auth.replace(/^Bearer\s+/i, "");

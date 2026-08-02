@@ -1,4 +1,4 @@
-import { db, ok, err, authedUserId, normalize, randomToken } from "./shared.ts";
+import { db, ok, err, authedUserId, normalize, randomToken, ownerFilter, creatorFilter } from "./shared.ts";
 
 // ---------------------------------------------------------------------------
 // Subjective lists ("make your own list" — no correct answer).
@@ -77,7 +77,9 @@ export async function actionListSave(req: Request, body: any) {
   const { data: rows } = await db.from("mp_lists").select("id, author_client_id, author_user_id").eq("topic_id", topic.id);
   const mine = (rows ?? []).find((l) => (userId && l.author_user_id === userId) || (clientId && l.author_client_id === clientId));
   if (mine) {
-    await db.from("mp_lists").update({ items, author_label: label, updated_at: new Date().toISOString() }).eq("id", mine.id);
+    const patch: any = { items, author_label: label, updated_at: new Date().toISOString() };
+    if (userId && !mine.author_user_id) patch.author_user_id = userId;   // claim it on sign-in, mirroring actionTierSave
+    await db.from("mp_lists").update(patch).eq("id", mine.id);
     return ok({ list_id: mine.id, item_count: items.length, saved: true });
   }
   const { data: created, error: cErr } = await db.from("mp_lists").insert({
@@ -156,18 +158,42 @@ export async function actionListMine(req: Request, body: any) {
   const userId = authedUserId(req);
   const clientId: string | null = body.client_id ?? null;
   if (!userId && !clientId) return err("identity_required", 400);
-  let q = db.from("mp_lists").select("id, items, updated_at, topic:mp_list_topics!inner(id, share_token, prompt, ranked, max_items, entry_type, review_status, creator_client_id, creator_user_id)").order("updated_at", { ascending: false });
-  q = userId ? q.eq("author_user_id", userId) : q.eq("author_client_id", clientId);
-  const { data, error } = await q;
+  const owner = ownerFilter(userId, clientId);
+  if (!owner) return err("identity_required", 400);
+  const { data, error } = await db.from("mp_lists")
+    .select("id, items, updated_at, topic:mp_list_topics!inner(id, share_token, prompt, ranked, max_items, entry_type, review_status, creator_client_id, creator_user_id)")
+    .or(owner).order("updated_at", { ascending: false });
   if (error) return err(error.message, 500);
-  return ok({
-    lists: (data ?? []).map((l: any) => ({
-      list_id: l.id, item_count: (l.items ?? []).length, updated_at: l.updated_at,
-      topic_id: l.topic?.id, share_token: l.topic?.share_token, prompt: l.topic?.prompt, ranked: l.topic?.ranked, max_items: l.topic?.max_items, entry_type: l.topic?.entry_type ?? "player",
-      review_status: l.topic?.review_status ?? "unsubmitted",
-      is_creator: !!((userId && l.topic?.creator_user_id === userId) || (clientId && l.topic?.creator_client_id === clientId)),
-    })),
-  });
+
+  const rows = (data ?? []).map((l: any) => ({
+    list_id: l.id, item_count: (l.items ?? []).length, updated_at: l.updated_at,
+    topic_id: l.topic?.id, share_token: l.topic?.share_token, prompt: l.topic?.prompt, ranked: l.topic?.ranked, max_items: l.topic?.max_items, entry_type: l.topic?.entry_type ?? "player",
+    review_status: l.topic?.review_status ?? "unsubmitted",
+    is_creator: !!((userId && l.topic?.creator_user_id === userId) || (clientId && l.topic?.creator_client_id === clientId)),
+    started: true,
+  }));
+
+  // Same gap as tiers: list_create only inserts an mp_lists row when items were
+  // passed, and the client never passes any, so every topic you make is
+  // invisible here until you save something into it.
+  const creator = creatorFilter(userId, clientId);
+  if (creator) {
+    const seen = new Set(rows.map((r) => r.topic_id));
+    const { data: mineTopics } = await db.from("mp_list_topics")
+      .select("id, share_token, prompt, ranked, max_items, entry_type, review_status, created_at")
+      .or(creator).order("created_at", { ascending: false });
+    for (const t of mineTopics ?? []) {
+      if (seen.has(t.id)) continue;
+      rows.push({
+        list_id: null, item_count: 0, updated_at: t.created_at,
+        topic_id: t.id, share_token: t.share_token, prompt: t.prompt, ranked: t.ranked,
+        max_items: t.max_items, entry_type: t.entry_type ?? "player",
+        review_status: t.review_status ?? "unsubmitted", is_creator: true, started: false,
+      });
+    }
+    rows.sort((a, b) => String(b.updated_at).localeCompare(String(a.updated_at)));
+  }
+  return ok({ lists: rows });
 }
 
 // Public discovery: approved topics only, ranked by how many people have listed.
