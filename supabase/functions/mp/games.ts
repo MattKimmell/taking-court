@@ -812,9 +812,12 @@ export async function actionChallengeCatalog() {
       .eq("status", "approved").order("sort_order", { ascending: true }),
     db.from("mp_challenge_catalog")
       .select("kind, sheet_id, roster_sheet_id, category_slug, title, blurb, featured, sort_order, " +
+              "group_key, group_label, group_order, " +
               "sheet:perfect_sheets(prompt, difficulty, answer_count), " +
               "roster:mp_roster_sheets(prompt, difficulty, target)")
-      .eq("status", "approved").order("sort_order", { ascending: true }),
+      .eq("status", "approved")
+      .order("group_order", { ascending: true, nullsFirst: true })
+      .order("sort_order", { ascending: true }),
   ]);
 
   const shape = (r: any) => {
@@ -829,15 +832,30 @@ export async function actionChallengeCatalog() {
       difficulty: src?.difficulty ?? null,
       answer_count: r.kind === "sheet" ? (src?.answer_count ?? null) : (src?.target ?? null),
       featured: !!r.featured,
+      // Optional browse axis. When present the client renders a picker for the
+      // group first (team today, decade next) instead of a flat list. Kept
+      // generic so a new axis needs no client change.
+      group_key: r.group_key ?? null,
+      group_label: r.group_label ?? null,
     };
   };
 
   const all = (rows ?? []).map(shape);
   const featured = all.find((x) => x.featured) ?? null;
-  const categories = (cats ?? []).map((c) => ({
-    slug: c.slug, label: c.label, blurb: c.blurb, icon: c.icon,
-    items: all.filter((x) => x.category === c.slug),
-  })).filter((c) => c.items.length > 0);
+  const categories = (cats ?? []).map((c) => {
+    const items = all.filter((x) => x.category === c.slug);
+    // Distinct groups in payload order, so the client can render a picker
+    // without re-sorting. Empty when the category is ungrouped.
+    const seen = new Set<string>();
+    const groups: { key: string; label: string; n: number }[] = [];
+    for (const it of items) {
+      if (!it.group_key || seen.has(it.group_key)) continue;
+      seen.add(it.group_key);
+      groups.push({ key: it.group_key, label: it.group_label ?? it.group_key,
+                    n: items.filter((y) => y.group_key === it.group_key).length });
+    }
+    return { slug: c.slug, label: c.label, blurb: c.blurb, icon: c.icon, items, groups };
+  }).filter((c) => c.items.length > 0);
 
   return ok({ featured, categories, total: all.length });
 }

@@ -99,6 +99,11 @@
   .hero .g{margin-top:10px;font-weight:700;font-size:13px;color:var(--accent)}
   .mine-f{padding:7px 12px;font-size:13px}
   .mine-f.on{background:rgba(249,115,22,.18);border-color:var(--accent);color:var(--ink)}
+  /* Team picker. auto-fill over a min width so 33 teams wrap to a dense grid on
+     a phone instead of a 33-row list, and reflow rather than scroll sideways. */
+  .teamgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:6px;margin-top:10px}
+  .teampick{padding:8px 6px;font-size:13px;line-height:1.15;min-height:38px}
+  .teampick.on{background:rgba(249,115,22,.18);border-color:var(--accent);color:var(--ink);font-weight:700}
   .rxn.add{opacity:.6}
   .tbtn.on{background:var(--accent);color:#0b1020}
   .banner{border-radius:12px;padding:16px;text-align:center;font-weight:700;font-size:20px}
@@ -835,19 +840,46 @@ function renderNameHome(){
     hero.firstElementChild.style.cursor="pointer";
   } else hero.innerHTML="";
 
-  // Categories collapse by default. With three of them and 15 items total a
-  // flat list would be shorter, but the shape is what matters here: this is the
-  // surface the filtered generator (team / G-F-C / decade) plugs into.
-  box.innerHTML=(r.categories||[]).map(c=>`<details style="margin-top:8px">
+  // A category with groups (team rosters: 96 challenges over 33 teams) renders
+  // a picker first — a 96-row flat list is a dump, not a browse. Ungrouped
+  // categories stay flat. The branch keys off the DATA, not the category slug,
+  // so adding a decade axis later needs no change in here.
+  box.innerHTML=(r.categories||[]).map((c,ci)=>{
+    const body = (c.groups && c.groups.length)
+      ? `<div class="teamgrid">${c.groups.map(g=>
+            `<button class="ghost teampick" data-c="${ci}" data-g="${esc(g.key)}">${esc(g.label)}</button>`).join("")}</div>
+         <div class="groupItems" data-c="${ci}"></div>`
+      : c.items.map(it=>itemRow(c.icon,it)).join("");
+    return `<details style="margin-top:8px">
       <summary>${c.icon} ${esc(c.label)} <span class="note">· ${c.items.length}</span></summary>
       ${c.blurb?`<div class="note" style="margin-top:4px">${esc(c.blurb)}</div>`:""}
-      ${c.items.map(it=>`<div class="slot" style="cursor:pointer;margin-top:8px" data-id="${it.sheet_id}" data-k="${it.kind}">
-          <div class="n">${c.icon}</div>
-          <div class="name">${esc(it.title)}${it.blurb?`<div class="note" style="font-weight:400">${esc(it.blurb)}</div>`:""}</div>
-          <div class="ctx">${diffPill(it.difficulty)}</div></div>`).join("")}
-    </details>`).join("") || `<div class="note">No challenges yet.</div>`;
+      ${body}</details>`;
+  }).join("") || `<div class="note">No challenges yet.</div>`;
 
-  box.querySelectorAll(".slot[data-id]").forEach(el=>{
+  // Pick a team -> reveal that team's positions in place. Tap again to collapse.
+  box.querySelectorAll(".teampick").forEach(btn=>{
+    btn.onclick=()=>{
+      const c=NAME_CATALOG.categories[+btn.dataset.c];
+      const target=box.querySelector(`.groupItems[data-c="${btn.dataset.c}"]`);
+      const already=btn.classList.contains("on");
+      box.querySelectorAll(`.teampick[data-c="${btn.dataset.c}"]`).forEach(b=>b.classList.remove("on"));
+      if(already){ target.innerHTML=""; return; }
+      btn.classList.add("on");
+      target.innerHTML=c.items.filter(i=>i.group_key===btn.dataset.g).map(i=>itemRow(c.icon,i)).join("");
+      bindItemRows(target);
+    };
+  });
+  bindItemRows(box);
+}
+function itemRow(icon,it){
+  return `<div class="slot" style="cursor:pointer;margin-top:8px" data-id="${it.sheet_id}" data-k="${it.kind}">
+    <div class="n">${icon}</div>
+    <div class="name">${esc(it.title)}${it.blurb?`<div class="note" style="font-weight:400">${esc(it.blurb)}</div>`:""}</div>
+    <div class="ctx">${diffPill(it.difficulty)}</div></div>`;
+}
+function bindItemRows(root){
+  root.querySelectorAll(".slot[data-id]").forEach(el=>{
+    if(el.dataset.bound) return; el.dataset.bound="1";
     el.onclick=()=>createChallenge(el.dataset.id, catKind(el.dataset.k), true);
   });
 }
