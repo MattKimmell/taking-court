@@ -831,7 +831,7 @@ function renderNameHome(){
       <div class="t">${esc(f.title)}</div>
       ${f.blurb?`<div class="b">${esc(f.blurb)}</div>`:""}
       <div class="g">${f.answer_count?`Name ${f.answer_count}`:"Play it"}${f.difficulty?` · ${esc(f.difficulty)}`:""}</div></div>`;
-    hero.firstElementChild.onclick=()=>createChallenge(f.sheet_id, catKind(f.kind));
+    hero.firstElementChild.onclick=()=>createChallenge(f.sheet_id, catKind(f.kind), true);
     hero.firstElementChild.style.cursor="pointer";
   } else hero.innerHTML="";
 
@@ -848,7 +848,7 @@ function renderNameHome(){
     </details>`).join("") || `<div class="note">No challenges yet.</div>`;
 
   box.querySelectorAll(".slot[data-id]").forEach(el=>{
-    el.onclick=()=>createChallenge(el.dataset.id, catKind(el.dataset.k));
+    el.onclick=()=>createChallenge(el.dataset.id, catKind(el.dataset.k), true);
   });
 }
 // Play Now: one tap into a random challenge, no configuration at all. Draws
@@ -858,10 +858,15 @@ $("playNowRandom").onclick = ()=>{
   const all=(NAME_CATALOG?.categories||[]).flatMap(c=>c.items);
   if(!all.length){ $("nameErr").textContent="Nothing to play yet."; return; }
   const p=all[Math.floor(Math.random()*all.length)];
-  createChallenge(p.sheet_id, catKind(p.kind));
+  createChallenge(p.sheet_id, catKind(p.kind), true);
 };
 
-async function createChallenge(sheet_id, kind){
+// andPlay: skip the share screen and go straight to the board. Tapping a
+// challenge in the Name It catalogue means "play this", not "set up a match" —
+// routing that intent through a share-a-link screen is a dead end. The share
+// flow still exists, it just belongs to the setup form, which is where someone
+// has actually said they want an opponent.
+async function createChallenge(sheet_id, kind, andPlay){
   const eb = homeErr(); eb.style.color="var(--bad)"; eb.textContent="";
   const vsComp = $("opponent").value==="computer";
   const r = await api("create",{
@@ -879,7 +884,7 @@ async function createChallenge(sheet_id, kind){
         mode:r.mode, kind:r.kind||kind||"top8", isRoster:(r.kind||kind)==="roster",
         prompt:r.prompt, sheet_id:sheet_id, finished:false, filled:{}, strikes:0, correct:0, startedMs:null,
         vsBot:vsComp, botLabel:r.bot_label };
-  if(vsComp){ startPlay(); return; }   // bot already waiting — go straight to the board
+  if(vsComp || andPlay){ startPlay(); return; }   // bot already waiting / browsed-and-tapped
   const link = location.origin+location.pathname+"?ch="+r.share_token;
   $("shareUrl").value = link;
   show("share");
