@@ -13,3 +13,6 @@ CLAUDE.local.md
 
 # Claude Code local config + worktrees (never published; repo root is the site)
 .claude/
+
+# Supabase CLI scratch (version cache, project ref) — regenerated, never ours to commit
+supabase/.temp/
