@@ -99,6 +99,18 @@
   .hero .g{margin-top:10px;font-weight:700;font-size:13px;color:var(--accent)}
   .mine-f{padding:7px 12px;font-size:13px}
   .mine-f.on{background:rgba(249,115,22,.18);border-color:var(--accent);color:var(--ink)}
+  /* Category cards — the first level of both browses. Deliberately not a
+     horizontal carousel: with three or four categories a scroller would hide
+     items off-screen for no reason. A grid shows the whole shape at once, which
+     is the point of a browse. */
+  .catgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-top:10px}
+  .catcard{background:var(--panel2);border:1px solid var(--line);border-radius:14px;
+    padding:14px 13px;cursor:pointer;transition:border-color .12s,background .12s}
+  .catcard:hover,.catcard:active{border-color:var(--accent);background:rgba(249,115,22,.08)}
+  .catcard .ci{font-size:22px;line-height:1}
+  .catcard .cl{font-weight:700;font-size:15px;margin-top:8px}
+  .catcard .cs{color:var(--muted);font-size:12.5px;margin-top:2px}
+  .catcard.empty{opacity:.55}
   /* Team picker. 104px min gave only two columns at 375px — 17 rows of scroll
      to find a team. 92px fits three on a phone (11 rows) and still reflows
      wider on desktop. Long names wrap; min-height keeps the grid even. */
@@ -360,30 +372,36 @@
   <!-- ===================== LISTS HOME ===================== -->
   <div id="listsHome" class="card hidden">
     <div class="head">
-      <div style="font-weight:700;font-size:18px">📝 Lists — make your own</div>
+      <div style="font-weight:700;font-size:18px">📝 Your Lists</div>
       <button class="ghost" id="listsHomeBack" style="flex:0 0 auto;padding:6px 12px">Home</button>
     </div>
-    <div class="note">Subjective lists — no right answer. Make one, share the topic, and see how friends' picks compare.</div>
-    <div class="row">
-      <div><label>New list title</label>
-        <input id="listTitle" placeholder="e.g. Favorite Spurs players · Best NBA franchises · Greatest Finals moments" /></div>
-      <div style="flex:0 0 auto"><label>About</label>
-        <select id="listEntryType">
-          <option value="player">Players</option>
-          <option value="team">Teams</option>
-          <option value="coach">Coaches</option>
-          <option value="moment">Moments / anything</option>
-        </select></div>
-    </div>
-    <div class="row" style="margin-top:12px">
-      <button id="listCreateBtn">Create list</button>
-      <label class="pill" style="flex:0 0 auto;cursor:pointer"><input type="checkbox" id="listRanked" checked style="width:auto;margin-right:6px" /> Ranked</label>
-      <label class="pill" style="flex:0 0 auto;cursor:pointer"><input type="checkbox" id="listDiscoverable" style="width:auto;margin-right:6px" /> Submit to Browse</label>
-    </div>
-    <div class="note" style="margin-top:6px">Your list is private to its share link. Submitting sends it for review — it shows up in Browse only once approved.</div>
+    <div class="note">No right answer here. You pick who makes the cut — then see who else named them.</div>
+    <div id="listHero"></div>
     <div class="row" style="margin-top:10px">
-      <button class="ghost" id="listBrowseBtn">🔎 Browse public lists</button>
+      <button id="listSurprise">🎲 Surprise me — random list</button>
     </div>
+    <div style="font-weight:700;margin-top:16px">Browse by</div>
+    <div id="listCats" class="catgrid"></div>
+    <details style="margin-top:14px">
+      <summary>Start my own list</summary>
+      <div class="row" style="margin-top:8px">
+        <div><label>New list title</label>
+          <input id="listTitle" placeholder="e.g. Favorite Spurs players · Greatest Finals moments" /></div>
+        <div style="flex:0 0 auto"><label>About</label>
+          <select id="listEntryType">
+            <option value="player">Players</option>
+            <option value="team">Teams</option>
+            <option value="coach">Coaches</option>
+            <option value="moment">Moments / anything</option>
+          </select></div>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button id="listCreateBtn">Create list</button>
+        <label class="pill" style="flex:0 0 auto;cursor:pointer"><input type="checkbox" id="listRanked" checked style="width:auto;margin-right:6px" /> Ranked</label>
+        <label class="pill" style="flex:0 0 auto;cursor:pointer"><input type="checkbox" id="listDiscoverable" style="width:auto;margin-right:6px" /> Submit to Browse</label>
+      </div>
+      <div class="note" style="margin-top:6px">Your list is private to its share link. Submitting sends it for review — it shows up in Browse only once approved.</div>
+    </details>
     <details style="margin-top:8px"><summary>Open a shared list link</summary>
       <div class="linkbox"><input id="listJoin" placeholder="Paste list link or token" /><button class="sky" id="listJoinBtn" style="flex:0 0 auto">Open</button></div>
     </details>
@@ -392,16 +410,20 @@
     <div class="err" id="listsErr"></div>
   </div>
 
-  <!-- ===================== LIST BROWSE ===================== -->
-  <div id="listBrowse" class="card hidden">
+  <!-- ============ CATEGORY PAGE (shared by Name It and Your Lists) ============
+       One screen, not one per mode: both browses are "pick a category, then see
+       its options", so the second level is the same screen filled with different
+       rows. Keeps the two modes behaving identically and halves the surface. -->
+  <div id="catPage" class="card hidden">
     <div class="head">
-      <div style="font-weight:700;font-size:18px">🔎 Browse public lists</div>
-      <button class="ghost" id="listBrowseBack" style="flex:0 0 auto;padding:6px 12px">Back</button>
+      <div style="font-weight:700;font-size:18px" id="catPageTitle"></div>
+      <button class="ghost" id="catPageBack" style="flex:0 0 auto;padding:6px 12px">Back</button>
     </div>
-    <div class="note">Topics people have made. Open one to add your list or see the consensus.</div>
-    <div id="browseList"><div class="note">Loading…</div></div>
-    <div class="err" id="browseErr"></div>
+    <div class="note" id="catPageBlurb"></div>
+    <div id="catPageBody" style="margin-top:6px"></div>
+    <div class="err" id="catPageErr"></div>
   </div>
+
 
   <!-- ===================== LIST BUILDER ===================== -->
   <div id="listBuild" class="card hidden">
@@ -758,7 +780,7 @@ let ST = { challenge_id:null, share_token:null, attempt_id:null, attempt_token:n
            filled:{}, strikes:0, correct:0, finished:false, sheet_id:null };
 let timerInt=null;
 
-function show(id){ ["lobby","nameHome","share","preview","play","results","leaderboard","listsHome","listBuild","listCompare","listBrowse","tierHome","tierBoard","tierCompare","tierBrowse","partyHost","partyPlay","partyRecap","mine","crewHome","crewRoom"].forEach(s=>$(s).classList.toggle("hidden", s!==id)); }
+function show(id){ ["lobby","nameHome","catPage","share","preview","play","results","leaderboard","listsHome","listBuild","listCompare","tierHome","tierBoard","tierCompare","tierBrowse","partyHost","partyPlay","partyRecap","mine","crewHome","crewRoom"].forEach(s=>$(s).classList.toggle("hidden", s!==id)); }
 // Challenge setup moved off the lobby onto #nameHome, so lobbyErr is hidden
 // whenever Name It is open — a failed create would have reported into a screen
 // nobody is looking at. Always write to the error box on the visible screen.
@@ -841,37 +863,60 @@ function renderNameHome(){
     hero.firstElementChild.style.cursor="pointer";
   } else hero.innerHTML="";
 
-  // A category with groups (team rosters: 96 challenges over 33 teams) renders
-  // a picker first — a 96-row flat list is a dump, not a browse. Ungrouped
-  // categories stay flat. The branch keys off the DATA, not the category slug,
-  // so adding a decade axis later needs no change in here.
-  box.innerHTML=(r.categories||[]).map((c,ci)=>{
-    const body = (c.groups && c.groups.length)
-      ? `<div class="teamgrid">${c.groups.map(g=>
-            `<button class="ghost teampick" data-c="${ci}" data-g="${esc(g.key)}">${esc(g.label)}</button>`).join("")}</div>
-         <div class="groupItems" data-c="${ci}"></div>`
-      : c.items.map(it=>itemRow(c.icon,it)).join("");
-    return `<details style="margin-top:8px">
-      <summary>${c.icon} ${esc(c.label)} <span class="note">· ${c.items.length}</span></summary>
-      ${c.blurb?`<div class="note" style="margin-top:4px">${esc(c.blurb)}</div>`:""}
-      ${body}</details>`;
-  }).join("") || `<div class="note">No challenges yet.</div>`;
-
-  // Pick a team -> reveal that team's positions in place. Tap again to collapse.
-  box.querySelectorAll(".teampick").forEach(btn=>{
-    btn.onclick=()=>{
-      const c=NAME_CATALOG.categories[+btn.dataset.c];
-      const target=box.querySelector(`.groupItems[data-c="${btn.dataset.c}"]`);
-      const already=btn.classList.contains("on");
-      box.querySelectorAll(`.teampick[data-c="${btn.dataset.c}"]`).forEach(b=>b.classList.remove("on"));
-      if(already){ target.innerHTML=""; return; }
-      btn.classList.add("on");
-      target.innerHTML=c.items.filter(i=>i.group_key===btn.dataset.g).map(i=>itemRow(c.icon,i)).join("");
-      bindItemRows(target);
-    };
+  // Category CARDS, not expanders. Tapping one navigates to the shared category
+  // page rather than growing this screen — an expander that unfurls 96 rows
+  // under a summary buries the hero and loses your place on scroll.
+  box.innerHTML = `<div style="font-weight:700;margin-top:16px">Browse by</div>
+    <div class="catgrid">${(r.categories||[]).map((c,ci)=>catCard(c.icon,c.label,
+        `${c.items.length} challenge${c.items.length===1?"":"s"}`, `data-ci="${ci}"`)).join("")}</div>`;
+  box.querySelectorAll("[data-ci]").forEach(el=>{
+    el.onclick=()=>openChallengeCategory(NAME_CATALOG.categories[+el.dataset.ci]);
   });
-  bindItemRows(box);
 }
+
+// A category's page. Grouped categories (team rosters) keep their team picker
+// here, so the drilldown lives inside the page instead of inside a summary.
+function openChallengeCategory(c){
+  const grouped = c.groups && c.groups.length;
+  const body = grouped
+    ? `<div class="teamgrid">${c.groups.map(g=>
+          `<button class="ghost teampick" data-g="${esc(g.key)}">${esc(g.label)}</button>`).join("")}</div>
+       <div class="groupItems"></div>`
+    : c.items.map(it=>itemRow(c.icon,it)).join("");
+  openCatPage(`${c.icon} ${c.label}`, c.blurb||"", body, "nameHome", root=>{
+    root.querySelectorAll(".teampick").forEach(btn=>{
+      btn.onclick=()=>{
+        const target=root.querySelector(".groupItems");
+        const already=btn.classList.contains("on");
+        root.querySelectorAll(".teampick").forEach(b=>b.classList.remove("on"));
+        if(already){ target.innerHTML=""; return; }
+        btn.classList.add("on");
+        target.innerHTML=c.items.filter(i=>i.group_key===btn.dataset.g).map(i=>itemRow(c.icon,i)).join("");
+        bindItemRows(target);
+      };
+    });
+    bindItemRows(root);
+  });
+}
+
+// ---- shared second level ----
+let CAT_RETURN = "lobby";
+function catCard(icon,label,sub,attrs){
+  return `<div class="catcard" ${attrs||""}><div class="ci">${icon}</div>
+    <div class="cl">${esc(label)}</div><div class="cs">${esc(sub)}</div></div>`;
+}
+function openCatPage(title, blurb, bodyHtml, backTo, bind){
+  CAT_RETURN = backTo;
+  $("catPageTitle").textContent = title;
+  $("catPageBlurb").textContent = blurb;
+  $("catPageErr").textContent = "";
+  $("catPageBody").innerHTML = bodyHtml;
+  show("catPage");
+  window.scrollTo(0,0);
+  if(bind) bind($("catPageBody"));
+}
+$("catPageBack").onclick = ()=>show(CAT_RETURN);
+
 function itemRow(icon,it){
   return `<div class="slot" style="cursor:pointer;margin-top:8px" data-id="${it.sheet_id}" data-k="${it.kind}">
     <div class="n">${icon}</div>
@@ -1255,12 +1300,15 @@ function wireSubmit(box, action, errId, reload){
 
 $("modeLists").onclick = openListsHome;
 $("listsHomeBack").onclick = ()=>show("lobby");
-async function openListsHome(){ show("listsHome"); $("listsErr").textContent=""; await loadMyLists(); }
+async function openListsHome(){
+  show("listsHome"); $("listsErr").textContent="";
+  await Promise.all([loadListBrowse(), loadMyLists()]);
+}
 async function loadMyLists(){
   const box=$("myLists"); box.innerHTML="Loading…";
   const r=await api("list_mine",{ client_id:clientId() });
   if(!r.ok){ box.textContent="Could not load."; return; }
-  if(!r.lists.length){ box.innerHTML=`<div class="note">No lists yet — create one above.</div>`; return; }
+  if(!r.lists.length){ box.innerHTML=`<div class="note">No lists yet — open “Start my own list” above.</div>`; return; }
   box.innerHTML = r.lists.map(l=>`<div class="slot" style="cursor:pointer" data-t="${l.share_token}">
      <div class="n">${ENTRY_ICON[l.entry_type]||"🏀"}</div>
      <div class="name">${l.prompt}</div><div class="ctx">${l.item_count} pick${l.item_count===1?"":"s"}${reviewTag(l.review_status)?" · "+reviewTag(l.review_status):""}</div>
@@ -1438,23 +1486,76 @@ $("listCompareCopyBtn").onclick=()=>{
 };
 
 // browse public topics
-$("listBrowseBtn").onclick=openBrowse;
-$("listBrowseBack").onclick=openListsHome;
-async function openBrowse(){
-  show("listBrowse"); $("browseErr").textContent="";
-  const box=$("browseList"); box.innerHTML=`<div class="note">Loading…</div>`;
+// Public lists, browsed the same way as Name It: a hero, a random pick, then
+// category cards into the shared category page. Categories are entry_type,
+// which is the axis the data already carries — no new schema, and it is the
+// distinction that actually matters when choosing a list to fill in.
+const ENTRY_CATS = [
+  { key:"player", icon:"🏀",  label:"Players",  blurb:"Who makes your cut." },
+  { key:"team",   icon:"🏟️", label:"Teams",    blurb:"Franchises, dynasties, eras." },
+  { key:"coach",  icon:"📋",  label:"Coaches",  blurb:"Sidelines and systems." },
+  { key:"moment", icon:"✨",  label:"Moments",  blurb:"Shots, games, anything." },
+];
+let LIST_BROWSE = null;
+// Display name for an entry_type; the raw column value is lowercase singular
+// ("player"), which reads like a bug in a hero.
+const catLabel = k => (ENTRY_CATS.find(c=>c.key===k)||{}).label || k;
+async function loadListBrowse(){
+  const hero=$("listHero"), cats=$("listCats");
+  hero.innerHTML=`<div class="note">Loading…</div>`; cats.innerHTML="";
   const r=await api("list_browse",{});
-  if(!r.ok){ $("browseErr").textContent="Error: "+r.error; box.innerHTML=""; return; }
-  if(!r.topics.length){ box.innerHTML=`<div class="note">No public lists yet — create one and it'll show here.</div>`; return; }
-  box.innerHTML=r.topics.map(t=>`<div class="slot" style="cursor:pointer" data-t="${t.share_token}">
-     <div class="n">${ENTRY_ICON[t.entry_type]||"🏀"}</div>
-     <div class="name">${t.prompt}</div>
-     <div class="ctx">${t.author_count} list${t.author_count===1?"":"s"}</div></div>`).join("");
-  // Rank first: landing on the consensus spoils the set and leaves you no stake
-  // in it. openListTopic sends you straight to compare if you already have one.
-  window.FROM_BROWSE = true;
-  Array.from(box.children).forEach(el=>el.onclick=()=>openListTopic(el.dataset.t,"build"));
+  if(!r.ok){ hero.innerHTML=""; $("listsErr").textContent="Could not load public lists."; return; }
+  LIST_BROWSE=r.topics||[];
+  // No editorial `featured` flag on list topics, so the hero is the most-played
+  // public list — list_browse already sorts by author_count. Add a featured
+  // column if this ever needs to be a curator's choice rather than a popularity
+  // read.
+  const top=LIST_BROWSE[0];
+  if(top){
+    hero.innerHTML=`<div class="hero">
+      <div class="t">${esc(top.prompt)}</div>
+      <div class="b">${ENTRY_ICON[top.entry_type]||"🏀"} ${esc(catLabel(top.entry_type))}${top.ranked?" · ranked":""}</div>
+      <div class="g">${top.author_count} list${top.author_count===1?"":"s"} so far — add yours</div></div>`;
+    hero.firstElementChild.onclick=()=>openPublicList(top.share_token);
+  } else {
+    hero.innerHTML=`<div class="banner wait" style="margin-top:10px">No public lists yet — start one below and submit it to Browse.</div>`;
+  }
+  // Every category is shown even when empty, so the shape of the catalogue is
+  // visible and obviously fillable. Empty ones are muted and their page says so
+  // rather than being a silent dead end.
+  cats.innerHTML=ENTRY_CATS.map(c=>{
+    const n=LIST_BROWSE.filter(t=>(t.entry_type||"player")===c.key).length;
+    return catCard(c.icon, c.label, n?`${n} list${n===1?"":"s"}`:"none yet",
+                   `data-ek="${c.key}"${n?"":' class-empty="1"'}`);
+  }).join("");
+  cats.querySelectorAll("[data-ek]").forEach(el=>{
+    if(el.getAttribute("class-empty")) el.classList.add("empty");
+    el.onclick=()=>openListCategory(el.dataset.ek);
+  });
 }
+function openListCategory(key){
+  const c=ENTRY_CATS.find(x=>x.key===key);
+  const items=LIST_BROWSE.filter(t=>(t.entry_type||"player")===key);
+  const body = items.length
+    ? items.map(t=>`<div class="slot" style="cursor:pointer;margin-top:8px" data-t="${t.share_token}">
+        <div class="n">${c.icon}</div>
+        <div class="name">${esc(t.prompt)}<div class="note" style="font-weight:400">${t.ranked?"Ranked":"Unordered"} · ${t.author_count} list${t.author_count===1?"":"s"}</div></div>
+        <div class="ctx">→</div></div>`).join("")
+    : `<div class="banner wait" style="margin-top:10px">Nothing public here yet. Start one from Your Lists and tick “Submit to Browse”.</div>`;
+  openCatPage(`${c.icon} ${c.label}`, c.blurb, body, "listsHome", root=>{
+    root.querySelectorAll(".slot[data-t]").forEach(el=>el.onclick=()=>openPublicList(el.dataset.t));
+  });
+}
+// Rank first: landing on the consensus spoils the set and leaves you no stake in
+// it. openListTopic jumps straight to compare if you already have an entry.
+function openPublicList(token){
+  window.FROM_BROWSE = true;
+  openListTopic(token, "build");
+}
+$("listSurprise").onclick=()=>{
+  if(!LIST_BROWSE || !LIST_BROWSE.length){ $("listsErr").textContent="No public lists yet."; return; }
+  openPublicList(LIST_BROWSE[Math.floor(Math.random()*LIST_BROWSE.length)].share_token);
+};
 
 // ------------------------------------------------------------------ tier lists
 let TIER = { topic_id:null, share_token:null, prompt:"", item_type:"player", tiers:[], item_set:[], assign:{}, is_creator:false };
