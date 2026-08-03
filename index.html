@@ -332,6 +332,13 @@
         <div style="flex:0 0 auto"><label>How many</label>
           <select id="fTarget"><option>5</option><option selected>8</option><option>10</option><option>12</option></select></div>
       </div>
+      <div class="row" style="margin-top:8px">
+        <div><label>Conference</label>
+          <select id="fConf"><option value="">Any</option></select></div>
+        <div><label>College</label>
+          <select id="fCollege"><option value="">Any</option></select></div>
+      </div>
+      <div class="note" style="margin-top:4px">Conferences are the classic ones — Syracuse and Louisville count as Big East.</div>
       <div class="row" style="margin-top:10px;flex-wrap:wrap;gap:8px">
         <label class="pill" style="cursor:pointer;display:inline-flex;flex:0 0 auto">
           <input type="checkbox" id="fDeep" style="width:auto;margin-right:6px" /> Allow deep cuts
@@ -912,7 +919,7 @@ $("modeNameIt").onclick = openNameHome;
 $("nameHomeBack").onclick = ()=>show("lobby");
 
 async function openNameHome(){
-  show("nameHome"); $("nameErr").textContent=""; fillFilterTeams();
+  show("nameHome"); $("nameErr").textContent=""; fillFilterTeams(); fillFilterOptions();
   if(!NAME_CATALOG) await loadChallengeCatalog(); else renderNameHome();
 }
 async function loadChallengeCatalog(){
@@ -1020,12 +1027,29 @@ function fillFilterTeams(){
   sel.insertAdjacentHTML("beforeend",
     FILTER_TEAMS.map(([a,n])=>`<option value="${a}">${esc(n)}</option>`).join(""));
 }
+// Colleges are data, not a constant, so unlike teams and decades they cannot be
+// hardcoded here — the server returns only the ones that could make a game.
+// Fetched once, on first open of the setup form, and cached for the session.
+let FILTER_OPTS=null;
+async function fillFilterOptions(){
+  const sel=$("fCollege"); if(!sel || sel.dataset.filled) return; sel.dataset.filled="1";
+  const r=await api("challenge_filters");
+  if(!r.ok) return;
+  FILTER_OPTS=r;
+  $("fConf").insertAdjacentHTML("beforeend",
+    (r.conferences||[]).map(c=>`<option value="${esc(c.v)}">${esc(c.v)} (${c.n})</option>`).join(""));
+  sel.insertAdjacentHTML("beforeend",
+    (r.colleges||[]).map(c=>`<option value="${esc(c.v)}">${esc(c.v)} (${c.n})</option>`).join(""));
+}
+
 function readFilters(){
   const f={ mode:"roster" };
   const t=$("fTeam").value, p=$("fPos").value, d=$("fDecade").value,
-        a=$("fAward").value, dr=$("fDraft").value;
+        a=$("fAward").value, dr=$("fDraft").value,
+        co=$("fCollege").value, cf=$("fConf").value;
   if(t) f.team=t; if(p) f.position=p; if(d) f.decade=+d;
   if(a) f.award=a; if(dr) f.draft=dr;
+  if(co) f.college=co; if(cf) f.conference=cf;
   f.target=+$("fTarget").value || 8;
   if($("fDeep").checked) f.deep_cuts=true;
   // Off by default, like the tier/list "Submit to Browse" tick: building a
@@ -1033,7 +1057,8 @@ function readFilters(){
   if($("fSubmit").checked){ f.submit=true; f.client_id=clientId(); }
   return f;
 }
-const FILTER_LABEL = { team:"Team", position:"Position", decade:"Decade", award:"Honour", draft:"Draft" };
+const FILTER_LABEL = { team:"Team", position:"Position", decade:"Decade", award:"Honour",
+                       draft:"Draft", college:"College", conference:"Conference" };
 const DIFF_WORD = { easy:"should be easy", normal:"a fair test", hard:"hard", brutal:"brutal — you would need nearly all of them" };
 
 // What came back from a "Suggest for Browse" tick. Every branch ends by telling
@@ -1061,6 +1086,12 @@ async function buildFromFilters(){
   const p=r.preview;
   // Unbuildable: say which filter is doing the damage rather than just "no".
   if(!r.built){
+    // "We have no such thing" and "we have no such players" are different
+    // problems and only one of them is the player's fault.
+    if(p.unknown_filter){
+      box.innerHTML=`<div class="banner lose">No ${esc(FILTER_LABEL[p.unknown_filter]||p.unknown_filter).toLowerCase()} by that name in the data.</div>`;
+      return;
+    }
     const rx=p.relax;
     box.innerHTML=`<div class="banner lose">Only ${p.known} qualify — not enough for a game.${
       rx?` Drop <b>${esc(FILTER_LABEL[rx.filter]||rx.filter)}</b> and you would have ${rx.would_give}.`:""}</div>`;
@@ -1086,7 +1117,18 @@ $("fBuild").onclick = buildFromFilters;
 // Surprise me WITHIN the filters: keep whatever you have set, randomise the rest.
 // The player-shaped way into the same machinery — pick your team, hit go.
 $("fSurprise").onclick = ()=>{
-  if(!$("fTeam").value) $("fTeam").value = FILTER_TEAMS[Math.floor(Math.random()*FILTER_TEAMS.length)][0];
+  // Roll a college sometimes instead of a team, so the new axis actually gets
+  // seen — a surprise that only ever produces "Bulls guards" is not a surprise.
+  const useCollege = FILTER_OPTS && FILTER_OPTS.colleges && FILTER_OPTS.colleges.length
+                     && !$("fTeam").value && Math.random() < 0.4;
+  if(useCollege){
+    if(!$("fCollege").value){
+      const cs=FILTER_OPTS.colleges;
+      $("fCollege").value = cs[Math.floor(Math.random()*cs.length)].v;
+    }
+  } else if(!$("fTeam").value){
+    $("fTeam").value = FILTER_TEAMS[Math.floor(Math.random()*FILTER_TEAMS.length)][0];
+  }
   if(!$("fPos").value)  $("fPos").value  = ["G","F","C"][Math.floor(Math.random()*3)];
   buildFromFilters();
 };

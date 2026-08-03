@@ -891,6 +891,13 @@ export async function actionChallengeCatalog() {
 const PREVIEW_AWARDS = new Set(["mvp","dpoy","roy","smoy","mip","allnba","alldef","allstar","allstar10","hof","ring"]);
 const PREVIEW_DRAFT  = new Set(["first","top3","lottery","round1","round2"]);
 const PREVIEW_DECADES = new Set([1940,1950,1960,1970,1980,1990,2000,2010,2020]);
+// Conferences are a closed set, so they get enumerated like every other
+// controlled vocabulary here. Colleges are not — there are 554 of them and the
+// list grows with the data — so those get shape validation, and a value that is
+// well-formed but unknown is caught by mp_challenge_preview, which reports
+// `unknown_filter` rather than letting it read as an empty combination.
+const PREVIEW_CONFERENCES = new Set(["ACC","SEC","Big Ten","Big 12","Big East","Pac-12"]);
+const COLLEGE_SHAPE = /^[A-Za-z0-9 .'()&-]{2,40}$/;
 
 export function buildChallengeFilters(body: any): { filters: Record<string, unknown> } | { error: string } {
   const f: Record<string, unknown> = {};
@@ -925,6 +932,16 @@ export function buildChallengeFilters(body: any): { filters: Record<string, unkn
     if (!PREVIEW_DRAFT.has(d)) return { error: "bad_draft" };
     f.draft = d;
   }
+  if (body.college != null && body.college !== "") {
+    const c = String(body.college).trim();
+    if (!COLLEGE_SHAPE.test(c)) return { error: "bad_college" };
+    f.college = c;
+  }
+  if (body.conference != null && body.conference !== "") {
+    const c = String(body.conference);
+    if (!PREVIEW_CONFERENCES.has(c)) return { error: "bad_conference" };
+    f.conference = c;
+  }
   if (body.target != null) {
     const n = Math.floor(Number(body.target));
     if (!Number.isFinite(n) || n < 3 || n > 15) return { error: "bad_target" };
@@ -932,6 +949,16 @@ export function buildChallengeFilters(body: any): { filters: Record<string, unkn
   }
   if (body.deep_cuts === true) f.min_notability = 0;   // "include the obscure ones"
   return { filters: f };
+}
+
+// The two open-ended dropdowns. Colleges are data, not a constant, so the client
+// cannot hardcode them the way it hardcodes teams and decades — and 554 of them
+// is a phone book, so the server returns only the ones that could make a game.
+// One call, cached client-side for the session.
+export async function actionChallengeFilters() {
+  const { data, error } = await db.rpc("mp_filter_options");
+  if (error) return err(error.message, 500);
+  return ok(data);
 }
 
 export async function actionChallengePreview(_req: Request, body: any) {
@@ -983,6 +1010,11 @@ export function composeFilterPrompt(f: Record<string, any>, target: number): str
   const noun = f.position ? POS_PLURAL[f.position] : "players";
   const clauses: string[] = [];
   if (f.team) clauses.push(`played for the ${TEAM_NAMES[f.team] ?? f.team}`);
+  // "went to Duke" / "came out of the Big East" — both read as natural speech,
+  // which matters more here than consistency of construction. All six
+  // conferences take a definite article.
+  if (f.college) clauses.push(`went to ${f.college}`);
+  if (f.conference) clauses.push(`came out of the ${f.conference}`);
   if (f.award) clauses.push(AWARD_PHRASE[f.award]);
   if (f.draft) clauses.push(DRAFT_PHRASE[f.draft]);
   let s = `Name ${target} ${noun}`;
