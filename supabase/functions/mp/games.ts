@@ -1,5 +1,5 @@
 import {
-  db, ok, err, authedUserId, normalize, randomToken,
+  db, ok, err, authedUserId, safeClientId, normalize, randomToken,
   buildSnapshot, revealedAnswers, strikeContext, rankCompare, leaderboardCompare, isBotClient,
   ARENA_POOL, TEAM_POOL, insertBot, insertRosterBot, loadRosterPool, rosterReveal, RARITY_LABEL,
   matchPoolGuess,
@@ -1013,5 +1013,22 @@ export async function actionChallengeBuild(req: Request, body: any) {
   });
   if (bErr) return err(bErr.message, 500);
 
-  return ok({ built: true, preview: pv, filters, sheet_id: sheetId, prompt, target });
+  // Optionally suggest it for the browse catalogue. This is strictly additive to
+  // the build: the challenge is already generated and playable by the time we get
+  // here, so nothing about a submission — refusal, duplicate, or outright db
+  // error — is allowed to fail the request. It reports and the player plays.
+  //
+  // The submission lands as `pending`. Same rule 0016 set for tier and list
+  // topics: creating never publishes, and moderation gates discovery only. The
+  // sheet is judged again inside mp_catalog_submit at the DEFAULT notability
+  // floor, so ticking "allow deep cuts" cannot buy a listing.
+  let submission: unknown = null;
+  if (body.submit === true) {
+    const { data: sub, error: sErr } = await db.rpc("mp_catalog_submit", {
+      f: filters, p_roster_sheet_id: sheetId, p_client_id: safeClientId(body.client_id),
+    });
+    submission = sErr ? { ok: false, reason: "submit_failed" } : sub;
+  }
+
+  return ok({ built: true, preview: pv, filters, sheet_id: sheetId, prompt, target, submission });
 }

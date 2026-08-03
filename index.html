@@ -332,9 +332,14 @@
         <div style="flex:0 0 auto"><label>How many</label>
           <select id="fTarget"><option>5</option><option selected>8</option><option>10</option><option>12</option></select></div>
       </div>
-      <label class="pill" style="margin-top:10px;cursor:pointer;display:inline-flex">
-        <input type="checkbox" id="fDeep" style="width:auto;margin-right:6px" /> Allow deep cuts
-      </label>
+      <div class="row" style="margin-top:10px;flex-wrap:wrap;gap:8px">
+        <label class="pill" style="cursor:pointer;display:inline-flex;flex:0 0 auto">
+          <input type="checkbox" id="fDeep" style="width:auto;margin-right:6px" /> Allow deep cuts
+        </label>
+        <label class="pill" style="cursor:pointer;display:inline-flex;flex:0 0 auto">
+          <input type="checkbox" id="fSubmit" style="width:auto;margin-right:6px" /> Suggest for Browse
+        </label>
+      </div>
       <div class="row" style="margin-top:12px">
         <button id="fBuild">Check &amp; play →</button>
         <button class="ghost" id="fSurprise" style="flex:0 0 auto">🎲 Surprise me</button>
@@ -1023,14 +1028,35 @@ function readFilters(){
   if(a) f.award=a; if(dr) f.draft=dr;
   f.target=+$("fTarget").value || 8;
   if($("fDeep").checked) f.deep_cuts=true;
+  // Off by default, like the tier/list "Submit to Browse" tick: building a
+  // challenge has never published it, and it shouldn't start now.
+  if($("fSubmit").checked){ f.submit=true; f.client_id=clientId(); }
   return f;
 }
 const FILTER_LABEL = { team:"Team", position:"Position", decade:"Decade", award:"Honour", draft:"Draft" };
 const DIFF_WORD = { easy:"should be easy", normal:"a fair test", hard:"hard", brutal:"brutal — you would need nearly all of them" };
 
+// What came back from a "Suggest for Browse" tick. Every branch ends by telling
+// the author the challenge is still theirs — a refused submission costs them
+// nothing, because the sheet exists and the share link already works.
+function submitNote(s){
+  if(!s) return "Not suggested for Browse.";
+  if(!s.ok){
+    if(s.reason==="too_thin")
+      return `Too thin for Browse — only ${s.known} recognisable names, and a stranger would stall. Still yours to play and share.`;
+    if(s.reason==="no_filters") return "Set at least one filter before suggesting it for Browse.";
+    return "Couldn't suggest that one for Browse. Still yours to play and share.";
+  }
+  if(s.already) return s.status==="approved"
+    ? `Already in Browse as <b>${esc(s.title)}</b>.`
+    : `Already suggested as <b>${esc(s.title)}</b> — ${esc(s.status)}.`;
+  return `Suggested as <b>${esc(s.title)}</b>. It appears in Browse once it's reviewed.`;
+}
+
 async function buildFromFilters(){
   const box=$("fVerdict"); box.innerHTML=`<div class="note">Checking…</div>`;
-  const r=await api("challenge_build", readFilters());
+  const body=readFilters();
+  const r=await api("challenge_build", body);
   if(!r.ok){ box.innerHTML=`<div class="banner lose">${esc(r.error)}</div>`; return; }
   const p=r.preview;
   // Unbuildable: say which filter is doing the damage rather than just "no".
@@ -1047,8 +1073,14 @@ async function buildFromFilters(){
   box.innerHTML=`<div class="banner win" style="text-align:left">
       <div style="font-weight:800">${esc(r.prompt)}</div>
       <div class="note" style="margin-top:4px">${notes.join(" · ")}</div>
-    </div>`;
-  createChallenge(r.sheet_id, "roster", true);
+      ${body.submit?`<div class="note" style="margin-top:6px">${submitNote(r.submission)}</div>`:""}
+    </div>`
+    + (body.submit?`<button id="fPlay" style="margin-top:10px">Play it →</button>`:"");
+  // Suggesting is an authoring act: the author wants to read the outcome and
+  // usually wants to build another, so the form stays put and playing becomes a
+  // choice. Building to play still drops straight onto the board.
+  if(body.submit) $("fPlay").onclick=()=>createChallenge(r.sheet_id, "roster", true);
+  else createChallenge(r.sheet_id, "roster", true);
 }
 $("fBuild").onclick = buildFromFilters;
 // Surprise me WITHIN the filters: keep whatever you have set, randomise the rest.
