@@ -941,3 +941,77 @@ export async function actionChallengePreview(_req: Request, body: any) {
   if (error) return err(error.message, 500);
   return ok({ filters: built.filters, preview: data });
 }
+
+// ---------------------------------------------------------------------------
+// Build a challenge from filters.
+//
+// Roster (set-membership) mode only. Filtered top-N is NOT possible yet: a top8
+// challenge takes its answers from perfect_sheet_answers via buildSnapshot, and
+// perfect_sheets belongs to another app that shares this database — generating
+// into it would mean writing to someone else's schema. Doing filtered top-N
+// properly means building the snapshot directly at challenge-creation time and
+// skipping sheets entirely. Deliberately left for later rather than half-built.
+const TEAM_NAMES: Record<string, string> = {
+  ATL:"Hawks", BOS:"Celtics", BRK:"Nets", CHO:"Hornets", CHI:"Bulls", CLE:"Cavaliers",
+  DAL:"Mavericks", DEN:"Nuggets", DET:"Pistons", GSW:"Warriors", HOU:"Rockets",
+  IND:"Pacers", LAC:"Clippers", LAL:"Lakers", MEM:"Grizzlies", MIA:"Heat", MIL:"Bucks",
+  MIN:"Timberwolves", NOP:"Pelicans", NYK:"Knicks", OKC:"Thunder", ORL:"Magic",
+  PHI:"76ers", PHO:"Suns", POR:"Trail Blazers", SAC:"Kings", SAS:"Spurs", TOR:"Raptors",
+  UTA:"Jazz", WAS:"Wizards", SEA:"Seattle SuperSonics", NJN:"New Jersey Nets",
+  WSB:"Washington Bullets", CHH:"Charlotte Hornets", VAN:"Vancouver Grizzlies",
+  BUF:"Buffalo Braves",
+};
+const POS_PLURAL: Record<string, string> = { G: "guards", F: "forwards", C: "centers" };
+// Each award phrase completes "...who ___".
+const AWARD_PHRASE: Record<string, string> = {
+  mvp: "won MVP", dpoy: "won Defensive Player of the Year", roy: "won Rookie of the Year",
+  smoy: "won Sixth Man of the Year", mip: "won Most Improved Player",
+  allnba: "made an All-NBA team", alldef: "made an All-Defensive team",
+  allstar: "made an All-Star team", allstar10: "made 10 or more All-Star teams",
+  hof: "are in the Hall of Fame", ring: "won a championship",
+};
+const DRAFT_PHRASE: Record<string, string> = {
+  first: "were drafted first overall", top3: "were drafted in the top 3",
+  lottery: "were lottery picks", round1: "were first-round picks",
+  round2: "were second-round picks",
+};
+
+// Readable English from a filter set. Worth the fiddliness: the prompt is the
+// whole game, and "Name 8 players position=G team=LAL" would be unplayable as a
+// piece of writing even if the answers were right.
+export function composeFilterPrompt(f: Record<string, any>, target: number): string {
+  const noun = f.position ? POS_PLURAL[f.position] : "players";
+  const clauses: string[] = [];
+  if (f.team) clauses.push(`played for the ${TEAM_NAMES[f.team] ?? f.team}`);
+  if (f.award) clauses.push(AWARD_PHRASE[f.award]);
+  if (f.draft) clauses.push(DRAFT_PHRASE[f.draft]);
+  let s = `Name ${target} ${noun}`;
+  if (clauses.length) s += ` who ${clauses.join(" and ")}`;
+  if (f.decade) s += `${clauses.length ? " and were" : " who were"} active in the ${f.decade}s`;
+  return s + ".";
+}
+
+export async function actionChallengeBuild(req: Request, body: any) {
+  const built = buildChallengeFilters(body);
+  if ("error" in built) return err(built.error, 400);
+  const filters = built.filters;
+  if (filters.mode === "top8") return err("top8_filters_unsupported", 400);
+
+  // Preview first, always. The same predicate backs the count and the generated
+  // pool, so a verdict of ok here means the sheet really will have that many.
+  const { data: pv, error: pErr } = await db.rpc("mp_challenge_preview", { f: filters });
+  if (pErr) return err(pErr.message, 500);
+  if (pv.verdict === "impossible") {
+    return ok({ built: false, preview: pv, filters });   // 200: a dead end is an answer, not a fault
+  }
+  // Honour the clamp — the preview already reduced the ask to what exists.
+  const target = pv.target as number;
+  const prompt = composeFilterPrompt(filters as any, target);
+
+  const { data: sheetId, error: bErr } = await db.rpc("mp_build_filtered_roster", {
+    f: filters, p_prompt: prompt, p_target: target, p_difficulty: pv.difficulty === "easy" ? "normal" : "hard",
+  });
+  if (bErr) return err(bErr.message, 500);
+
+  return ok({ built: true, preview: pv, filters, sheet_id: sheetId, prompt, target });
+}
