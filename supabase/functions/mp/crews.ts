@@ -1,4 +1,4 @@
-import { db, ok, err, authedUserId, consensusFor } from "./shared.ts";
+import { db, ok, err, authedUserId, consensusFor, computeStreak } from "./shared.ts";
 import { getOrCreateDailyTopic } from "./tiers.ts";
 
 // -----------------------------------------------------------------------------
@@ -18,16 +18,6 @@ export async function uniqueCrewCode(): Promise<string> {
     if (!data) return c;
   }
   return makeCrewCode();
-}
-export function dayMinus(dateStr: string, n: number): string {
-  return new Date(new Date(dateStr + "T00:00:00Z").getTime() - n * 86400000).toISOString().slice(0, 10);
-}
-export function computeStreak(dates: Set<string>, today: string): number {
-  let anchor: string | null = dates.has(today) ? today : (dates.has(dayMinus(today, 1)) ? dayMinus(today, 1) : null);
-  if (!anchor) return 0;
-  let streak = 0, d = anchor;
-  while (dates.has(d)) { streak++; d = dayMinus(d, 1); }
-  return streak;
 }
 
 export async function actionCrewCreate(req: Request, body: any) {

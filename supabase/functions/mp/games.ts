@@ -625,7 +625,13 @@ export async function actionResults(_req: Request, body: any) {
   let winner: { type: string; attempt_id?: string } = { type: "pending" };
   if (challengeClosed || allFinished) {
     if (ranked.length === 0) winner = { type: "none" };
-    else if (ranked.length === 1) winner = { type: "attempt", attempt_id: ranked[0].id };
+    // One attempt is not a victory. This used to return type "attempt", which
+    // made the sole player the winner by default -- so a solo run that struck
+    // out at 3 of 8 still rendered "🏆 You win!". A solo run has no opponent, so
+    // the outcome is performance against the sheet, and "solo" says so
+    // explicitly rather than leaving the client to infer it from a count.
+    // A bot opponent is a real second attempt, so vs-computer is unaffected.
+    else if (ranked.length === 1) winner = { type: "solo", attempt_id: ranked[0].id };
     else {
       const tie = rankCompare(ranked[0], ranked[1]) === 0;
       winner = tie ? { type: "draw" } : { type: "attempt", attempt_id: ranked[0].id };
@@ -691,14 +697,26 @@ export async function actionLeaderboard(req: Request, body: any) {
   const includeBots = body.include_bots === true;
   const limit = Number.isFinite(body.limit) ? Math.min(100, Math.max(1, Math.floor(body.limit))) : 20;
 
-  const { data, error } = await db
-    .from("mp_attempts")
-    .select("id, player_label, player_client_id, player_user_id, status, correct_count, strikes, elapsed_ms, ranking_time_ms, finished_at, challenge:mp_challenges!inner(prompt, sheet_id, roster_sheet_id, answer_target)")
-    .in("status", ["completed", "eliminated", "expired"]);
-  if (error) return err(error.message, 500);
+  // pagedRows, not a bare select: PostgREST caps a response at max_rows = 1000,
+  // so this silently dropped every attempt past the first thousand and then
+  // ranked the truncated set — a leaderboard that is quietly wrong rather than
+  // visibly broken. Filters are pushed into the query for the same reason:
+  // filtering in JS after truncation filters the wrong thousand rows.
+  const sheet = body.sheet_id ? String(body.sheet_id) : null;
+  const data = await pagedRows(() => {
+    let q = db.from("mp_attempts")
+      .select("id, player_label, player_client_id, player_user_id, status, correct_count, strikes, elapsed_ms, ranking_time_ms, finished_at, challenge:mp_challenges!inner(prompt, sheet_id, roster_sheet_id, answer_target)")
+      .in("status", ["completed", "eliminated", "expired"])
+      .not("finished_at", "is", null);
+    // A sheet id can be either a trivia sheet or a roster sheet, so match either
+    // side. .or() takes a raw string, hence the strict uuid guard above/below.
+    if (sheet && /^[0-9a-fA-F-]{36}$/.test(sheet)) {
+      q = q.or(`sheet_id.eq.${sheet},roster_sheet_id.eq.${sheet}`, { referencedTable: "mp_challenges" });
+    }
+    return q;
+  });
 
-  let rows = (data ?? []).filter((r: any) => r.finished_at);
-  if (body.sheet_id) rows = rows.filter((r: any) => r.challenge?.sheet_id === body.sheet_id || r.challenge?.roster_sheet_id === body.sheet_id);
+  let rows = data;
   if (!includeBots) rows = rows.filter((r: any) => !isBotClient(r.player_client_id));
 
   rows.sort(leaderboardCompare);

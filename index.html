@@ -1135,6 +1135,17 @@ async function showResults(){
   if(r.winner.type==="pending"){ wb.className="banner wait";
     wb.textContent="Your run is locked in. Waiting for the other player to finish…"; }
   else if(r.winner.type==="draw"){ wb.className="banner draw"; wb.textContent="Dead heat — it's a draw!"; }
+  // Solo run: nobody to beat, so report the sheet, not a verdict. Only a full
+  // sheet gets the trophy; striking out says so plainly, and running out of
+  // answers reads as a score rather than a loss.
+  else if(r.winner.type==="solo"){
+    const n=me?me.correct_count:0, t=r.answer_target;
+    if(me && me.completed){ wb.className="banner win";
+      wb.textContent=`🏆 Perfect — all ${t} in ${fmt(me.elapsed_ms)}`; }
+    else if(me && me.status==="eliminated"){ wb.className="banner lose";
+      wb.textContent=`✕ Struck out at ${n} of ${t}`; }
+    else { wb.className="banner draw"; wb.textContent=`${n} of ${t} — not bad`; }
+  }
   else if(r.winner.type==="attempt"){
     const won = me && r.winner.attempt_id===me.attempt_id;
     wb.className="banner "+(won?"win":"lose");
@@ -1560,7 +1571,7 @@ function tierChip(it){
 }
 async function saveTier(){
   const r=await api("tier_save",{ topic_id:TIER.topic_id, assignments:TIER.assign, client_id:clientId(), label:ensureName() });
-  if(r.ok && TIER.isDaily) bumpStreak(TIER.date);
+  if(r.ok && r.streak) setStreak(r.streak);   // server-computed, already counts today
   if(r.ok) track("board_complete", { daily: !!TIER.isDaily });
   return r;
 }
@@ -1748,21 +1759,25 @@ async function openTierBrowse(){
 }
 
 // ------------------------------------------------------------------ daily + share card
+// The streak is now DERIVED SERVER-SIDE from daily play history and arrives on
+// the `daily` and `tier_save` responses. It used to live only in localStorage,
+// which meant it vanished on a cache clear and the server could never assert it
+// — and you cannot send "your streak is about to break" from a server that does
+// not know the streak. This is a display cache, not the source of truth: the
+// last server value is kept in localStorage purely so the lobby can render a
+// number before the first `daily` call returns.
 function getStreak(){ try{return JSON.parse(localStorage.getItem("mp_streak")||"{}")}catch{return {}} }
 function renderStreak(){ const s=getStreak(); const el=$("dailyStreak"); if(el) el.textContent=(s.streak>0?" · 🔥 "+s.streak:""); }
-function bumpStreak(dateStr){
-  const s=getStreak();
-  if(s.last!==dateStr){
-    const y=new Date(new Date(dateStr+"T00:00:00Z").getTime()-86400000).toISOString().slice(0,10);
-    s.streak=(s.last===y)?(s.streak||0)+1:1; s.last=dateStr;
-    localStorage.setItem("mp_streak",JSON.stringify(s));
-  }
+function setStreak(srv){
+  if(!srv || typeof srv.current!=="number") return;
+  localStorage.setItem("mp_streak", JSON.stringify({ streak:srv.current, last:srv.last_played||null }));
   renderStreak();
 }
 $("dailyBtn").onclick=openDaily;
 async function openDaily(){
   const r=await api("daily",{client_id:clientId()});
   if(!r.ok){ $("lobbyErr").style.color="var(--bad)"; $("lobbyErr").textContent="Daily unavailable: "+r.error; return; }
+  setStreak(r.streak);   // reconcile the cached number against the server's
   TIER={ topic_id:r.topic.id, share_token:r.topic.share_token, prompt:r.topic.prompt, item_type:r.topic.item_type,
          tiers:r.topic.tiers, item_set:r.topic.item_set, assign:{...(r.your_assignments||{})}, is_creator:false, isDaily:true, date:r.date };
   if(CREW_RETURN) openTierBoard(); else if(r.done) showTierCompare(); else openTierBoard();

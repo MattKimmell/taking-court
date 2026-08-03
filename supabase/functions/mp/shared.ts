@@ -559,3 +559,21 @@ export async function loadRosterPool(rosterSheetId: string): Promise<PoolEntry[]
   }));
 }
 
+// -----------------------------------------------------------------------------
+// Daily streaks. Lives here, not in crews.ts, because tiers.ts needs it too and
+// crews.ts already imports tiers.ts — importing back would be circular.
+// Pure over a set of ISO dates, so the same derivation serves the crew room and
+// the solo daily and cannot drift between them.
+// -----------------------------------------------------------------------------
+export function dayMinus(dateStr: string, n: number): string {
+  return new Date(new Date(dateStr + "T00:00:00Z").getTime() - n * 86400000).toISOString().slice(0, 10);
+}
+// Yesterday counts as the anchor so a streak is not destroyed at 00:00 UTC
+// before the player has had a chance to play today.
+export function computeStreak(dates: Set<string>, today: string): number {
+  let anchor: string | null = dates.has(today) ? today : (dates.has(dayMinus(today, 1)) ? dayMinus(today, 1) : null);
+  if (!anchor) return 0;
+  let streak = 0, d = anchor;
+  while (dates.has(d)) { streak++; d = dayMinus(d, 1); }
+  return streak;
+}

@@ -1,4 +1,4 @@
-import { db, ok, err, authedUserId, randomToken, tierPool, drawSet, POOL_TYPE, DAILY_ROTATION, ownerFilter, creatorFilter, safeClientId, consensusFor, scoreBoard, minBoardsFor } from "./shared.ts";
+import { db, ok, err, authedUserId, randomToken, tierPool, drawSet, POOL_TYPE, DAILY_ROTATION, ownerFilter, creatorFilter, safeClientId, consensusFor, scoreBoard, minBoardsFor, computeStreak } from "./shared.ts";
 
 // ---------------------------------------------------------------------------
 // Tier-list mode (spin a set from a pool, sort into S/A/B/C/D/F, compare).
@@ -111,15 +111,24 @@ export async function actionTierSave(req: Request, body: any) {
   const label = body.label ?? "Anonymous";
   const { data: rows } = await db.from("mp_tier_lists").select("id, author_client_id, author_user_id").eq("topic_id", topic.id);
   const mine = (rows ?? []).find((l) => (userId && l.author_user_id === userId) || (clientId && l.author_client_id === clientId));
+  // Saving a daily board is what advances the streak, so hand the new value back
+  // instead of making the client re-fetch or guess. Computed AFTER the write, so
+  // today is already counted.
+  const dailyDate = (topic.kind === "daily")
+    ? (/^daily_(\d{4}-\d{2}-\d{2})$/.exec(topic.share_token ?? "")?.[1] ?? null)
+    : null;
+  const withStreak = async (extra: Record<string, unknown>) =>
+    dailyDate ? { ...extra, streak: await soloStreak(userId, clientId, dailyDate) } : extra;
+
   if (mine) {
     const patch: any = { assignments: asg, author_label: label, updated_at: new Date().toISOString() };
     if (userId && !mine.author_user_id) patch.author_user_id = userId;   // backfill so a signed-in member's board counts in crews
     await db.from("mp_tier_lists").update(patch).eq("id", mine.id);
-    return ok({ list_id: mine.id, saved: true });
+    return ok(await withStreak({ list_id: mine.id, saved: true }));
   }
   const { data: created, error: cErr } = await db.from("mp_tier_lists").insert({ topic_id: topic.id, author_client_id: clientId, author_user_id: userId, author_label: label, assignments: asg }).select("id").single();
   if (cErr) return err(cErr.message, 500);
-  return ok({ list_id: created.id, saved: true });
+  return ok(await withStreak({ list_id: created.id, saved: true }));
 }
 
 // Curated themes: the featured one is returned separately because it gets a
@@ -306,6 +315,47 @@ export async function getOrCreateDailyTopic(): Promise<{ topic: any; date: strin
 
 // Daily debate: one shared tier topic per UTC date. Everyone gets the same set;
 // reuses tier_save / tier_compare. No schema change needed.
+// Solo daily streak, derived from play history rather than stored.
+//
+// The client kept this in localStorage, which meant it died on a cache clear and
+// the server could never assert it — and you cannot send "your streak is about
+// to break" from a server that does not know the streak. Deriving it means there
+// is nothing to migrate, nothing to keep in sync, and no way for a client to
+// inflate it.
+//
+// Daily topics carry their date in the share_token (daily_YYYY-MM-DD), which is
+// the same handle crew streaks parse, so both read the same history.
+export async function soloStreak(userId: string | null, clientId: string | null, today: string) {
+  const empty = { current: 0, last_played: null as string | null, played_today: false };
+  const filter = ownerFilter(userId, clientId);
+  if (!filter) return empty;
+
+  const { data: dailies } = await db.from("mp_tier_topics")
+    .select("id, share_token").eq("kind", "daily");
+  if (!dailies?.length) return empty;
+
+  const dateById = new Map<string, string>();
+  for (const d of dailies) {
+    const m = /^daily_(\d{4}-\d{2}-\d{2})$/.exec(d.share_token ?? "");
+    if (m) dateById.set(d.id, m[1]);
+  }
+  if (!dateById.size) return empty;
+
+  const { data: mine } = await db.from("mp_tier_lists")
+    .select("topic_id").in("topic_id", [...dateById.keys()]).or(filter);
+
+  const dates = new Set<string>();
+  for (const l of mine ?? []) { const d = dateById.get(l.topic_id); if (d) dates.add(d); }
+  if (!dates.size) return empty;
+
+  const sorted = [...dates].sort();
+  return {
+    current: computeStreak(dates, today),
+    last_played: sorted[sorted.length - 1],
+    played_today: dates.has(today),
+  };
+}
+
 export async function actionDaily(req: Request, body: any) {
   const userId = authedUserId(req);
   const clientId: string | null = body.client_id ?? null;
@@ -319,6 +369,7 @@ export async function actionDaily(req: Request, body: any) {
     topic: { id: topic.id, share_token: topic.share_token, prompt: topic.prompt, item_type: topic.item_type, tiers: topic.tiers, item_set: topic.item_set, author_count: (lists ?? []).length, is_creator: false, is_daily: true },
     your_assignments: mine?.assignments ?? {},
     done: !!mine,
+    streak: await soloStreak(userId, clientId, date),
   });
 }
 
