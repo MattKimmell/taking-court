@@ -99,10 +99,11 @@
   .hero .g{margin-top:10px;font-weight:700;font-size:13px;color:var(--accent)}
   .mine-f{padding:7px 12px;font-size:13px}
   .mine-f.on{background:rgba(249,115,22,.18);border-color:var(--accent);color:var(--ink)}
-  /* Team picker. auto-fill over a min width so 33 teams wrap to a dense grid on
-     a phone instead of a 33-row list, and reflow rather than scroll sideways. */
-  .teamgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:6px;margin-top:10px}
-  .teampick{padding:8px 6px;font-size:13px;line-height:1.15;min-height:38px}
+  /* Team picker. 104px min gave only two columns at 375px — 17 rows of scroll
+     to find a team. 92px fits three on a phone (11 rows) and still reflows
+     wider on desktop. Long names wrap; min-height keeps the grid even. */
+  .teamgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:6px;margin-top:10px}
+  .teampick{padding:8px 5px;font-size:12.5px;line-height:1.15;min-height:40px}
   .teampick.on{background:rgba(249,115,22,.18);border-color:var(--accent);color:var(--ink);font-weight:700}
   .rxn.add{opacity:.6}
   .tbtn.on{background:var(--accent);color:#0b1020}

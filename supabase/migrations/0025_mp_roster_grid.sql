@@ -114,3 +114,19 @@ update public.mp_challenge_catalog c
        group_order = 999, sort_order = 9
   from public.mp_roster_sheets r
  where r.id = c.roster_sheet_id and r.decade is not null and c.group_key is null;
+
+-- Order the team picker by the name people SEE, not by abbreviation. Ordering
+-- by abbr put Lakers 13th (LAL) and Celtics 2nd (BOS), which fails the one job
+-- a 33-item picker has. Current franchises alphabetical as one block; the
+-- throwbacks keep their own block at the end so they read as a deliberate set.
+with ranked as (
+  select group_key,
+         row_number() over (order by (group_order >= 400)::int, lower(group_label)) as rn
+  from (select distinct group_key, group_label, group_order
+        from public.mp_challenge_catalog
+        where category_slug='team-rosters' and group_key is not null and group_order < 999) d
+)
+update public.mp_challenge_catalog c
+   set group_order = (r.rn * 10)::smallint
+  from ranked r
+ where c.group_key = r.group_key and c.group_order < 999;
