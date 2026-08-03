@@ -792,3 +792,52 @@ export async function actionSuggest(_req: Request, body: any) {
   return ok({ type: "player", items: names });
 }
 
+
+// The "Name It" browse screen: one curated catalogue of recall challenges,
+// grouped into categories, with a single featured hero.
+//
+// Returned in ONE round trip with items nested under their category. That is a
+// deliberate call at this size -- the whole catalogue is ~15 rows, so paging or
+// a per-category fetch would cost more requests than it saves bytes. Revisit if
+// the filtered generator (team / G-F-C / decade) starts producing hundreds.
+//
+// Reads the mp_challenge_catalog layer rather than perfect_sheets directly, so
+// `title` can show "Career points" where the underlying prompt says "Name the 8
+// players with the most career points (NBA regular season)." -- the prompt still
+// governs play, this only governs browse.
+export async function actionChallengeCatalog() {
+  const [{ data: cats }, { data: rows }] = await Promise.all([
+    db.from("mp_challenge_categories")
+      .select("slug, label, blurb, icon, sort_order")
+      .eq("status", "approved").order("sort_order", { ascending: true }),
+    db.from("mp_challenge_catalog")
+      .select("kind, sheet_id, roster_sheet_id, category_slug, title, blurb, featured, sort_order, " +
+              "sheet:perfect_sheets(prompt, difficulty, answer_count), " +
+              "roster:mp_roster_sheets(prompt, difficulty, target)")
+      .eq("status", "approved").order("sort_order", { ascending: true }),
+  ]);
+
+  const shape = (r: any) => {
+    const src = r.kind === "sheet" ? r.sheet : r.roster;
+    return {
+      kind: r.kind,
+      sheet_id: r.sheet_id ?? r.roster_sheet_id,   // the client passes this straight back to `create`
+      category: r.category_slug,
+      title: r.title ?? src?.prompt ?? "Challenge",
+      blurb: r.blurb ?? null,
+      prompt: src?.prompt ?? null,
+      difficulty: src?.difficulty ?? null,
+      answer_count: r.kind === "sheet" ? (src?.answer_count ?? null) : (src?.target ?? null),
+      featured: !!r.featured,
+    };
+  };
+
+  const all = (rows ?? []).map(shape);
+  const featured = all.find((x) => x.featured) ?? null;
+  const categories = (cats ?? []).map((c) => ({
+    slug: c.slug, label: c.label, blurb: c.blurb, icon: c.icon,
+    items: all.filter((x) => x.category === c.slug),
+  })).filter((c) => c.items.length > 0);
+
+  return ok({ featured, categories, total: all.length });
+}

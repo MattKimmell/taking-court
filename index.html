@@ -173,55 +173,34 @@
   <!-- ===================== LOBBY ===================== -->
   <div id="lobby" class="card">
     <button id="dailyBtn" style="width:100%;font-size:16px;padding:14px;margin-bottom:14px;background:linear-gradient(90deg,var(--accent),var(--gold))">🗓️ Play today's Daily <span id="dailyStreak"></span></button>
-    <div class="row">
-      <div>
-        <label>Your name</label>
-        <input id="playerName" placeholder="e.g. Alice" />
+    <!-- Three modes, and the distinction is what YOU supply: the right answers,
+         a ranking of a set we give you, or the names themselves. The old lobby
+         put one mode's config form here and hid the others behind nav buttons,
+         which made the recall game look like the whole app. -->
+    <div class="slots">
+      <div class="slot" id="modeNameIt" style="cursor:pointer">
+        <div class="n">🎯</div>
+        <div class="name">Name It<div class="note" style="font-weight:400">Recall the right answers, against the clock</div></div>
       </div>
-      <div>
-        <label>Opponent</label>
-        <select id="opponent">
-          <option value="human">A friend (share link)</option>
-          <option value="computer">The computer</option>
-        </select>
+      <div class="slot" id="modeTiers" style="cursor:pointer">
+        <div class="n">🪜</div>
+        <div class="name">Tier Lists<div class="note" style="font-weight:400">We give you the names — you rank them</div></div>
       </div>
-    </div>
-    <div class="row" id="oppRow">
-      <div id="modeWrap">
-        <label>Mode</label>
-        <select id="mode">
-          <option value="duel">1v1 Duel</option>
-          <option value="competition">Private competition (group)</option>
-        </select>
+      <div class="slot" id="modeLists" style="cursor:pointer">
+        <div class="n">📝</div>
+        <div class="name">Your Lists<div class="note" style="font-weight:400">No right answer — you pick who makes the cut</div></div>
       </div>
-      <div id="diffWrap" class="hidden">
-        <label>Difficulty</label>
-        <select id="difficulty">
-          <option value="easy">Rookie (easy)</option>
-          <option value="medium" selected>Starter (medium)</option>
-          <option value="hard">All-Star (hard)</option>
-        </select>
+      <div class="slot" id="modeParty" style="cursor:pointer;border-color:var(--accent)">
+        <div class="n">🏀</div>
+        <div class="name">Pickup<div class="note" style="font-weight:400">Everyone in the room, one shared board</div></div>
       </div>
     </div>
-    <label>Category</label>
-    <select id="sheet"><option>Loading categories…</option></select>
-    <div class="row" style="margin-top:14px">
-      <button id="createBtn">Create challenge</button>
-      <button class="ghost" id="randomBtn" style="flex:0 0 auto">🎲 Random</button>
+    <div class="row" style="margin-top:12px">
+      <button class="ghost" id="crewBtn">👥 Crews</button>
+      <button class="ghost" id="mineBtn">🗂️ My takes</button>
+      <button class="ghost" id="lbBtn">🏆 Leaderboard</button>
     </div>
     <div class="err" id="lobbyErr"></div>
-    <div class="row" style="margin-top:12px">
-      <button class="ghost" id="lbBtn">🏆 Leaderboard</button>
-      <button class="ghost" id="listsBtn">📝 Lists</button>
-      <button class="ghost" id="tierBtn">🪜 Tier Lists</button>
-      <button class="ghost" id="crewBtn">👥 Crews</button>
-    </div>
-    <div class="row" style="margin-top:8px">
-      <button class="ghost" id="partyBtn" style="border-color:var(--accent)">🏀 Pickup — play in person</button>
-    </div>
-    <div class="row" style="margin-top:8px">
-      <button class="ghost" id="mineBtn">🗂️ My takes</button>
-    </div>
 
     <details>
       <summary>Or join with a challenge link / token</summary>
@@ -231,6 +210,64 @@
       </div>
     </details>
 
+  </div>
+
+  <!-- ===================== NAME IT (recall challenges) ===================== -->
+  <div id="nameHome" class="card hidden">
+    <div class="head">
+      <div style="font-weight:700;font-size:18px">🎯 Name It</div>
+      <button class="ghost" id="nameHomeBack" style="flex:0 0 auto;padding:6px 12px">Home</button>
+    </div>
+    <div class="note">There <em>is</em> a right answer here. Three strikes, clock running.</div>
+    <div id="nameHero"></div>
+    <div class="row" style="margin-top:10px">
+      <button id="playNowRandom">⚡ Play Now — surprise me</button>
+    </div>
+    <div id="nameCats" style="margin-top:6px"></div>
+
+    <!-- The old lobby form, moved wholesale. Element ids are unchanged so every
+         existing handler (createChallenge, opponent onchange, loadSheets) keeps
+         working untouched. -->
+    <details style="margin-top:14px">
+      <summary>Set it up myself — opponent, mode, exact category</summary>
+      <div class="row" style="margin-top:8px">
+        <div>
+          <label>Your name</label>
+          <input id="playerName" placeholder="e.g. Alice" />
+        </div>
+        <div>
+          <label>Opponent</label>
+          <select id="opponent">
+            <option value="human">A friend (share link)</option>
+            <option value="computer">The computer</option>
+          </select>
+        </div>
+      </div>
+      <div class="row" id="oppRow">
+        <div id="modeWrap">
+          <label>Mode</label>
+          <select id="mode">
+            <option value="duel">Head-to-head (play anytime)</option>
+            <option value="competition">Private competition (group)</option>
+          </select>
+        </div>
+        <div id="diffWrap" class="hidden">
+          <label>Difficulty</label>
+          <select id="difficulty">
+            <option value="easy">Rookie (easy)</option>
+            <option value="medium" selected>Starter (medium)</option>
+            <option value="hard">All-Star (hard)</option>
+          </select>
+        </div>
+      </div>
+      <label>Category</label>
+      <select id="sheet"><option>Loading categories…</option></select>
+      <div class="row" style="margin-top:14px">
+        <button id="createBtn">Create challenge</button>
+        <button class="ghost" id="randomBtn" style="flex:0 0 auto">🎲 Random</button>
+      </div>
+    </details>
+    <div class="err" id="nameErr"></div>
   </div>
 
   <!-- ===================== SHARE ===================== -->
@@ -390,6 +427,7 @@
       <div style="font-weight:700;font-size:17px" id="listComparePrompt"></div>
       <button class="ghost" id="listCompareBack" style="flex:0 0 auto;padding:6px 12px">Home</button>
     </div>
+    <div id="listReveal"></div>
     <div style="font-weight:700;margin-top:8px">Consensus <span class="note" id="listCompareCount"></span></div>
     <div id="listConsensus"></div>
     <div style="font-weight:700;margin-top:16px">Everyone's lists</div>
@@ -714,8 +752,12 @@ let ST = { challenge_id:null, share_token:null, attempt_id:null, attempt_token:n
            filled:{}, strikes:0, correct:0, finished:false, sheet_id:null };
 let timerInt=null;
 
-function show(id){ ["lobby","share","preview","play","results","leaderboard","listsHome","listBuild","listCompare","listBrowse","tierHome","tierBoard","tierCompare","tierBrowse","partyHost","partyPlay","partyRecap","mine","crewHome","crewRoom"].forEach(s=>$(s).classList.toggle("hidden", s!==id)); }
-function toast(msg){ $("lobbyErr").style.color="var(--muted)"; $("lobbyErr").textContent=msg; }
+function show(id){ ["lobby","nameHome","share","preview","play","results","leaderboard","listsHome","listBuild","listCompare","listBrowse","tierHome","tierBoard","tierCompare","tierBrowse","partyHost","partyPlay","partyRecap","mine","crewHome","crewRoom"].forEach(s=>$(s).classList.toggle("hidden", s!==id)); }
+// Challenge setup moved off the lobby onto #nameHome, so lobbyErr is hidden
+// whenever Name It is open — a failed create would have reported into a screen
+// nobody is looking at. Always write to the error box on the visible screen.
+function homeErr(){ return $("nameHome").classList.contains("hidden") ? $("lobbyErr") : $("nameErr"); }
+function toast(msg){ const b=homeErr(); b.style.color="var(--muted)"; b.textContent=msg; }
 function fmt(ms){ if(ms==null) return "—"; const s=ms/1000; const m=Math.floor(s/60);
   const r=(s-m*60); return m+":"+r.toFixed(1).padStart(4,"0"); }
 
@@ -758,8 +800,69 @@ function syncModePill(){
 $("createBtn").onclick = ()=>{ const o=$("sheet").selectedOptions[0]; createChallenge(o?o.value:null, o?o.dataset.kind:null); };
 $("randomBtn").onclick = ()=>{ const s=SHEETS[Math.floor(Math.random()*SHEETS.length)]; createChallenge(s?s.id:null, s?s.kind:null); };
 
+// ---------- Name It: browse recall challenges by category ----------
+// The catalogue is a curated layer over the sheets, so `title` can read
+// "Career points" where the underlying prompt reads "Name the 8 players with
+// the most career points (NBA regular season)" — the UI was printing the count
+// twice. The prompt still governs play; this only governs browse.
+let NAME_CATALOG = null;
+// Catalogue `kind` is 'sheet'|'roster'; createChallenge expects 'top8'|'roster'.
+const catKind = k => k === "roster" ? "roster" : "top8";
+const diffPill = d => d ? `<span class="pill" style="padding:1px 7px;font-size:11px">${esc(d)}</span>` : "";
+
+$("modeNameIt").onclick = openNameHome;
+$("nameHomeBack").onclick = ()=>show("lobby");
+
+async function openNameHome(){
+  show("nameHome"); $("nameErr").textContent="";
+  if(!NAME_CATALOG) await loadChallengeCatalog(); else renderNameHome();
+}
+async function loadChallengeCatalog(){
+  const hero=$("nameHero"); hero.innerHTML=`<div class="note">Loading…</div>`;
+  const r=await api("challenge_catalog",{});
+  if(!r.ok){ hero.innerHTML=""; $("nameErr").textContent="Could not load challenges."; return; }
+  NAME_CATALOG=r; renderNameHome();
+}
+function renderNameHome(){
+  const r=NAME_CATALOG, hero=$("nameHero"), box=$("nameCats");
+  if(r.featured){
+    const f=r.featured;
+    hero.innerHTML=`<div class="hero">
+      <div class="t">${esc(f.title)}</div>
+      ${f.blurb?`<div class="b">${esc(f.blurb)}</div>`:""}
+      <div class="g">${f.answer_count?`Name ${f.answer_count}`:"Play it"}${f.difficulty?` · ${esc(f.difficulty)}`:""}</div></div>`;
+    hero.firstElementChild.onclick=()=>createChallenge(f.sheet_id, catKind(f.kind));
+    hero.firstElementChild.style.cursor="pointer";
+  } else hero.innerHTML="";
+
+  // Categories collapse by default. With three of them and 15 items total a
+  // flat list would be shorter, but the shape is what matters here: this is the
+  // surface the filtered generator (team / G-F-C / decade) plugs into.
+  box.innerHTML=(r.categories||[]).map(c=>`<details style="margin-top:8px">
+      <summary>${c.icon} ${esc(c.label)} <span class="note">· ${c.items.length}</span></summary>
+      ${c.blurb?`<div class="note" style="margin-top:4px">${esc(c.blurb)}</div>`:""}
+      ${c.items.map(it=>`<div class="slot" style="cursor:pointer;margin-top:8px" data-id="${it.sheet_id}" data-k="${it.kind}">
+          <div class="n">${c.icon}</div>
+          <div class="name">${esc(it.title)}${it.blurb?`<div class="note" style="font-weight:400">${esc(it.blurb)}</div>`:""}</div>
+          <div class="ctx">${diffPill(it.difficulty)}</div></div>`).join("")}
+    </details>`).join("") || `<div class="note">No challenges yet.</div>`;
+
+  box.querySelectorAll(".slot[data-id]").forEach(el=>{
+    el.onclick=()=>createChallenge(el.dataset.id, catKind(el.dataset.k));
+  });
+}
+// Play Now: one tap into a random challenge, no configuration at all. Draws
+// from the curated catalogue rather than every sheet, so it can never serve
+// something unlisted or half-finished.
+$("playNowRandom").onclick = ()=>{
+  const all=(NAME_CATALOG?.categories||[]).flatMap(c=>c.items);
+  if(!all.length){ $("nameErr").textContent="Nothing to play yet."; return; }
+  const p=all[Math.floor(Math.random()*all.length)];
+  createChallenge(p.sheet_id, catKind(p.kind));
+};
+
 async function createChallenge(sheet_id, kind){
-  $("lobbyErr").style.color="var(--bad)"; $("lobbyErr").textContent="";
+  const eb = homeErr(); eb.style.color="var(--bad)"; eb.textContent="";
   const vsComp = $("opponent").value==="computer";
   const r = await api("create",{
     mode: vsComp ? "duel" : $("mode").value,
@@ -770,7 +873,7 @@ async function createChallenge(sheet_id, kind){
     vs: vsComp ? "computer" : undefined,
     bot_difficulty: vsComp ? $("difficulty").value : undefined
   });
-  if(!r.ok){ $("lobbyErr").textContent = "Error: "+r.error; return; }
+  if(!r.ok){ eb.textContent = "Error: "+r.error; return; }
   ST = {...ST, challenge_id:r.challenge_id, share_token:r.share_token, attempt_id:r.attempt_id,
         attempt_token:r.attempt_token, answer_target:r.answer_target, strike_limit:r.strike_limit,
         mode:r.mode, kind:r.kind||kind||"top8", isRoster:(r.kind||kind)==="roster",
@@ -1101,7 +1204,7 @@ function wireSubmit(box, action, errId, reload){
   });
 }
 
-$("listsBtn").onclick = openListsHome;
+$("modeLists").onclick = openListsHome;
 $("listsHomeBack").onclick = ()=>show("lobby");
 async function openListsHome(){ show("listsHome"); $("listsErr").textContent=""; await loadMyLists(); }
 async function loadMyLists(){
@@ -1205,6 +1308,7 @@ async function showListCompare(){
   if(!r.ok){ $("listCompareErr").textContent="Error: "+r.error; return; }
   $("listComparePrompt").textContent=r.topic.prompt;
   $("listCompareCount").textContent=`· ${r.total_authors} player${r.total_authors===1?"":"s"}`;
+  renderListReveal(r);
   const cons=$("listConsensus");
   cons.innerHTML = r.consensus.length
     ? `<table><thead><tr><th></th><th>Pick</th><th>Picked by</th>${r.topic.ranked?"<th>Avg rank</th>":""}</tr></thead><tbody>`+
@@ -1214,6 +1318,57 @@ async function showListCompare(){
      <div style="font-weight:700">${l.author_label}${l.is_you?' <span class="pill" style="padding:1px 7px">you</span>':""}</div>
      <ol style="margin:8px 0 0;padding-left:20px">${l.items.map(it=>`<li>${it.label}${it.note?` <span class="note" style="font-weight:400">— ${it.note}</span>`:""}</li>`).join("")}</ol></div>`).join("")
      : `<div class="note">No lists yet — be the first.</div>`;
+}
+// The payoff a subjective list has that a tier list structurally cannot: tier
+// lists compare WHERE you put a fixed set, so the only question is placement.
+// Here you choose who makes the cut at all, so the interesting comparison is
+// INCLUSION — who else named your guy, and who did you leave off.
+//
+// Everything below is derived from data list_compare already returns
+// (consensus[].count and the caller's own list); no backend change needed.
+function renderListReveal(r){
+  const box=$("listReveal"); if(!box) return;
+  const me=(r.lists||[]).find(l=>l.is_you);
+  const total=r.total_authors||0;
+  // Below two lists there is no "room" to agree with — say so rather than
+  // dressing one other person up as a consensus.
+  if(!me || total<2){
+    box.innerHTML=`<div class="banner wait" style="margin-top:10px">${
+      me ? "🔥 Your picks are in — share the link and see who backs them up."
+         : "🌶️ Add your list to see how your picks stack up."}</div>`;
+    return;
+  }
+  const mine=new Set((me.items||[]).map(i=>normalize(i.label)));
+  const rows=(r.consensus||[]).map(c=>({...c, key:normalize(c.label), inMine:mine.has(normalize(c.label))}));
+
+  const unanimous = rows.filter(x=>x.inMine && x.count===total);
+  // count===1 AND it's mine ⇒ nobody else named them. The best line on the page.
+  const solo      = rows.filter(x=>x.inMine && x.count===1);
+  const backed    = rows.filter(x=>x.inMine && x.count>1 && x.count<total)
+                        .sort((a,b)=>b.count-a.count);
+  const missed    = rows.filter(x=>!x.inMine).sort((a,b)=>b.count-a.count);
+
+  let h=`<div class="card" style="margin-top:10px;background:var(--panel2);border-color:var(--accent)">
+    <div style="font-weight:800;font-size:15px">🔥 Your picks vs. the room</div>`;
+  if(unanimous.length)
+    h+=`<div style="margin-top:8px">🤝 <b>Everyone</b> had ${unanimous.map(x=>esc(x.label)).join(", ")}</div>`;
+  if(backed.length){
+    const b=backed[0];
+    h+=`<div style="margin-top:6px">👥 ${b.count-1} other${b.count-1===1?"":"s"} also said <b>${esc(b.label)}</b></div>`;
+  }
+  if(solo.length){
+    h+=`<div style="margin-top:8px;font-weight:700;color:var(--muted);font-size:12px;letter-spacing:.5px">ONLY YOU</div>`;
+    h+=solo.slice(0,4).map(x=>`<div style="margin-top:5px">🎯 <b>${esc(x.label)}</b> — nobody else named them</div>`).join("");
+  }
+  if(missed.length){
+    const m=missed[0];
+    h+=`<div style="margin-top:8px">👀 You left off <b>${esc(m.label)}</b> — ${m.count} of ${total} had them</div>`;
+  }
+  const overlap=rows.filter(x=>x.inMine&&x.count>1).length;
+  h+=`<div class="note" style="margin-top:12px">${
+      solo.length===mine.size ? "Nothing you picked showed up on anyone else's list. Respect."
+      : `${overlap} of your ${mine.size} picks showed up on someone else's list.`}</div></div>`;
+  box.innerHTML=h;
 }
 $("listCompareBack").onclick=()=>show("lobby");
 $("listCompareRefresh").onclick=showListCompare;
@@ -1254,7 +1409,7 @@ let TIER_GATE = null;     // {have, need, unlocked} from the server
 const TIER_COLORS = { S:"#fbbf24", A:"#4ade80", B:"#7dd3fc", C:"#aab6d8", D:"#fb923c", F:"#fca5a5" };
 const tierIcon = t => t==="team"?"🏟️":t==="coach"?"📋":"🏀";
 
-$("tierBtn").onclick = openTierHome;
+$("modeTiers").onclick = openTierHome;
 $("tierHomeBack").onclick = ()=>show("lobby");
 async function openTierHome(){
   show("tierHome"); $("tierErr").textContent=""; syncTierEra();
@@ -1808,7 +1963,7 @@ function partyFlash(html, good){
   el.innerHTML=html; setTimeout(()=>{ if(el.innerHTML===html) el.innerHTML=""; }, 2200);
 }
 
-$("partyBtn") && ($("partyBtn").onclick = openPartyHome);
+$("modeParty") && ($("modeParty").onclick = openPartyHome);
 async function openPartyHome(){
   show("partyHost"); $("partyHostErr").textContent="";
   $("modePill").textContent = "pickup";
