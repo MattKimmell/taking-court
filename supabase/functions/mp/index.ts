@@ -1,7 +1,7 @@
 // Router entry for the `mp` edge function. All logic lives in sibling modules
 // (shared / games / lists / tiers / crews); this file only maps actions to them.
 import { CORS, err } from "./shared.ts";
-import { actionSheets, actionCreate, actionOpen, actionStart, actionGuess, actionResults, actionAddBot, actionLeaderboard, actionSuggest, actionChallengeCatalog } from "./games.ts";
+import { actionSheets, actionCreate, actionOpen, actionStart, actionGuess, actionResults, actionAddBot, actionLeaderboard, actionSuggest, actionChallengeCatalog, actionChallengePreview } from "./games.ts";
 import { actionListCreate, actionListSave, actionListOpen, actionListCompare, actionListMine, actionListBrowse, actionListSubmit } from "./lists.ts";
 import { actionTierCreate, actionTierReroll, actionTierOpen, actionTierSave, actionTierCompare, actionTierMine, actionTierBrowse, actionTierSubmit, actionTierThemes, actionDaily } from "./tiers.ts";
 import { actionCrewCreate, actionCrewJoin, actionCrewMine, actionCrewDaily, actionCrewReact } from "./crews.ts";
@@ -43,6 +43,8 @@ Deno.serve(async (req: Request) => {
         return await actionLeaderboard(req, body);
       case "challenge_catalog":
         return await actionChallengeCatalog();
+      case "challenge_preview":
+        return await actionChallengePreview(req, body);
       case "suggest":
         return await actionSuggest(req, body);
       case "list_create":

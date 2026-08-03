@@ -877,3 +877,67 @@ export async function actionChallengeCatalog() {
 
   return ok({ featured, categories, total: all.length });
 }
+
+// Playability check for a filtered challenge, before the player commits to it.
+//
+// Delegates the counting to public.mp_challenge_preview, which does the base
+// counts AND the "which filter should I drop" probes inside a single call. Doing
+// the probes here would be one round trip each.
+//
+// Filters are whitelisted before they go anywhere. The rpc argument is
+// parameterised so injection is not the risk; the risk is a typo silently
+// counting zero and reading as "impossible", which would be indistinguishable
+// from a genuinely empty combination.
+const PREVIEW_AWARDS = new Set(["mvp","dpoy","roy","smoy","mip","allnba","alldef","allstar","allstar10","hof","ring"]);
+const PREVIEW_DRAFT  = new Set(["first","top3","lottery","round1","round2"]);
+const PREVIEW_DECADES = new Set([1940,1950,1960,1970,1980,1990,2000,2010,2020]);
+
+export function buildChallengeFilters(body: any): { filters: Record<string, unknown> } | { error: string } {
+  const f: Record<string, unknown> = {};
+  const mode = String(body.mode ?? "roster");
+  if (mode !== "roster" && mode !== "top8") return { error: "bad_mode" };
+  f.mode = mode;
+
+  if (body.team != null && body.team !== "") {
+    const t = String(body.team).toUpperCase();
+    if (!/^[A-Z]{3}$/.test(t)) return { error: "bad_team" };
+    f.team = t;
+  }
+  if (body.position != null && body.position !== "") {
+    const p = String(body.position).toUpperCase();
+    // G/F/C only. The data has no PG/SG/SF/PF anywhere, so accepting one would
+    // silently return nothing and look like a bug.
+    if (!["G","F","C"].includes(p)) return { error: "bad_position" };
+    f.position = p;
+  }
+  if (body.decade != null && body.decade !== "") {
+    const d = Math.floor(Number(body.decade));
+    if (!PREVIEW_DECADES.has(d)) return { error: "bad_decade" };
+    f.decade = d;
+  }
+  if (body.award != null && body.award !== "") {
+    const a = String(body.award);
+    if (!PREVIEW_AWARDS.has(a)) return { error: "bad_award" };
+    f.award = a;
+  }
+  if (body.draft != null && body.draft !== "") {
+    const d = String(body.draft);
+    if (!PREVIEW_DRAFT.has(d)) return { error: "bad_draft" };
+    f.draft = d;
+  }
+  if (body.target != null) {
+    const n = Math.floor(Number(body.target));
+    if (!Number.isFinite(n) || n < 3 || n > 15) return { error: "bad_target" };
+    f.target = n;
+  }
+  if (body.deep_cuts === true) f.min_notability = 0;   // "include the obscure ones"
+  return { filters: f };
+}
+
+export async function actionChallengePreview(_req: Request, body: any) {
+  const built = buildChallengeFilters(body);
+  if ("error" in built) return err(built.error, 400);
+  const { data, error } = await db.rpc("mp_challenge_preview", { f: built.filters });
+  if (error) return err(error.message, 500);
+  return ok({ filters: built.filters, preview: data });
+}
