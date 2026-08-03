@@ -1338,8 +1338,12 @@ function renderListReveal(r){
          : "🌶️ Add your list to see how your picks stack up."}</div>`;
     return;
   }
-  const mine=new Set((me.items||[]).map(i=>normalize(i.label)));
-  const rows=(r.consensus||[]).map(c=>({...c, key:normalize(c.label), inMine:mine.has(normalize(c.label))}));
+  // normStr, not normalize — the client has no normalize(); that name only
+  // exists server-side. Both sides of this comparison use the same function,
+  // which is what matters: my own labels are matched against consensus labels,
+  // never against a server-generated key.
+  const mine=new Set((me.items||[]).map(i=>normStr(i.label)));
+  const rows=(r.consensus||[]).map(c=>({...c, inMine:mine.has(normStr(c.label))}));
 
   const unanimous = rows.filter(x=>x.inMine && x.count===total);
   // count===1 AND it's mine ⇒ nobody else named them. The best line on the page.
@@ -1350,8 +1354,9 @@ function renderListReveal(r){
 
   let h=`<div class="card" style="margin-top:10px;background:var(--panel2);border-color:var(--accent)">
     <div style="font-weight:800;font-size:15px">🔥 Your picks vs. the room</div>`;
+  // "Everyone" for a room of two is an overstatement dressed as consensus.
   if(unanimous.length)
-    h+=`<div style="margin-top:8px">🤝 <b>Everyone</b> had ${unanimous.map(x=>esc(x.label)).join(", ")}</div>`;
+    h+=`<div style="margin-top:8px">🤝 <b>${total===2?"You both":"Everyone"}</b> had ${unanimous.map(x=>esc(x.label)).join(", ")}</div>`;
   if(backed.length){
     const b=backed[0];
     h+=`<div style="margin-top:6px">👥 ${b.count-1} other${b.count-1===1?"":"s"} also said <b>${esc(b.label)}</b></div>`;
