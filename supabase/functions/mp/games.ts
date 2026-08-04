@@ -859,7 +859,12 @@ export async function actionChallengeCatalog() {
   };
 
   const all = (rows ?? []).map(shape);
-  const featured = all.find((x) => x.featured) ?? null;
+  // An ARRAY as of 0033. One hero was the right call for tier themes, where a
+  // consensus gate needs three boards on the same set — concentrating attention
+  // is what clears it. A recall challenge has no gate, so a single pick buys
+  // nothing and costs the shelf variety at the top. `featured_one` keeps the old
+  // single-object contract alive for shells cached before this shipped.
+  const featured = all.filter((x) => x.featured);
   const categories = (cats ?? []).map((c) => {
     const items = all.filter((x) => x.category === c.slug);
     // Distinct groups in payload order, so the client can render a picker
@@ -875,7 +880,7 @@ export async function actionChallengeCatalog() {
     return { slug: c.slug, label: c.label, blurb: c.blurb, icon: c.icon, items, groups };
   }).filter((c) => c.items.length > 0);
 
-  return ok({ featured, categories, total: all.length });
+  return ok({ featured, featured_one: featured[0] ?? null, categories, total: all.length });
 }
 
 // Playability check for a filtered challenge, before the player commits to it.
@@ -1006,7 +1011,9 @@ const DRAFT_PHRASE: Record<string, string> = {
 // Readable English from a filter set. Worth the fiddliness: the prompt is the
 // whole game, and "Name 8 players position=G team=LAL" would be unplayable as a
 // piece of writing even if the answers were right.
-export function composeFilterPrompt(f: Record<string, any>, target: number): string {
+// The describing half, shared so the two prompt forms below cannot drift apart
+// and start describing the same filter set differently.
+function filterPhrase(f: Record<string, any>): string {
   const noun = f.position ? POS_PLURAL[f.position] : "players";
   const clauses: string[] = [];
   if (f.team) clauses.push(`played for the ${TEAM_NAMES[f.team] ?? f.team}`);
@@ -1017,10 +1024,22 @@ export function composeFilterPrompt(f: Record<string, any>, target: number): str
   if (f.conference) clauses.push(`came out of the ${f.conference}`);
   if (f.award) clauses.push(AWARD_PHRASE[f.award]);
   if (f.draft) clauses.push(DRAFT_PHRASE[f.draft]);
-  let s = `Name ${target} ${noun}`;
+  let s = noun;
   if (clauses.length) s += ` who ${clauses.join(" and ")}`;
   if (f.decade) s += `${clauses.length ? " and were" : " who were"} active in the ${f.decade}s`;
-  return s + ".";
+  return s;
+}
+
+export function composeFilterPrompt(f: Record<string, any>, target: number): string {
+  return `Name ${target} ${filterPhrase(f)}.`;
+}
+
+// Pickup prompts are noun phrases, not imperatives — "Players with 20,000+ career
+// points" — because that screen renders the target separately and the room is
+// looking at a board, not reading an instruction.
+export function composeFilterSubject(f: Record<string, any>): string {
+  const s = filterPhrase(f);
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 export async function actionChallengeBuild(req: Request, body: any) {

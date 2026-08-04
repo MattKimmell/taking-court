@@ -97,6 +97,12 @@
   .hero .t{font-weight:800;font-size:20px;line-height:1.2}
   .hero .b{color:var(--muted);font-size:14px;margin-top:4px}
   .hero .g{margin-top:10px;font-weight:700;font-size:13px;color:var(--accent)}
+  /* Several featured, side by side. Cards sit at 78% so the next one peeks in —
+     that sliver is the only affordance telling you the row scrolls. */
+  .herorow{display:flex;gap:10px;overflow-x:auto;margin-top:10px;padding-bottom:4px;
+    scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch}
+  .herorow::-webkit-scrollbar{height:0}
+  .herorow .hero{margin-top:0;flex:0 0 78%;scroll-snap-align:start;min-width:0}
   .mine-f{padding:7px 12px;font-size:13px}
   .mine-f.on{background:rgba(249,115,22,.18);border-color:var(--accent);color:var(--ink)}
   /* Category cards — the first level of both browses. Deliberately not a
@@ -673,20 +679,30 @@
     <div class="note">Everyone in the room plays together on their own phone. Pick a challenge, show the code, and shout names at each other. No accounts.</div>
 
     <div id="partySetup">
-      <label>Your name</label>
-      <input id="partyName" placeholder="e.g. Dave" autocomplete="off" />
-      <label style="margin-top:10px">Challenge</label>
-      <select id="partyPrompt"><option>Loading…</option></select>
-      <label style="margin-top:10px">Clock</label>
-      <select id="partyTime">
-        <option value="180">3 minutes</option>
-        <option value="300" selected>5 minutes</option>
-        <option value="600">10 minutes</option>
-        <option value="">No clock</option>
-      </select>
-      <div class="row" style="margin-top:14px">
-        <button id="partyCreateBtn">Start a session</button>
+      <div class="row">
+        <div><label>Your name</label>
+          <input id="partyName" placeholder="e.g. Dave" autocomplete="off" /></div>
+        <div style="flex:0 0 auto"><label>Clock</label>
+          <select id="partyTime">
+            <option value="180">3 min</option>
+            <option value="300" selected>5 min</option>
+            <option value="600">10 min</option>
+            <option value="">No clock</option>
+          </select></div>
       </div>
+
+      <!-- Tapping a challenge starts the session outright. A host standing in
+           front of four people should not have to pick, then confirm. -->
+      <div id="partyHero"></div>
+      <div class="row" style="margin-top:10px">
+        <button id="partyRandom">🎲 Random — surprise the room</button>
+      </div>
+      <div id="partyCats" style="margin-top:6px"></div>
+
+      <details style="margin-top:14px">
+        <summary>Build your own</summary>
+        <div id="partyBuild" style="margin-top:8px"></div>
+      </details>
     </div>
 
     <div id="partyLobby" class="hidden">
@@ -930,15 +946,17 @@ async function loadChallengeCatalog(){
 }
 function renderNameHome(){
   const r=NAME_CATALOG, hero=$("nameHero"), box=$("nameCats");
-  if(r.featured){
-    const f=r.featured;
-    hero.innerHTML=`<div class="hero">
-      <div class="t">${esc(f.title)}</div>
-      ${f.blurb?`<div class="b">${esc(f.blurb)}</div>`:""}
-      <div class="g">${f.answer_count?`Name ${f.answer_count}`:"Play it"}${f.difficulty?` · ${esc(f.difficulty)}`:""}</div></div>`;
-    hero.firstElementChild.onclick=()=>createChallenge(f.sheet_id, catKind(f.kind), true);
-    hero.firstElementChild.style.cursor="pointer";
-  } else hero.innerHTML="";
+  // `featured` became an array; fall back to the old single field so a shell
+  // cached before that change still renders a hero instead of nothing.
+  const feat = Array.isArray(r.featured) ? r.featured : (r.featured ? [r.featured] : []);
+  heroRow(hero, feat, {
+    // "Guards" is meaningless out of its group — inside browse the group label
+    // supplies the team, but a hero card carries no such context.
+    title: it => it.group_label ? `${it.group_label} · ${it.title}` : it.title,
+    blurb: it => it.blurb,
+    foot:  it => (it.answer_count?`Name ${it.answer_count}`:"Play it") + (it.difficulty?` · ${it.difficulty}`:""),
+    pick:  it => createChallenge(it.sheet_id, catKind(it.kind), true),
+  });
 
   // Category CARDS, not expanders. Tapping one navigates to the shared category
   // page rather than growing this screen — an expander that unfurls 96 rows
@@ -974,6 +992,23 @@ function openChallengeCategory(c){
     });
     bindItemRows(root);
   });
+}
+
+// A scrolling row of featured cards, shared by Name It and Pickup.
+// SEVERAL, not one: the single hero is right for tier themes, where a consensus
+// gate needs three boards on the same set and concentrating attention is the
+// whole mechanism. Nothing here has a gate, so one editorial pick just costs the
+// shelf its variety at the top.
+function heroRow(el, items, opts){
+  if(!items || !items.length){ el.innerHTML=""; return; }
+  el.innerHTML = `<div class="herorow">${items.map((it,i)=>{
+    const b = opts.blurb(it);
+    return `<div class="hero" data-hi="${i}">
+      <div class="t">${esc(opts.title(it))}</div>
+      ${b?`<div class="b">${esc(b)}</div>`:""}
+      <div class="g">${esc(opts.foot(it))}</div></div>`;
+  }).join("")}</div>`;
+  el.querySelectorAll("[data-hi]").forEach(n=>{ n.onclick=()=>opts.pick(items[+n.dataset.hi]); });
 }
 
 // ---- shared second level ----
@@ -1040,6 +1075,7 @@ async function fillFilterOptions(){
     (r.conferences||[]).map(c=>`<option value="${esc(c.v)}">${esc(c.v)} (${c.n})</option>`).join(""));
   sel.insertAdjacentHTML("beforeend",
     (r.colleges||[]).map(c=>`<option value="${esc(c.v)}">${esc(c.v)} (${c.n})</option>`).join(""));
+  partyBuildSyncOptions();   // Pickup's copy of the two lists, if it is drawn
 }
 
 function readFilters(){
@@ -2327,27 +2363,148 @@ function partyFlash(html, good){
 }
 
 $("modeParty") && ($("modeParty").onclick = openPartyHome);
+let PARTY_CATALOG = null;
 async function openPartyHome(){
   show("partyHost"); $("partyHostErr").textContent="";
   $("modePill").textContent = "pickup";
   $("partySetup").classList.remove("hidden"); $("partyLobby").classList.add("hidden");
   $("partyName").value = store.get("mp_name","");
   $("partyStartBtn").style.display = ""; $("partyShareBtn").style.display = "";
+  fillFilterTeams(); fillFilterOptions(); renderPartyBuild();
+  if(PARTY_CATALOG){ renderPartyHome(); return; }
+  $("partyHero").innerHTML = `<div class="note">Loading…</div>`;
   const r = await api("party_prompts",{});
-  if(!r.ok){ $("partyHostErr").textContent="Error: "+r.error; return; }
-  $("partyPrompt").innerHTML = r.prompts.map(p=>`<option value="${p.slug}">${esc(p.prompt)} · name ${p.target}</option>`).join("");
+  if(!r.ok){ $("partyHero").innerHTML=""; $("partyHostErr").textContent="Error: "+r.error; return; }
+  PARTY_CATALOG = r; renderPartyHome();
+}
+
+function renderPartyHome(){
+  const r=PARTY_CATALOG;
+  heroRow($("partyHero"), r.featured||[], {
+    title: it => it.title,
+    blurb: it => it.blurb,
+    foot:  it => `Name ${it.target} · start now`,
+    pick:  it => partyCreate({ slug: it.slug }),
+  });
+  $("partyCats").innerHTML = `<div style="font-weight:700;margin-top:16px">Browse by</div>
+    <div class="catgrid">${(r.categories||[]).map((c,ci)=>catCard(c.icon,c.label,
+        `${c.items.length} challenge${c.items.length===1?"":"s"}`, `data-pci="${ci}"`)).join("")}</div>`;
+  $("partyCats").querySelectorAll("[data-pci]").forEach(el=>{
+    el.onclick=()=>openPartyCategory(PARTY_CATALOG.categories[+el.dataset.pci]);
+  });
+}
+
+// Pickup's category page. Same shared page as Name It, but a row here STARTS a
+// session rather than opening a challenge — the host is standing in front of the
+// room and does not want a second confirmation.
+function openPartyCategory(c){
+  const body = c.items.map(it=>`<div class="slot" style="cursor:pointer;margin-top:8px" data-slug="${esc(it.slug)}">
+      <div class="n">${c.icon}</div>
+      <div class="name">${esc(it.title)}${it.blurb?`<div class="note" style="font-weight:400">${esc(it.blurb)}</div>`:""}</div>
+      <div class="ctx"><span class="pill" style="padding:1px 7px;font-size:11px">Name ${it.target}</span></div></div>`).join("");
+  openCatPage(`${c.icon} ${c.label}`, c.blurb||"", body, "partyHost", root=>{
+    root.querySelectorAll("[data-slug]").forEach(el=>{
+      el.onclick=()=>{ show("partyHost"); partyCreate({ slug: el.dataset.slug }); };
+    });
+  });
+}
+
+$("partyRandom").onclick = ()=>{
+  const all=(PARTY_CATALOG?.categories||[]).flatMap(c=>c.items);
+  if(!all.length){ $("partyHostErr").textContent="Nothing to play yet."; return; }
+  partyCreate({ slug: all[Math.floor(Math.random()*all.length)].slug });
+};
+
+// Build your own, rendered in JS so the six controls are not a second hand-kept
+// copy of the Name It form. Position and "how many" are deliberately absent:
+// Pickup derives its own target from how many recognisable answers exist, because
+// a room needs an ambitious ask, not a 3-of-5.
+function renderPartyBuild(){
+  const box=$("partyBuild"); if(!box || box.dataset.built) return; box.dataset.built="1";
+  const opt=(v,l)=>`<option value="${esc(v)}">${esc(l)}</option>`;
+  box.innerHTML = `
+    <div class="row">
+      <div><label>Team</label><select id="pfTeam"><option value="">Any</option>${
+        FILTER_TEAMS.map(([a,n])=>opt(a,n)).join("")}</select></div>
+      <div style="flex:0 0 auto"><label>Decade</label><select id="pfDecade">
+        <option value="">Any era</option>${[1950,1960,1970,1980,1990,2000,2010,2020].map(d=>opt(d,d+"s")).join("")}
+      </select></div>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <div><label>Honour</label><select id="pfAward"><option value="">Any</option>${
+        [["mvp","Won MVP"],["dpoy","Won DPOY"],["roy","Won Rookie of the Year"],["smoy","Won Sixth Man"],
+         ["mip","Won Most Improved"],["allstar","Made an All-Star team"],["allstar10","10+ All-Star teams"],
+         ["allnba","Made All-NBA"],["alldef","Made All-Defense"],["ring","Won a title"],["hof","Hall of Fame"]]
+        .map(([v,l])=>opt(v,l)).join("")}</select></div>
+      <div><label>Draft</label><select id="pfDraft"><option value="">Any</option>${
+        [["first","First overall"],["top3","Top 3 pick"],["lottery","Lottery pick"],
+         ["round1","First round"],["round2","Second round"]].map(([v,l])=>opt(v,l)).join("")}</select></div>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <div><label>Conference</label><select id="pfConf"><option value="">Any</option>${
+        (FILTER_OPTS?.conferences||[]).map(c=>opt(c.v,`${c.v} (${c.n})`)).join("")}</select></div>
+      <div><label>College</label><select id="pfCollege"><option value="">Any</option>${
+        (FILTER_OPTS?.colleges||[]).map(c=>opt(c.v,`${c.v} (${c.n})`)).join("")}</select></div>
+    </div>
+    <div class="row" style="margin-top:12px"><button id="pfGo">Check &amp; start →</button></div>
+    <div id="pfVerdict" style="margin-top:10px"></div>`;
+  $("pfGo").onclick = ()=>{
+    const f={};
+    const g=id=>$(id).value;
+    if(g("pfTeam")) f.team=g("pfTeam");
+    if(g("pfDecade")) f.decade=+g("pfDecade");
+    if(g("pfAward")) f.award=g("pfAward");
+    if(g("pfDraft")) f.draft=g("pfDraft");
+    if(g("pfConf")) f.conference=g("pfConf");
+    if(g("pfCollege")) f.college=g("pfCollege");
+    if(!Object.keys(f).length){
+      $("pfVerdict").innerHTML=`<div class="banner lose">Pick at least one filter.</div>`; return;
+    }
+    partyCreate({ filters:f }, $("pfVerdict"));
+  };
+}
+// The college and conference lists arrive after the form is drawn, so backfill
+// them once they land rather than blocking the whole screen on that call.
+function partyBuildSyncOptions(){
+  if(!FILTER_OPTS) return;
+  const fill=(id,rows)=>{ const s=$(id); if(!s||s.dataset.filled) return; s.dataset.filled="1";
+    s.insertAdjacentHTML("beforeend", rows.map(c=>`<option value="${esc(c.v)}">${esc(c.v)} (${c.n})</option>`).join("")); };
+  fill("pfConf", FILTER_OPTS.conferences||[]);
+  fill("pfCollege", FILTER_OPTS.colleges||[]);
 }
 $("partyHostBack").onclick = ()=>{ partyLeave(); show("lobby"); };
 $("partyPlayBack").onclick = ()=>{ partyLeave(); show("lobby"); };
 $("partyRecapBack").onclick = ()=>{ partyLeave(); show("lobby"); };
 function partyLeave(){ clearTimeout(PARTY_TIMER); PARTY_TIMER=null; PARTY=null; PARTY_RECAP=null; syncModePill(); }
 
-$("partyCreateBtn").onclick = async ()=>{
-  const slug=$("partyPrompt").value, tv=$("partyTime").value;
+// One create path for all four routes in: a featured card, a category row,
+// Random, and the builder. `where` is an optional element for the builder's
+// inline verdict; everything else reports through the screen's error line.
+let PARTY_LAST_PICK = null;
+async function partyCreate(pick, where){
+  const tv=$("partyTime").value;
   const name = partyName();
   if(name) store.set("mp_name", name);
-  const r = await api("party_create",{ slug, time_limit_s: tv===""?null:Number(tv), client_id:clientId(), label:name });
-  if(!r.ok){ $("partyHostErr").textContent="Error: "+r.error; return; }
+  const box = where || null;
+  if(box) box.innerHTML=`<div class="note">Checking…</div>`;
+  $("partyHostErr").textContent="";
+  const r = await api("party_create", { ...pick, time_limit_s: tv===""?null:Number(tv),
+                                        client_id:clientId(), label:name });
+  if(!r.ok){
+    const msg = "Error: "+r.error;
+    if(box) box.innerHTML=`<div class="banner lose">${esc(msg)}</div>`;
+    else $("partyHostErr").textContent = msg;
+    return;
+  }
+  // Buildable-but-too-thin comes back 200. Not a failure, just not a party.
+  if(r.built===false){
+    const msg = `Only ${r.known} recognisable names — not enough for a room. Try dropping a filter.`;
+    if(box) box.innerHTML=`<div class="banner lose">${esc(msg)}</div>`;
+    else $("partyHostErr").textContent = msg;
+    return;
+  }
+  if(box) box.innerHTML="";
+  PARTY_LAST_PICK = pick;
   PARTY = { session:r.session, member_id:r.member_id, member_token:r.member_token,
             host_token:r.host_token, is_host:true, members:r.members||[], sinceId:0, seen:new Map() };
   partyStash(r.session.id, { member_id:r.member_id, member_token:r.member_token, host_token:r.host_token });
@@ -2357,7 +2514,7 @@ $("partyCreateBtn").onclick = async ()=>{
   const q = await api("qr",{ url: partyJoinUrl(r.session.code) });
   $("partyQr").innerHTML = q.ok ? q.svg : "";
   partyRender(); partySchedule();
-};
+}
 
 $("partyShareBtn").onclick = ()=>{
   if(!PARTY) return;
@@ -2496,7 +2653,15 @@ function partyShowRecap(){
   $("partyRecapBody").innerHTML = h;
 }
 
-$("partyAgainBtn").onclick = ()=>{ const s=PARTY&&PARTY.session; partyLeave(); openPartyHome().then(()=>{ if(s) $("partyPrompt").value = $("partyPrompt").value; }); };
+// Run it back = the SAME prompt, fresh session. It used to reassign a dropdown
+// to its own value, which did nothing; now that one function creates every
+// session, remembering the pick is enough to make the button honest.
+$("partyAgainBtn").onclick = async ()=>{
+  const pick = PARTY_LAST_PICK;
+  partyLeave();
+  await openPartyHome();
+  if(pick) partyCreate(pick);
+};
 $("partyRecapShare").onclick = ()=>{
   if(!PARTY_RECAP) return;
   const R=PARTY_RECAP;

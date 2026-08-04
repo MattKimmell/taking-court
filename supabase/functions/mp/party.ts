@@ -19,6 +19,9 @@ import {
 } from "./shared.ts";
 import type { PoolEntry } from "./shared.ts";
 import { makeCrewCode } from "./crews.ts";
+// Pickup builds its own challenges from the same filter vocabulary Name It uses.
+// games.ts does not import party.ts, so this direction is safe.
+import { buildChallengeFilters, composeFilterSubject } from "./games.ts";
 
 const MAX_LABEL = 24;
 const PG_UNIQUE_VIOLATION = "23505";
@@ -93,11 +96,45 @@ async function requireMember(sessionId: string, memberId: string, token: string)
 }
 
 // -----------------------------------------------------------------------------
+// The Pickup browse screen. Same shape as challenge_catalog and the same
+// categories table, because these are the same kind of content asked a different
+// way — a second taxonomy for the same 30-odd prompts would be a thing to keep in
+// sync for no gain.
+//
+// SEVERAL featured, not one. The single-hero rule exists for tier themes, where a
+// consensus gate needs three boards on the same set and concentration is the
+// point. A Pickup prompt has no gate, and a host scanning for something the room
+// will enjoy wants options, not an editorial pick.
+//
+// `prompts` is still returned, flat, because the old dropdown consumed it and a
+// cached client shell will keep calling this until its service worker turns over.
 export async function actionPartyPrompts() {
-  const { data } = await db.from("mp_party_prompts")
-    .select("slug, prompt, target, item_type")   // never the pool
-    .eq("status", "approved").order("sort_order", { ascending: true });
-  return ok({ prompts: data ?? [] });
+  const [{ data: cats }, { data: rows }] = await Promise.all([
+    db.from("mp_challenge_categories")
+      .select("slug, label, blurb, icon, sort_order")
+      .eq("status", "approved").order("sort_order", { ascending: true }),
+    db.from("mp_party_prompts")
+      // never the pool — it is the answer key
+      .select("slug, prompt, target, item_type, category_slug, title, blurb, featured, sort_order")
+      .eq("status", "approved").order("sort_order", { ascending: true }),
+  ]);
+
+  const all = (rows ?? []).map((p) => ({
+    slug: p.slug, prompt: p.prompt, target: p.target, item_type: p.item_type,
+    title: p.title ?? p.prompt, blurb: p.blurb ?? null,
+    category: p.category_slug, featured: !!p.featured,
+  }));
+  const categories = (cats ?? []).map((c) => ({
+    slug: c.slug, label: c.label, blurb: c.blurb, icon: c.icon,
+    items: all.filter((x) => x.category === c.slug),
+  })).filter((c) => c.items.length > 0);
+
+  return ok({
+    featured: all.filter((x) => x.featured),
+    categories,
+    total: all.length,
+    prompts: all,           // legacy flat list, for shells cached before this shipped
+  });
 }
 
 export async function actionPartyCreate(req: Request, body: any) {
@@ -105,10 +142,41 @@ export async function actionPartyCreate(req: Request, body: any) {
   const clientId: string | null = body.client_id ?? null;
   if (!clientId) return err("identity_required", 400);
 
-  const slug = String(body.slug ?? "");
-  const { data: prompt } = await db.from("mp_party_prompts").select("*")
-    .eq("slug", slug).eq("status", "approved").maybeSingle();
-  if (!prompt) return err("unknown_prompt", 404);
+  // Two ways in: a curated prompt by slug, or a filter set the host built. Both
+  // end at the same place — a frozen pool on the session — so nothing downstream
+  // (join, guess, state, recap) needs to know which route was taken.
+  let promptId: string | null = null;
+  let promptText: string;
+  let target: number;
+  let pool: unknown;
+
+  if (body.filters || body.college || body.conference || body.team ||
+      body.position || body.decade || body.award || body.draft) {
+    const built = buildChallengeFilters({ ...(body.filters ?? body), mode: "roster" });
+    if ("error" in built) return err(built.error, 400);
+    const f = built.filters;
+    delete (f as any).mode;      // party has no top8/roster distinction
+    delete (f as any).target;    // the room's ask is derived, not requested
+    if (!Object.keys(f).length) return err("no_filters", 400);
+
+    const { data: b, error: bErr } = await db.rpc("mp_party_build", { f });
+    if (bErr) return err(bErr.message, 500);
+    if (!b?.ok) {
+      // 200, not an error: "not enough for a room" is an answer the host can act
+      // on, and the same shape the Name It gate returns.
+      return ok({ built: false, reason: b?.reason ?? "too_thin", known: b?.known ?? 0 });
+    }
+    promptText = composeFilterSubject(f as any);
+    target = b.target;
+    pool = b.pool;
+  } else {
+    const slug = String(body.slug ?? "");
+    const { data: prompt } = await db.from("mp_party_prompts").select("*")
+      .eq("slug", slug).eq("status", "approved").maybeSingle();
+    if (!prompt) return err("unknown_prompt", 404);
+    promptId = prompt.id; promptText = prompt.prompt;
+    target = prompt.target; pool = prompt.pool;
+  }
 
   // 3 / 5 / 10 minutes, or untimed. Anything else is rejected rather than clamped
   // so a bad client can't quietly create a 6-hour session.
@@ -119,8 +187,8 @@ export async function actionPartyCreate(req: Request, body: any) {
   const hostToken = randomToken(16);
   const { data: session, error: sErr } = await db.from("mp_party_sessions").insert({
     code, share_token: "party_" + randomToken(8),
-    prompt_id: prompt.id, prompt: prompt.prompt, target: prompt.target,
-    answers_snapshot: prompt.pool,       // freeze: editing the prompt can't change a live game
+    prompt_id: promptId, prompt: promptText, target,
+    answers_snapshot: pool,              // freeze: editing the prompt can't change a live game
     status: "lobby", time_limit_s: raw,
     host_client_id: clientId, host_token: hostToken,
   }).select("*").single();
