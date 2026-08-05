@@ -260,7 +260,10 @@ function consensusReveal(round: any, boards: any[]) {
   };
   const order = items.map((it) => ({ key: it.key, label: it.label, mean: meanOf(it.key) }))
     .sort((a, b) => a.mean - b.mean || a.label.localeCompare(b.label))
-    .map((r, i) => ({ ...r, rank: i + 1, mean: r.mean === Infinity ? null : Math.round(r.mean * 100) / 100 }));
+    // mean goes out 1-BASED, like every other rank in this payload. It is computed
+    // from label indexes, which are 0-based; shipping that raw would leave the
+    // client adding one and the wire format meaning something other than it says.
+    .map((r, i) => ({ ...r, rank: i + 1, mean: r.mean === Infinity ? null : Math.round((r.mean + 1) * 100) / 100 }));
 
   // Score against that order rather than against the modal, so "matched 3/5"
   // means three players put exactly where the room put them.
