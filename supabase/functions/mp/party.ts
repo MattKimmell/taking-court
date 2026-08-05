@@ -40,10 +40,15 @@ const PG_UNIQUE_VIOLATION = "23505";
 const RAPID_S = 120;          // a night's opening round; short enough to keep the energy
 const TURN_S = 15;            // sudden death, per turn
 const CONSENSUS_ITEMS = 5;
-// Four tiers, not the app's usual six: five chips against six rows is too much
-// scrolling on a phone. consensusFor/scoreBoard take `tiers` as a parameter, so
-// the vocabulary is free to differ here.
-const CONSENSUS_TIERS = ["S", "A", "B", "C"];
+// Round 2 is a 1-to-5 ORDERING, not a tier bucketing. Five names into six tier
+// buckets mostly produces ties and a shrug; forcing a strict order makes everyone
+// commit, and "you had him 2nd, the room had him 5th" is a better argument than
+// "you both said B".
+//
+// It still rides on consensusFor/scoreBoard unchanged, because those take the
+// label vocabulary as a parameter and only ever use its INDEX — so ["1".."5"]
+// behaves exactly like a tier ladder with index 0 = best.
+const CONSENSUS_RANKS = ["1", "2", "3", "4", "5"];
 const ROUND_LABEL: Record<string, string> = {
   rapid: "Rapid Fire", consensus: "Guess the Room", sudden: "Sudden Death",
 };
@@ -231,33 +236,62 @@ async function drawConsensusItems(session: any): Promise<TierItem[]> {
 // consensus, and the live demo boards can never move the room's score.
 function consensusReveal(round: any, boards: any[]) {
   const items = (round.item_set ?? []) as TierItem[];
-  const tiers = (round.tiers ?? CONSENSUS_TIERS) as string[];
+  const tiers = (round.tiers ?? CONSENSUS_RANKS) as string[];
   // Two boards is the floor for "the room" to mean anything at all. Below it the
   // client shows the boards side by side rather than inventing a consensus.
   const need = 2;
   if (boards.length < need) {
-    return { unlocked: false, have: boards.length, need, consensus: [], scores: [], divisive: null };
+    return { unlocked: false, have: boards.length, need, consensus: [], scores: [], order: [], divisive: null };
   }
   const consensus = consensusFor(items, boards, tiers);
+  const idx = new Map(tiers.map((t, i) => [t, i]));
+
+  // THE ROOM'S ORDER. Mean position, not the modal one: modal ranks are picked
+  // per player independently, so they can easily put two people 2nd and nobody
+  // 3rd — not an ordering at all. The mean always sorts into a real 1..n list,
+  // which is the whole point of making this round a ranking.
+  const meanOf = (key: string) => {
+    let sum = 0, n = 0;
+    for (const b of boards) {
+      const v = (b.assignments || {})[key];
+      if (v != null && idx.has(v)) { sum += idx.get(v)!; n++; }
+    }
+    return n ? sum / n : Infinity;
+  };
+  const order = items.map((it) => ({ key: it.key, label: it.label, mean: meanOf(it.key) }))
+    .sort((a, b) => a.mean - b.mean || a.label.localeCompare(b.label))
+    .map((r, i) => ({ ...r, rank: i + 1, mean: r.mean === Infinity ? null : Math.round(r.mean * 100) / 100 }));
+
+  // Score against that order rather than against the modal, so "matched 3/5"
+  // means three players put exactly where the room put them.
+  const consensusRank = new Map(order.map((o) => [o.key, tiers[o.rank - 1] ?? null]));
+  const versusOrder = consensus.map((c) => ({ ...c, modal_tier: consensusRank.get(c.key) ?? null }));
   const scores = boards.map((b) => {
-    const s = scoreBoard(b.assignments, consensus, tiers);
+    const s = scoreBoard(b.assignments, versusOrder, tiers);
     return {
       label: b.member_label,
       ...(s ?? { matched: 0, rated: 0, spice: 0, emoji: "🤷", title: "Didn't rank" }),
     };
   }).sort((a, b) => b.spice - a.spice);   // spiciest first — the Menace leads the reveal
-  // Widest spread across the room, for the "you all split on X" line. Denominator
-  // is the item's own count, matching renderHotTakes' MOST DIVIDED.
-  let divisive: { label: string; spread: number; modal_tier: string | null } | null = null;
-  for (const c of consensus) {
-    if (!c.count) continue;
-    const top = Math.max(...(Object.values(c.distribution) as number[]));
-    const spread = 1 - top / c.count;
+
+  // Widest disagreement: the biggest gap between where two people put the same
+  // player. On a 1..5 ordering that reads better than a distribution spread —
+  // "you had him 1st and 5th" is the argument worth surfacing.
+  let divisive: { label: string; spread: number; low: string | null; high: string | null } | null = null;
+  for (const it of items) {
+    let lo = Infinity, hi = -Infinity;
+    for (const b of boards) {
+      const v = (b.assignments || {})[it.key];
+      if (v == null || !idx.has(v)) continue;
+      lo = Math.min(lo, idx.get(v)!); hi = Math.max(hi, idx.get(v)!);
+    }
+    if (hi < 0) continue;
+    const spread = hi - lo;
     if (!divisive || spread > divisive.spread) {
-      divisive = { label: c.label, spread, modal_tier: c.modal_tier };
+      divisive = { label: it.label, spread, low: tiers[lo] ?? null, high: tiers[hi] ?? null };
     }
   }
-  return { unlocked: true, have: boards.length, need, consensus, scores, divisive };
+  return { unlocked: true, have: boards.length, need, consensus, scores, order, divisive };
 }
 
 // Everything a client needs to render whichever round the room is on. Shared by
@@ -480,7 +514,7 @@ export async function actionPartyCreate(req: Request, body: any) {
   const roundRows = format === "night"
     ? [
         { idx: 1, kind: "rapid", prompt: promptText, target, time_limit_s: RAPID_S },
-        { idx: 2, kind: "consensus", prompt: "Rank five of them", tiers: CONSENSUS_TIERS },
+        { idx: 2, kind: "consensus", prompt: "Rank five of them", tiers: CONSENSUS_RANKS },
         { idx: 3, kind: "sudden", prompt: promptText },
       ]
     : [{ idx: 1, kind: "rapid", prompt: promptText, target, time_limit_s: raw }];
@@ -818,12 +852,19 @@ export async function actionPartyTierSave(_req: Request, body: any) {
   if (round.status !== "live") return err("round_not_live", 409, { status: round.status });
 
   // Same validation shape as actionTierSave: anything not in this round's item_set
-  // and tier vocabulary is dropped rather than trusted.
+  // and label vocabulary is dropped rather than trusted.
   const validKeys = new Set(((round.item_set ?? []) as TierItem[]).map((i) => i.key));
-  const validTiers = new Set((round.tiers ?? CONSENSUS_TIERS) as string[]);
+  const validTiers = new Set((round.tiers ?? CONSENSUS_RANKS) as string[]);
   const asg: Record<string, string> = {};
+  // A rank is a POSITION, so two players cannot hold the same one. Partial is
+  // fine — this autosaves while someone is still deciding — but a duplicate is
+  // never legitimate, and the server can't take the client's word that its swap
+  // logic ran. First writer keeps the slot.
+  const taken = new Set<string>();
   for (const [k, v] of Object.entries(body.assignments ?? {})) {
-    if (validKeys.has(k) && validTiers.has(v as string)) asg[k] = v as string;
+    if (!validKeys.has(k) || !validTiers.has(v as string)) continue;
+    if (taken.has(v as string)) continue;
+    taken.add(v as string); asg[k] = v as string;
   }
 
   const { error } = await db.from("mp_party_round_boards").upsert({
@@ -980,7 +1021,7 @@ async function buildRecap(session: any, rounds: any[] = []) {
       const { data: boards } = await db.from("mp_party_round_boards")
         .select("member_id, member_label, assignments").eq("round_id", r.id);
       perRound.push({
-        ...head, prompt: r.prompt, item_set: r.item_set ?? [], tiers: r.tiers ?? CONSENSUS_TIERS,
+        ...head, prompt: r.prompt, item_set: r.item_set ?? [], tiers: r.tiers ?? CONSENSUS_RANKS,
         reveal: consensusReveal(r, boards ?? []),
       });
       continue;

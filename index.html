@@ -133,8 +133,15 @@
   .prank .pn{flex:1;min-width:0;font-size:14px;font-weight:600;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .prank .pb{display:flex;gap:4px;flex:0 0 auto}
-  .prank .pb button{width:36px;height:36px;border-radius:8px;border:none;
+  .prank .pb button{width:33px;height:34px;border-radius:8px;border:none;
     font-weight:800;font-size:13px;background:#243056;color:var(--muted);cursor:pointer}
+  .prank.set{border-color:var(--accent)}
+  .rkno{display:inline-block;min-width:19px;margin-right:7px;padding:1px 0;text-align:center;
+    border-radius:5px;background:var(--accent);color:#0b1020;font-weight:900;font-size:12px}
+  /* The room's ordering on the reveal. */
+  .rrow{display:flex;align-items:baseline;gap:9px;margin-top:6px;font-size:14px}
+  .rrow .rp{flex:0 0 22px;font-weight:900;color:var(--accent);text-align:right}
+  .rrow .rm{margin-left:auto;color:var(--muted);font-size:12px}
   /* Category cards — the first level of both browses. Deliberately not a
      horizontal carousel: with three or four categories a scroller would hide
      items off-screen for no reason. A grid shows the whole shape at once, which
@@ -803,7 +810,10 @@
 
     <!-- ROUND 3 · sudden death. -->
     <div id="partyPanelSudden" class="hidden">
-      <div id="partySuddenSeat" style="margin-top:10px;text-align:center"></div>
+      <!-- The ask, in the round itself. Whoever is on the clock should not have to
+           look back up at the header to remember what they are naming. -->
+      <div class="note" id="partySuddenAsk" style="margin-top:8px;text-align:center"></div>
+      <div id="partySuddenSeat" style="margin-top:6px;text-align:center"></div>
       <div class="turnbar" id="partySeats"></div>
       <div class="linkbox" style="margin-top:12px">
         <div style="position:relative;flex:1">
@@ -2461,8 +2471,11 @@ function partyRender(){
       ? `Round ${cur.idx} of ${rounds.length} · ${live ? cur.label : "break"}` : "";
   }
 
-  $("partyPlayPrompt").textContent = (live && R.kind==="consensus") ? "🪜 Guess the Room"
-    : (live && R.kind==="sudden") ? "💀 Sudden Death" : s.prompt;
+  // ALWAYS the session prompt. Replacing it with the round's name meant sudden
+  // death asked you to shout a name without ever saying what it had to be a name
+  // OF — the one piece of information the round cannot work without. The round
+  // rail underneath already says which round this is.
+  $("partyPlayPrompt").textContent = s.prompt;
   // A night's clock lives on the round; a classic session's on the session.
   const secs = (R && R.seconds_left != null) ? R.seconds_left : s.seconds_left;
   $("partyClock").textContent = (secs==null || !live) ? "" :
@@ -2494,30 +2507,40 @@ function partyRenderRapid(s){
 // Mirrors renderTierBoard/tierChip against party state and reuses their CSS
 // (.tierrow / .chip / .tbtn / TIER_COLORS) rather than editing the shipped tier
 // board, whose output is documented as must-not-shift.
+// Round 2 is an ORDERING: every name gets a distinct 1..5. A rank is a position,
+// so picking one somebody already holds SWAPS them rather than creating a tie —
+// which means the board is always a valid partial ordering and any mistake is one
+// tap to fix.
 function partyRenderTier(R){
-  const items = R.item_set || [], tiers = R.tiers || ["S","A","B","C"];
+  const items = R.item_set || [], ranks = R.tiers || ["1","2","3","4","5"];
   // Seed from the server ONCE per round. Re-seeding on every poll would clobber a
   // tap that is still inside its save debounce.
   if(PARTY.tierRound !== R.id){ PARTY.tierRound = R.id; PARTY.tier = { ...(R.your_assignments||{}) }; }
   $("partyTierRows").innerHTML = items.map(it=>{
     const cur = PARTY.tier[it.key] || null;
-    const btns = tiers.map(t=>{
-      const on = cur===t;
-      const style = on ? `background:${TIER_COLORS[t]||"var(--accent)"};color:#0b1020` : "";
+    const btns = ranks.map(t=>{
+      const style = cur===t ? `background:var(--accent);color:#0b1020` : "";
       return `<button data-k="${esc(it.key)}" data-t="${t}" style="${style}">${t}</button>`;
     }).join("");
-    return `<div class="prank"><div class="pn">${esc(it.label)}</div><div class="pb">${btns}</div></div>`;
+    const badge = cur ? `<span class="rkno">${cur}</span>` : "";
+    return `<div class="prank ${cur?'set':''}"><div class="pn">${badge}${esc(it.label)}</div><div class="pb">${btns}</div></div>`;
   }).join("");
   Array.from($("partyTierRows").querySelectorAll(".pb button")).forEach(b=>b.onclick=()=>{
     const k=b.dataset.k, t=b.dataset.t;
-    // Tapping the tier a name already sits in clears it — no separate × button to
-    // fit onto a row that is already four buttons wide.
-    if(PARTY.tier[k]===t) delete PARTY.tier[k]; else PARTY.tier[k]=t;
+    if(PARTY.tier[k]===t){ delete PARTY.tier[k]; }        // tap your own number to clear it
+    else {
+      const holder = Object.keys(PARTY.tier).find(x=>PARTY.tier[x]===t);
+      const mine = PARTY.tier[k] || null;
+      PARTY.tier[k] = t;
+      // Whoever held that slot takes the one being vacated, or drops out of the
+      // order if this name had none — never two players on the same number.
+      if(holder && holder!==k){ if(mine) PARTY.tier[holder]=mine; else delete PARTY.tier[holder]; }
+    }
     partyRenderTier(R); partyTierSave();
   });
   const done = Object.keys(PARTY.tier).length, n = R.boards_saved||0, m = (PARTY.members||[]).length;
   $("partyTierState").textContent = done < items.length
-    ? `${items.length-done} to go — S is best, C is worst.`
+    ? `Put them 1 to ${items.length} — ${items.length-done} to go. 1 is best.`
     : `${n} of ${m} locked in${n<m?" — waiting on the rest":". Host can reveal."}`;
   if(PARTY.is_host) $("partySkipBtn").textContent = n>=m ? "Reveal the room →" : "Finish round →";
 }
@@ -2540,6 +2563,7 @@ function partyRenderSudden(R){
   const mine = R.turn_member_id === PARTY.member_id;
   const holder = (PARTY.members||[]).find(m=>m.id===R.turn_member_id);
   const t = R.turn_seconds_left;
+  $("partySuddenAsk").innerHTML = `Name one — <b>${esc(PARTY.session.prompt)}</b>`;
   $("partySuddenSeat").innerHTML = mine
     ? `<div style="font-size:22px;font-weight:900;color:var(--accent)">Your call${t!=null?` · ${t}s`:""}</div>`
     : `<div style="font-size:18px;font-weight:800">${esc(holder?holder.label:"…")} is up${t!=null?` · ${t}s`:""}</div>`;
@@ -2576,22 +2600,22 @@ function partyRenderBreak(){
   $("partyBreakWait").textContent = PARTY.is_host ? "" : "Waiting for the host to move things on.";
 }
 
-// The room's own consensus. Iterates reveal.consensus, which consensusFor leaves
-// in item_set order — the server never sorts it, and neither should this.
+// The room's own ordering. `rev.order` is sorted by mean position server-side —
+// the modal rank can put two people 2nd and nobody 3rd, which is not an ordering.
 function partyConsensusHtml(rev){
   if(!rev) return "";
   if(!rev.unlocked) return `<div class="note">Only ${rev.have} board${rev.have===1?"":"s"} in — the room needs ${rev.need} before "the room" means anything.</div>`;
-  let h = `<div style="font-weight:700;font-size:12px;color:var(--muted);letter-spacing:.5px">HOW EACH OF YOU READ THE ROOM</div>`;
+  let h = `<div style="font-weight:700;font-size:12px;color:var(--muted);letter-spacing:.5px">THE ROOM'S ORDER</div>`;
+  h += (rev.order||[]).map(o=>`<div class="rrow"><span class="rp">${o.rank}.</span>
+      <span>${esc(o.label)}</span>${o.mean!=null?`<span class="rm">avg ${(o.mean+1).toFixed(1)}</span>`:""}</div>`).join("");
+  if(rev.divisive && rev.divisive.spread > 0){
+    h += `<div style="margin-top:14px;padding:10px 12px;border-radius:10px;background:rgba(249,115,22,.1);border:1px solid var(--accent);font-size:14px">
+      🌶️ Biggest argument: <b>${esc(rev.divisive.label)}</b> went as high as ${rev.divisive.low} and as low as ${rev.divisive.high}</div>`;
+  }
+  h += `<div style="font-weight:700;font-size:12px;color:var(--muted);letter-spacing:.5px;margin-top:16px">HOW CLOSE EACH OF YOU WAS</div>`;
   h += (rev.scores||[]).map(s=>`<div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:7px;font-size:14px">
       <span>${s.emoji} <b>${esc(s.label)}</b> <span class="note">${esc(s.title)}</span></span>
-      <span class="note">matched ${s.matched}/${s.rated}</span></div>`).join("");
-  if(rev.divisive && rev.divisive.spread > 0){
-    h += `<div style="margin-top:12px;padding:10px 12px;border-radius:10px;background:rgba(249,115,22,.1);border:1px solid var(--accent);font-size:14px">
-      🌶️ You split hardest on <b>${esc(rev.divisive.label)}</b>${rev.divisive.modal_tier?` — the room landed on ${rev.divisive.modal_tier}`:""}</div>`;
-  }
-  h += `<div style="font-weight:700;font-size:12px;color:var(--muted);letter-spacing:.5px;margin-top:14px">WHERE THE ROOM PUT THEM</div>`;
-  h += (rev.consensus||[]).map(c=>`<div style="display:flex;justify-content:space-between;margin-top:5px;font-size:14px">
-      <span>${esc(c.label)}</span><b style="color:${TIER_COLORS[c.modal_tier]||"var(--muted)"}">${c.modal_tier||"—"}</b></div>`).join("");
+      <span class="note">${s.matched}/${s.rated} in the right spot</span></div>`).join("");
   return h;
 }
 
