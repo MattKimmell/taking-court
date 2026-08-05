@@ -105,6 +105,36 @@
   .herorow .hero{margin-top:0;flex:0 0 78%;scroll-snap-align:start;min-width:0}
   .mine-f{padding:7px 12px;font-size:13px}
   .mine-f.on{background:rgba(249,115,22,.18);border-color:var(--accent);color:var(--ink)}
+  /* Format picker. Two side-by-side buttons rather than a select: it is the one
+     choice that changes what the next twelve minutes look like, so it should be
+     readable at a glance by a host holding the phone up to a room. */
+  .fmtpick{display:flex;gap:8px;margin-top:10px}
+  .fmtpick .fmt{flex:1;background:var(--panel2);border:1px solid var(--line);color:var(--muted);
+    border-radius:12px;padding:10px 8px;font-weight:800;font-size:14px;cursor:pointer;
+    display:flex;flex-direction:column;gap:2px;line-height:1.2}
+  .fmtpick .fmt span{font-weight:500;font-size:11.5px;color:var(--muted)}
+  .fmtpick .fmt.on{background:rgba(249,115,22,.16);border-color:var(--accent);color:var(--ink)}
+  /* Round rail on the play screen: where we are in the night, at a glance. */
+  .rrail{display:flex;gap:6px;margin:8px 0 4px}
+  .rrail .rs{flex:1;height:4px;border-radius:99px;background:var(--panel2)}
+  .rrail .rs.done{background:var(--muted)}
+  .rrail .rs.now{background:var(--accent)}
+  .turnbar{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+  .seat{padding:6px 11px;border-radius:99px;font-size:13px;font-weight:700;
+    background:var(--panel2);border:1px solid var(--line);color:var(--muted)}
+  .seat.now{background:var(--accent);border-color:var(--accent);color:#0b1020}
+  .seat.out{text-decoration:line-through;opacity:.5}
+  /* Round 2 ranks five names against four tiers. The tier BOARD (.tierrow) is
+     right for 8-12 chips across six tiers, but here it spends most of a phone
+     screen on an "Unranked" gutter — so this round is a list, one row per name,
+     every tier one tap away. */
+  .prank{display:flex;align-items:center;gap:8px;background:var(--panel2);
+    border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin-bottom:6px}
+  .prank .pn{flex:1;min-width:0;font-size:14px;font-weight:600;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .prank .pb{display:flex;gap:4px;flex:0 0 auto}
+  .prank .pb button{width:36px;height:36px;border-radius:8px;border:none;
+    font-weight:800;font-size:13px;background:#243056;color:var(--muted);cursor:pointer}
   /* Category cards — the first level of both browses. Deliberately not a
      horizontal carousel: with three or four categories a scroller would hide
      items off-screen for no reason. A grid shows the whole shape at once, which
@@ -682,13 +712,19 @@
       <div class="row">
         <div><label>Your name</label>
           <input id="partyName" placeholder="e.g. Dave" autocomplete="off" /></div>
-        <div style="flex:0 0 auto"><label>Clock</label>
+        <!-- Hidden for a night: each of its rounds has a designed length, so a
+             session-wide clock would have nothing to control. -->
+        <div style="flex:0 0 auto" id="partyTimeWrap"><label>Clock</label>
           <select id="partyTime">
             <option value="180">3 min</option>
             <option value="300" selected>5 min</option>
             <option value="600">10 min</option>
             <option value="">No clock</option>
           </select></div>
+      </div>
+      <div id="partyFormat" class="fmtpick">
+        <button class="fmt on" data-fmt="night">🌙 Full night<span>3 rounds · ~12 min</span></button>
+        <button class="fmt" data-fmt="classic">⚡ One round<span>Rapid fire only</span></button>
       </div>
 
       <!-- Tapping a challenge starts the session outright. A host standing in
@@ -732,22 +768,69 @@
       <div style="font-weight:700;font-size:16px" id="partyPlayPrompt"></div>
       <div id="partyClock" style="flex:0 0 auto;font-weight:900;font-size:18px"></div>
     </div>
-    <div style="margin-top:6px">
-      <div style="height:10px;background:var(--panel2);border-radius:99px;overflow:hidden">
-        <div id="partyBar" style="height:100%;width:0%;background:linear-gradient(90deg,var(--accent),var(--gold));transition:width .3s"></div>
-      </div>
-      <div class="note" style="margin-top:4px"><b id="partyCount">0</b> of <span id="partyTarget">0</span> · <span id="partyMisses">0</span> misses</div>
+    <!-- Where we are in the night. Hidden entirely for a one-round session, so
+         the classic screen looks exactly as it did. -->
+    <div id="partyRoundHead" class="hidden">
+      <div class="rrail" id="partyRail"></div>
+      <div class="note" id="partyRoundLabel"></div>
     </div>
-    <div class="linkbox" style="margin-top:12px">
-      <div style="position:relative;flex:1">
-        <input id="partyGuess" placeholder="Shout a name…" autocomplete="off" autocapitalize="words" />
-        <div id="partyAc" class="acdrop hidden"></div>
+
+    <!-- ROUND 1 · rapid fire. Markup unchanged from the single-round game. -->
+    <div id="partyPanelRapid">
+      <div style="margin-top:6px">
+        <div style="height:10px;background:var(--panel2);border-radius:99px;overflow:hidden">
+          <div id="partyBar" style="height:100%;width:0%;background:linear-gradient(90deg,var(--accent),var(--gold));transition:width .3s"></div>
+        </div>
+        <div class="note" style="margin-top:4px"><b id="partyCount">0</b> of <span id="partyTarget">0</span> · <span id="partyMisses">0</span> misses</div>
       </div>
-      <button class="sky" id="partyGuessBtn" style="flex:0 0 auto">Add</button>
+      <div class="linkbox" style="margin-top:12px">
+        <div style="position:relative;flex:1">
+          <input id="partyGuess" placeholder="Shout a name…" autocomplete="off" autocapitalize="words" />
+          <div id="partyAc" class="acdrop hidden"></div>
+        </div>
+        <button class="sky" id="partyGuessBtn" style="flex:0 0 auto">Add</button>
+      </div>
+      <div id="partyFlash" style="min-height:24px;margin-top:8px;font-weight:700"></div>
+      <div id="partyBoard" style="margin-top:6px"></div>
     </div>
-    <div id="partyFlash" style="min-height:24px;margin-top:8px;font-weight:700"></div>
-    <div id="partyBoard" style="margin-top:6px"></div>
+
+    <!-- ROUND 2 · guess the room. Reuses the tier board's markup and CSS. -->
+    <div id="partyPanelTier" class="hidden">
+      <div class="note" style="margin-top:8px">Rank these five on your own phone. Nobody sees your board until everyone's in.</div>
+      <div id="partyTierRows" style="margin-top:10px"></div>
+      <div class="note" id="partyTierState" style="margin-top:8px;min-height:16px"></div>
+    </div>
+
+    <!-- ROUND 3 · sudden death. -->
+    <div id="partyPanelSudden" class="hidden">
+      <div id="partySuddenSeat" style="margin-top:10px;text-align:center"></div>
+      <div class="turnbar" id="partySeats"></div>
+      <div class="linkbox" style="margin-top:12px">
+        <div style="position:relative;flex:1">
+          <input id="partyTurnGuess" placeholder="Name one…" autocomplete="off" autocapitalize="words" />
+          <div id="partyTurnAc" class="acdrop hidden"></div>
+        </div>
+        <button class="sky" id="partyTurnBtn" style="flex:0 0 auto">Call it</button>
+      </div>
+      <div id="partyTurnFlash" style="min-height:24px;margin-top:8px;font-weight:700"></div>
+      <div class="note" style="margin-top:2px">Wrong name or the clock and you're out. Last one standing takes it.</div>
+      <div id="partyUsed" style="margin-top:8px"></div>
+    </div>
+
+    <!-- INTERMISSION · between rounds. Only the host can move the room on. -->
+    <div id="partyPanelBreak" class="hidden">
+      <div id="partyBreakBody" style="margin-top:10px"></div>
+      <div class="row" style="margin-top:14px">
+        <button id="partyNextBtn">Next round →</button>
+      </div>
+      <div class="note" id="partyBreakWait" style="margin-top:8px"></div>
+    </div>
+
     <div class="row" style="margin-top:12px">
+      <!-- Ends the live round early — a room that has run out of names should not
+           have to watch the clock run down. Lands on the intermission, not on the
+           next round: what just happened is worth a look. Host only. -->
+      <button class="ghost" id="partySkipBtn" style="flex:0 0 auto">Finish round →</button>
       <button class="ghost" id="partyEndBtn" style="flex:0 0 auto">End session</button>
       <button class="ghost" id="partyPlayBack" style="flex:0 0 auto">Leave</button>
     </div>
@@ -2292,6 +2375,10 @@ function partyInterval(){
   const st = PARTY.session.status;
   if(st==="ended") return null;
   if(st==="lobby") return 10000;
+  // Sudden death runs on a 15-second turn clock that everyone is watching, and
+  // whoever polls is also what eliminates a stalled seat — so this round needs a
+  // tighter tick than a shared board being filled at leisure.
+  if(PARTY.round && PARTY.round.kind==="sudden" && PARTY.round.status==="live") return 1000;
   return PARTY.is_host ? 1000 : 2000;
 }
 function partySchedule(){
@@ -2304,7 +2391,10 @@ document.addEventListener("visibilitychange", ()=>{ if(document.hidden) { clearT
 
 async function partyPoll(){
   if(!PARTY) return;
-  const r = await api("party_state",{ session_id:PARTY.session.id, since_id:PARTY.sinceId });
+  // member_id so the tier round hands this device back its OWN board — the poll
+  // never carries anyone else's until the round ends.
+  const r = await api("party_state",{ session_id:PARTY.session.id, since_id:PARTY.sinceId,
+                                      member_id:PARTY.member_id });
   if(r && r.ok) partyApply(r);
   partySchedule();
 }
@@ -2316,6 +2406,12 @@ function partyApply(r){
   if(r.session) PARTY.session = r.session;
   if(Array.isArray(r.members)) PARTY.members = r.members;
   if(Array.isArray(r.answers)) partyAppend(r.answers);
+  // `undefined` rather than falsy: an ordinary guess response carries no round
+  // state (it would cost queries the typer would wait on), while an intermission
+  // legitimately sends round:null. Overwriting on the former loses the round.
+  if(Array.isArray(r.rounds)) PARTY.rounds = r.rounds;
+  if(r.round !== undefined) PARTY.round = r.round;
+  if(r.next_round !== undefined) PARTY.next_round = r.next_round;
   // Self-heal: if the server's count disagrees with what we've rendered, our
   // cursor missed something (or we optimistically rendered a loser). Refetch.
   if(typeof r.count === "number" && r.count !== PARTY.seen.size){
@@ -2332,6 +2428,11 @@ function partyAppend(rows){
   }
 }
 
+// Which sub-panel of #partyPlay is showing. A one-round session only ever
+// reaches "rapid", so the classic screen is byte-for-byte what it was.
+const PARTY_PANELS = { rapid:"partyPanelRapid", consensus:"partyPanelTier",
+                       sudden:"partyPanelSudden", break:"partyPanelBreak" };
+
 function partyRender(){
   if(!PARTY) return;
   const s = PARTY.session;
@@ -2342,19 +2443,156 @@ function partyRender(){
     if(s.status==="live" || s.status==="ended") partyOpenPlay();
     return;
   }
-  $("partyPlayPrompt").textContent = s.prompt;
+
+  const R = PARTY.round, rounds = PARTY.rounds || [];
+  const night = rounds.length > 1;
+  const live = !!(R && R.status === "live");
+  // No live round but one still pending = intermission. Nothing pending means the
+  // night is over and partyApply is about to hand off to the recap.
+  const phase = live ? R.kind : (PARTY.next_round ? "break" : (R ? R.kind : "rapid"));
+  for(const k in PARTY_PANELS) $(PARTY_PANELS[k]).classList.toggle("hidden", k !== phase);
+
+  $("partyRoundHead").classList.toggle("hidden", !night);
+  if(night){
+    $("partyRail").innerHTML = rounds.map(r =>
+      `<div class="rs ${r.status==="ended"?"done":r.status==="live"?"now":""}"></div>`).join("");
+    const cur = live ? R : (PARTY.next_round || R);
+    $("partyRoundLabel").textContent = cur
+      ? `Round ${cur.idx} of ${rounds.length} · ${live ? cur.label : "break"}` : "";
+  }
+
+  $("partyPlayPrompt").textContent = (live && R.kind==="consensus") ? "🪜 Guess the Room"
+    : (live && R.kind==="sudden") ? "💀 Sudden Death" : s.prompt;
+  // A night's clock lives on the round; a classic session's on the session.
+  const secs = (R && R.seconds_left != null) ? R.seconds_left : s.seconds_left;
+  $("partyClock").textContent = (secs==null || !live) ? "" :
+    Math.floor(secs/60)+":"+String(secs%60).padStart(2,"0");
+  $("partyEndBtn").style.display = PARTY.is_host ? "" : "none";
+  $("partySkipBtn").style.display =
+    (PARTY.is_host && live && rounds.some(r=>r.status==="pending")) ? "" : "none";
+  $("partySkipBtn").textContent = "Finish round →";   // partyRenderTier sharpens this
+
+  if(phase === "rapid")     partyRenderRapid(s);
+  if(phase === "consensus") partyRenderTier(R);
+  if(phase === "sudden")    partyRenderSudden(R);
+  if(phase === "break")     partyRenderBreak();
+}
+
+function partyRenderRapid(s){
   $("partyTarget").textContent = s.target;
   $("partyCount").textContent = PARTY.seen.size;
   $("partyMisses").textContent = s.misses||0;
   $("partyBar").style.width = Math.min(100, Math.round(100*PARTY.seen.size/Math.max(1,s.target)))+"%";
-  $("partyClock").textContent = s.seconds_left==null ? "" :
-    Math.floor(s.seconds_left/60)+":"+String(s.seconds_left%60).padStart(2,"0");
-  $("partyEndBtn").style.display = PARTY.is_host ? "" : "none";
   const rows = Array.from(PARTY.seen.values()).reverse();
   $("partyBoard").innerHTML = rows.length ? rows.map(a=>{
     const e = a.rarity_tier==="deep_cut"?"🔥 ":a.rarity_tier==="rare"?"💎 ":"";
     return `<div class="slot"><div class="n">${e||"✓"}</div><div class="name">${esc(a.display_name)}</div><div class="ctx">${esc(a.member_label||"")}</div></div>`;
   }).join("") : `<div class="note">Nothing yet — start shouting.</div>`;
+}
+
+// ---------------------------------------------------------------- round 2
+// Mirrors renderTierBoard/tierChip against party state and reuses their CSS
+// (.tierrow / .chip / .tbtn / TIER_COLORS) rather than editing the shipped tier
+// board, whose output is documented as must-not-shift.
+function partyRenderTier(R){
+  const items = R.item_set || [], tiers = R.tiers || ["S","A","B","C"];
+  // Seed from the server ONCE per round. Re-seeding on every poll would clobber a
+  // tap that is still inside its save debounce.
+  if(PARTY.tierRound !== R.id){ PARTY.tierRound = R.id; PARTY.tier = { ...(R.your_assignments||{}) }; }
+  $("partyTierRows").innerHTML = items.map(it=>{
+    const cur = PARTY.tier[it.key] || null;
+    const btns = tiers.map(t=>{
+      const on = cur===t;
+      const style = on ? `background:${TIER_COLORS[t]||"var(--accent)"};color:#0b1020` : "";
+      return `<button data-k="${esc(it.key)}" data-t="${t}" style="${style}">${t}</button>`;
+    }).join("");
+    return `<div class="prank"><div class="pn">${esc(it.label)}</div><div class="pb">${btns}</div></div>`;
+  }).join("");
+  Array.from($("partyTierRows").querySelectorAll(".pb button")).forEach(b=>b.onclick=()=>{
+    const k=b.dataset.k, t=b.dataset.t;
+    // Tapping the tier a name already sits in clears it — no separate × button to
+    // fit onto a row that is already four buttons wide.
+    if(PARTY.tier[k]===t) delete PARTY.tier[k]; else PARTY.tier[k]=t;
+    partyRenderTier(R); partyTierSave();
+  });
+  const done = Object.keys(PARTY.tier).length, n = R.boards_saved||0, m = (PARTY.members||[]).length;
+  $("partyTierState").textContent = done < items.length
+    ? `${items.length-done} to go — S is best, C is worst.`
+    : `${n} of ${m} locked in${n<m?" — waiting on the rest":". Host can reveal."}`;
+  if(PARTY.is_host) $("partySkipBtn").textContent = n>=m ? "Reveal the room →" : "Finish round →";
+}
+let PARTY_TIER_T = null;
+function partyTierSave(){
+  clearTimeout(PARTY_TIER_T);
+  PARTY_TIER_T = setTimeout(async ()=>{
+    const R = PARTY && PARTY.round;
+    if(!R || R.kind!=="consensus" || R.status!=="live") return;
+    const r = await api("party_tier_save",{ session_id:PARTY.session.id, member_id:PARTY.member_id,
+      member_token:PARTY.member_token, round_id:R.id, assignments:PARTY.tier });
+    if(r.ok){ R.boards_saved = r.boards_saved; partyRender(); }
+  }, 450);
+}
+
+// ---------------------------------------------------------------- round 3
+function partyRenderSudden(R){
+  const alive = R.alive || [];
+  const aliveIds = new Set(alive.map(a=>a.member_id));
+  const mine = R.turn_member_id === PARTY.member_id;
+  const holder = (PARTY.members||[]).find(m=>m.id===R.turn_member_id);
+  const t = R.turn_seconds_left;
+  $("partySuddenSeat").innerHTML = mine
+    ? `<div style="font-size:22px;font-weight:900;color:var(--accent)">Your call${t!=null?` · ${t}s`:""}</div>`
+    : `<div style="font-size:18px;font-weight:800">${esc(holder?holder.label:"…")} is up${t!=null?` · ${t}s`:""}</div>`;
+  // Out is derived from who's alive, not from matching labels — two people in a
+  // room can pick the same name.
+  $("partySeats").innerHTML = (PARTY.members||[]).map(m=>{
+    const out = !aliveIds.has(m.id);
+    return `<span class="seat ${m.id===R.turn_member_id?'now':''} ${out?'out':''}">${esc(m.label)}</span>`;
+  }).join("");
+  $("partyTurnGuess").disabled = !mine; $("partyTurnBtn").disabled = !mine;
+  $("partyTurnGuess").placeholder = mine ? "Name one…" : "Waiting…";
+  const used = R.used || [];
+  $("partyUsed").innerHTML = used.length
+    ? `<div class="note">Gone: ${used.map(u=>esc(u.display_name)).join(", ")}</div>` : "";
+}
+
+// ---------------------------------------------------------------- intermission
+function partyRenderBreak(){
+  // PARTY.round is the round that just ended, and it is the only one the server
+  // sends the reveal with — so read it rather than searching PARTY.rounds.
+  const done = PARTY.round, next = PARTY.next_round;
+  let h = "";
+  if(done && done.kind==="rapid"){
+    h = `<div style="text-align:center"><div style="font-size:34px;font-weight:900">${PARTY.seen.size}<span class="note" style="font-size:16px"> / ${PARTY.session.target}</span></div>
+      <div class="note">named in Rapid Fire</div></div>`;
+  } else if(done && done.kind==="consensus"){
+    h = partyConsensusHtml(done.reveal);
+  } else if(done && done.kind==="sudden"){
+    h = `<div class="note">Sudden death done.</div>`;
+  }
+  $("partyBreakBody").innerHTML = h;
+  $("partyNextBtn").style.display = PARTY.is_host ? "" : "none";
+  $("partyNextBtn").textContent = next ? `Next: ${next.label} →` : "See the recap →";
+  $("partyBreakWait").textContent = PARTY.is_host ? "" : "Waiting for the host to move things on.";
+}
+
+// The room's own consensus. Iterates reveal.consensus, which consensusFor leaves
+// in item_set order — the server never sorts it, and neither should this.
+function partyConsensusHtml(rev){
+  if(!rev) return "";
+  if(!rev.unlocked) return `<div class="note">Only ${rev.have} board${rev.have===1?"":"s"} in — the room needs ${rev.need} before "the room" means anything.</div>`;
+  let h = `<div style="font-weight:700;font-size:12px;color:var(--muted);letter-spacing:.5px">HOW EACH OF YOU READ THE ROOM</div>`;
+  h += (rev.scores||[]).map(s=>`<div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:7px;font-size:14px">
+      <span>${s.emoji} <b>${esc(s.label)}</b> <span class="note">${esc(s.title)}</span></span>
+      <span class="note">matched ${s.matched}/${s.rated}</span></div>`).join("");
+  if(rev.divisive && rev.divisive.spread > 0){
+    h += `<div style="margin-top:12px;padding:10px 12px;border-radius:10px;background:rgba(249,115,22,.1);border:1px solid var(--accent);font-size:14px">
+      🌶️ You split hardest on <b>${esc(rev.divisive.label)}</b>${rev.divisive.modal_tier?` — the room landed on ${rev.divisive.modal_tier}`:""}</div>`;
+  }
+  h += `<div style="font-weight:700;font-size:12px;color:var(--muted);letter-spacing:.5px;margin-top:14px">WHERE THE ROOM PUT THEM</div>`;
+  h += (rev.consensus||[]).map(c=>`<div style="display:flex;justify-content:space-between;margin-top:5px;font-size:14px">
+      <span>${esc(c.label)}</span><b style="color:${TIER_COLORS[c.modal_tier]||"var(--muted)"}">${c.modal_tier||"—"}</b></div>`).join("");
+  return h;
 }
 
 function partyFlash(html, good){
@@ -2370,6 +2608,7 @@ async function openPartyHome(){
   $("partySetup").classList.remove("hidden"); $("partyLobby").classList.add("hidden");
   $("partyName").value = store.get("mp_name","");
   $("partyStartBtn").style.display = ""; $("partyShareBtn").style.display = "";
+  partySyncFormat();
   fillFilterTeams(); fillFilterOptions(); renderPartyBuild();
   if(PARTY_CATALOG){ renderPartyHome(); return; }
   $("partyHero").innerHTML = `<div class="note">Loading…</div>`;
@@ -2475,11 +2714,24 @@ function partyBuildSyncOptions(){
 $("partyHostBack").onclick = ()=>{ partyLeave(); show("lobby"); };
 $("partyPlayBack").onclick = ()=>{ partyLeave(); show("lobby"); };
 $("partyRecapBack").onclick = ()=>{ partyLeave(); show("lobby"); };
-function partyLeave(){ clearTimeout(PARTY_TIMER); PARTY_TIMER=null; PARTY=null; PARTY_RECAP=null; syncModePill(); }
+function partyLeave(){ clearTimeout(PARTY_TIMER); PARTY_TIMER=null; clearTimeout(PARTY_TIER_T);
+  PARTY=null; PARTY_RECAP=null; syncModePill(); }
 
 // One create path for all four routes in: a featured card, a category row,
 // Random, and the builder. `where` is an optional element for the builder's
 // inline verdict; everything else reports through the screen's error line.
+// A night is the default because it is the designed experience; one round stays
+// reachable for a group with ten minutes rather than twenty.
+let PARTY_FORMAT = "night";
+function partySyncFormat(){
+  Array.from(document.querySelectorAll("#partyFormat .fmt")).forEach(b=>
+    b.classList.toggle("on", b.dataset.fmt===PARTY_FORMAT));
+  $("partyTimeWrap").style.display = PARTY_FORMAT==="night" ? "none" : "";
+}
+Array.from(document.querySelectorAll("#partyFormat .fmt")).forEach(b=>b.onclick=()=>{
+  PARTY_FORMAT = b.dataset.fmt; partySyncFormat();
+});
+
 let PARTY_LAST_PICK = null;
 async function partyCreate(pick, where){
   const tv=$("partyTime").value;
@@ -2488,7 +2740,9 @@ async function partyCreate(pick, where){
   const box = where || null;
   if(box) box.innerHTML=`<div class="note">Checking…</div>`;
   $("partyHostErr").textContent="";
-  const r = await api("party_create", { ...pick, time_limit_s: tv===""?null:Number(tv),
+  const r = await api("party_create", { ...pick, format: PARTY_FORMAT,
+                                        // A night's rounds carry their own clocks.
+                                        time_limit_s: PARTY_FORMAT==="night" ? null : (tv===""?null:Number(tv)),
                                         client_id:clientId(), label:name });
   if(!r.ok){
     const msg = "Error: "+r.error;
@@ -2506,7 +2760,8 @@ async function partyCreate(pick, where){
   if(box) box.innerHTML="";
   PARTY_LAST_PICK = pick;
   PARTY = { session:r.session, member_id:r.member_id, member_token:r.member_token,
-            host_token:r.host_token, is_host:true, members:r.members||[], sinceId:0, seen:new Map() };
+            host_token:r.host_token, is_host:true, members:r.members||[], sinceId:0, seen:new Map(),
+            rounds:r.rounds||[], round:null, next_round:null, tier:{}, tierRound:null };
   partyStash(r.session.id, { member_id:r.member_id, member_token:r.member_token, host_token:r.host_token });
   $("partySetup").classList.add("hidden"); $("partyLobby").classList.remove("hidden");
   $("partyCode").textContent = r.session.code;
@@ -2539,7 +2794,12 @@ $("partyStartBtn").onclick = async ()=>{
   if(!PARTY) return;
   const r = await api("party_start",{ session_id:PARTY.session.id, host_token:PARTY.host_token });
   if(!r.ok){ $("partyHostErr").textContent="Error: "+r.error; return; }
-  PARTY.session = r.session; partyOpenPlay(); partySchedule();
+  PARTY.session = r.session;
+  // Switch screens first, then apply — the response already says which round went
+  // live, and dropping it left the wrong panel up until the next poll: a second
+  // of wrong screen for the host, two for everyone else, at the exact moment the
+  // room is looking.
+  partyOpenPlay(); partyApply(r); partySchedule();
 };
 
 function partyOpenPlay(){
@@ -2550,6 +2810,9 @@ function partyOpenPlay(){
 // Joining from a ?p= link or a typed code. Resumes rather than re-joining when
 // this device already has a member token for the session.
 async function partyJoinByCode(code, label){
+  // syncModePill reads the Name It form, so arriving straight from a ?p= link
+  // used to label a Pickup session with whatever Name It mode was selected.
+  $("modePill").textContent = "pickup";
   const r = await api("party_join",{ code, client_id:clientId(), label: label ?? partyName() });
   if(!r.ok){
     show("partyHost"); $("partySetup").classList.remove("hidden"); $("partyLobby").classList.add("hidden");
@@ -2560,7 +2823,10 @@ async function partyJoinByCode(code, label){
   const stash = partyRecall(r.session.id) || {};
   PARTY = { session:r.session, member_id:r.member_id, member_token:r.member_token,
             host_token:stash.host_token||null, is_host:r.is_host, members:r.members||[],
-            sinceId:0, seen:new Map() };
+            sinceId:0, seen:new Map(),
+            // A late joiner lands mid-night wherever the room already is.
+            rounds:r.rounds||[], round:r.round??null, next_round:r.next_round??null,
+            tier:{}, tierRound:null };
   partyStash(r.session.id, { member_id:r.member_id, member_token:r.member_token, host_token:PARTY.host_token });
   partyAppend(r.board||[]);
   if(r.session.status==="lobby" && !r.is_host){
@@ -2580,18 +2846,27 @@ async function partyLoadPool(){
   const r = await api("suggest",{ pool:"players" });
   if(r && r.ok && r.items) PARTY_POOL = r.items.map(n=>({v:n, label:n, key:normStr(n)}));
 }
-function partyAcHide(){ $("partyAc").classList.add("hidden"); $("partyAc").innerHTML=""; }
-$("partyGuess").addEventListener("input", ()=>{
-  const q=normStr($("partyGuess").value).trim();
-  if(q.length<2 || !PARTY_POOL.length) return partyAcHide();
-  const hits=PARTY_POOL.filter(p=>p.key.startsWith(q)).slice(0,6);
-  if(!hits.length) return partyAcHide();
-  $("partyAc").innerHTML = hits.map(h=>`<div class="acitem" data-v="${esc(h.v)}">${esc(h.label)}</div>`).join("");
-  $("partyAc").classList.remove("hidden");
-  Array.from($("partyAc").children).forEach(el=>el.onclick=()=>{ $("partyGuess").value=el.dataset.v; partyAcHide(); partySubmit(); });
-});
-$("partyGuess").addEventListener("keydown", e=>{ if(e.key==="Enter"){ e.preventDefault(); partyAcHide(); partySubmit(); } });
+// Two rounds take a typed name, so the autocomplete is wired once and attached
+// twice rather than copied.
+function wirePartyAc(inputId, dropId, submit){
+  const inp=$(inputId), dd=$(dropId);
+  const hide=()=>{ dd.classList.add("hidden"); dd.innerHTML=""; };
+  inp.addEventListener("input", ()=>{
+    const q=normStr(inp.value).trim();
+    if(q.length<2 || !PARTY_POOL.length) return hide();
+    const hits=PARTY_POOL.filter(p=>p.key.startsWith(q)).slice(0,6);
+    if(!hits.length) return hide();
+    dd.innerHTML = hits.map(h=>`<div class="acitem" data-v="${esc(h.v)}">${esc(h.label)}</div>`).join("");
+    dd.classList.remove("hidden");
+    Array.from(dd.children).forEach(el=>el.onclick=()=>{ inp.value=el.dataset.v; hide(); submit(); });
+  });
+  inp.addEventListener("keydown", e=>{ if(e.key==="Enter"){ e.preventDefault(); hide(); submit(); } });
+  return hide;
+}
+const partyAcHide     = wirePartyAc("partyGuess", "partyAc", ()=>partySubmit());
+const partyTurnAcHide = wirePartyAc("partyTurnGuess", "partyTurnAc", ()=>partyTurnSubmit());
 $("partyGuessBtn").onclick = ()=>{ partyAcHide(); partySubmit(); };
+$("partyTurnBtn").onclick  = ()=>{ partyTurnAcHide(); partyTurnSubmit(); };
 
 async function partySubmit(){
   if(!PARTY) return;
@@ -2601,7 +2876,9 @@ async function partySubmit(){
   const r = await api("party_guess",{ session_id:PARTY.session.id, member_id:PARTY.member_id,
     member_token:PARTY.member_token, guess, since_id:PARTY.sinceId });
   if(!r.ok){
-    if(r.error==="session_not_live"){ partyPoll(); return; }
+    // A round transition this device hasn't seen yet — the server sends the new
+    // round state with the refusal, so applying it lands on the right panel.
+    if(r.error==="session_not_live" || r.error==="round_not_rapid"){ partyApply(r); partyPoll(); return; }
     $("partyPlayErr").textContent="Error: "+r.error; return;
   }
   if(r.result==="correct"){
@@ -2617,6 +2894,47 @@ async function partySubmit(){
   $("partyGuess").focus();
 }
 
+// Sudden death. turn_seq is echoed back so a device acting on a stale view of
+// whose turn it is gets refused rather than spending someone else's turn.
+async function partyTurnSubmit(){
+  const R = PARTY && PARTY.round;
+  if(!R || R.kind!=="sudden") return;
+  const guess = $("partyTurnGuess").value.trim();
+  if(!guess) return;
+  $("partyTurnGuess").value = "";
+  const r = await api("party_turn",{ session_id:PARTY.session.id, member_id:PARTY.member_id,
+    member_token:PARTY.member_token, guess, turn_seq:R.turn_seq });
+  const f = $("partyTurnFlash");
+  if(!r.ok){
+    if(r.error==="not_your_turn" || r.error==="round_not_live"){
+      f.style.color="var(--muted)"; f.textContent="Too slow — the turn moved on.";
+      partyApply(r); partyPoll(); return;
+    }
+    $("partyPlayErr").textContent="Error: "+r.error; return;
+  }
+  if(r.result==="correct"){ f.style.color="var(--good)"; f.innerHTML=`✅ ${esc(r.display_name)}`; }
+  else if(r.result==="duplicate"){ f.style.color="var(--bad)"; f.innerHTML=`💀 Already gone — you're out`; }
+  else { f.style.color="var(--bad)"; f.innerHTML=`💀 Not in this one — you're out`; }
+  if(r.recap) PARTY_RECAP = r.recap;
+  partyApply(r); partySchedule();
+}
+
+// Advancing the night. party_round_next closes whatever is live and opens what's
+// next, so the same call serves both "the round finished" and "we're done early".
+async function partyAdvance(btn){
+  if(!PARTY || !PARTY.host_token) return;
+  btn.disabled = true;
+  const r = await api("party_round_next",{ session_id:PARTY.session.id,
+    host_token:PARTY.host_token, member_id:PARTY.member_id });
+  btn.disabled = false;
+  if(!r.ok){ $("partyPlayErr").textContent="Error: "+r.error; return; }
+  if(r.recap) PARTY_RECAP = r.recap;
+  partyApply(r); partySchedule();
+  if(PARTY.round && PARTY.round.kind==="sudden") $("partyTurnGuess").focus();
+}
+$("partyNextBtn").onclick = ()=>partyAdvance($("partyNextBtn"));
+$("partySkipBtn").onclick = ()=>partyAdvance($("partySkipBtn"));
+
 $("partyEndBtn").onclick = async ()=>{
   if(!PARTY || !PARTY.host_token) return;
   const r = await api("party_end",{ session_id:PARTY.session.id, host_token:PARTY.host_token });
@@ -2629,8 +2947,13 @@ function partyShowRecap(){
   if(!PARTY_RECAP){ api("party_state",{session_id:PARTY.session.id, since_id:0}).then(r=>{ if(r.ok&&r.recap){ PARTY_RECAP=r.recap; partyShowRecap(); } }); return; }
   const R = PARTY_RECAP;
   show("partyRecap");
+  const night = R.format==="night" && (R.rounds||[]).length > 1;
+  $("partyRecapBody").innerHTML = night ? partyNightRecapHtml(R) : partyRapidRecapHtml(R, false);
+}
+
+function partyRapidRecapHtml(R, compact){
   const hit = R.count >= R.target;
-  let h = `<div style="text-align:center;margin:6px 0 12px">
+  let h = compact ? "" : `<div style="text-align:center;margin:6px 0 12px">
     <div style="font-size:40px;font-weight:900;color:${hit?"var(--good)":"var(--ink)"}">${R.count}<span class="note" style="font-size:18px"> / ${R.target}</span></div>
     <div class="note">${esc(R.prompt)}</div>
     <div class="note" style="margin-top:4px">${R.count + (R.misses||0)} shouted · ${R.count} landed</div></div>`;
@@ -2650,7 +2973,47 @@ function partyShowRecap(){
     h += `<div style="font-weight:700;font-size:12px;color:var(--muted);letter-spacing:.5px;margin-top:14px">YOU MISSED</div>
           <div style="margin-top:5px">${R.missed.map(m=>esc(m.display_name)).join(", ")}</div>`;
   }
-  $("partyRecapBody").innerHTML = h;
+  return h;
+}
+
+function partyRoundsBy(R){ const by={}; for(const x of R.rounds||[]) by[x.kind]=x; return by; }
+function partyMenace(by){
+  const rev = by.consensus && by.consensus.reveal;
+  return (rev && rev.unlocked && (rev.scores||[]).length) ? rev.scores[0] : null;
+}
+
+// Three headline tiles in three different currencies — a team number, a joke
+// title, a survivor — deliberately NOT summed. Totalling them would crown one
+// person and undo the reason the co-op round has no leaderboard.
+function partyNightRecapHtml(R){
+  const by = partyRoundsBy(R), men = partyMenace(by);
+  const tiles = [];
+  if(by.rapid) tiles.push([`${by.rapid.count}<span class="note" style="font-size:13px">/${by.rapid.target}</span>`, "named"]);
+  if(men) tiles.push([`${men.emoji} ${esc(men.label)}`, esc(men.title)]);
+  if(by.sudden && by.sudden.survivor) tiles.push([`🏆 ${esc(by.sudden.survivor)}`, "last standing"]);
+
+  let h = `<div class="note" style="text-align:center;margin-top:4px">${esc(R.prompt)}</div>`;
+  if(tiles.length) h += `<div style="display:flex;gap:8px;margin:12px 0 4px">` + tiles.map(([big,small])=>
+    `<div style="flex:1;min-width:0;text-align:center;background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:12px 6px">
+       <div style="font-weight:900;font-size:17px;line-height:1.2;overflow:hidden;text-overflow:ellipsis">${big}</div>
+       <div class="note" style="font-size:11.5px;margin-top:3px">${small}</div></div>`).join("") + `</div>`;
+
+  if(by.rapid)     h += `<div style="margin-top:14px">${partyRapidRecapHtml(by.rapid, true)}</div>`;
+  if(by.consensus) h += `<div style="margin-top:18px">${partyConsensusHtml(by.consensus.reveal)}</div>`;
+  if(by.sudden)    h += partySuddenRecapHtml(by.sudden);
+  return h;
+}
+
+function partySuddenRecapHtml(S){
+  let h = `<div style="font-weight:700;font-size:12px;color:var(--muted);letter-spacing:.5px;margin-top:18px">SUDDEN DEATH</div>`;
+  h += `<div class="note" style="margin-top:5px">${S.names} name${S.names===1?"":"s"} called before it ran out.</div>`;
+  h += (S.knocked_out||[]).map(k=>`<div style="margin-top:5px;font-size:14px">💀 <b>${esc(k.label)}</b> <span class="note">${
+    k.outcome==="timeout" ? "ran out of clock"
+      : k.outcome==="duplicate" ? `repeated ${esc(k.guess)}`
+      : `said ${esc(k.guess)}`}</span></div>`).join("");
+  if(S.survivor) h += `<div style="margin-top:8px;font-size:15px">🏆 <b>${esc(S.survivor)}</b> survived.</div>`;
+  else if((S.still_standing||[]).length>1) h += `<div class="note" style="margin-top:8px">Called early — ${S.still_standing.map(esc).join(" and ")} were still in.</div>`;
+  return h;
 }
 
 // Run it back = the SAME prompt, fresh session. It used to reassign a dropdown
@@ -2665,9 +3028,21 @@ $("partyAgainBtn").onclick = async ()=>{
 $("partyRecapShare").onclick = ()=>{
   if(!PARTY_RECAP) return;
   const R=PARTY_RECAP;
-  const text = `🏀 Pickup — ${R.prompt}\nWe got ${R.count}/${R.target}`
-    + ((R.missed||[]).length?`\nMissed: ${R.missed.map(m=>m.display_name).join(", ")}`:"")
-    + `\n${location.origin+location.pathname}`;
+  let text;
+  if(R.format==="night" && (R.rounds||[]).length > 1){
+    // Names, not squares. The one artifact this app produces that means something
+    // to somebody who has never opened it is a line with people in it.
+    const by = partyRoundsBy(R), men = partyMenace(by);
+    text = `🏀 Pickup night — ${R.prompt}\n`
+      + (by.rapid ? `We named ${by.rapid.count}/${by.rapid.target}\n` : "")
+      + (men ? `${men.emoji} ${men.label} was the ${men.title}\n` : "")
+      + (by.sudden && by.sudden.survivor ? `🏆 ${by.sudden.survivor} survived sudden death\n` : "")
+      + (location.origin+location.pathname);
+  } else {
+    text = `🏀 Pickup — ${R.prompt}\nWe got ${R.count}/${R.target}`
+      + ((R.missed||[]).length?`\nMissed: ${R.missed.map(m=>m.display_name).join(", ")}`:"")
+      + `\n${location.origin+location.pathname}`;
+  }
   if(navigator.share){ navigator.share({text}).catch(()=>{}); return; }
   try{ navigator.clipboard?.writeText(text); }catch(e){}
 };

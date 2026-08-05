@@ -752,7 +752,12 @@ export async function actionPartyEnd(_req: Request, body: any) {
 }
 
 // ---------------------------------------------------------------------------
-// Host advances the night: close what's live, open what's next.
+// Host advances the night, ONE BEAT PER CALL.
+//
+// Closing a round and opening the next used to happen in a single call, which
+// skipped straight past the intermission — and for round 2 the intermission IS
+// the payoff: the room never got to see whose take was the Menace. So a live
+// round ends here and stops; a second call opens the next one.
 // ---------------------------------------------------------------------------
 export async function actionPartyRoundNext(_req: Request, body: any) {
   const { data: session } = await db.from("mp_party_sessions").select("*")
@@ -760,6 +765,7 @@ export async function actionPartyRoundNext(_req: Request, body: any) {
   if (!session) return err("unknown_session", 404);
   if (session.host_token !== String(body.host_token ?? "")) return err("only_host_can_advance", 403);
 
+  const memberId = body.member_id ? String(body.member_id) : null;
   let rounds = await loadRounds(session.id);
   if (!rounds.length) return err("no_rounds", 409);
 
@@ -769,22 +775,28 @@ export async function actionPartyRoundNext(_req: Request, body: any) {
       .update({ status: "ended", ended_at: new Date().toISOString() })
       .eq("id", live.id).eq("status", "live");
     rounds = await loadRounds(session.id);
+    // Nothing left to play: the night is over and the recap is the next screen.
+    if (!roundPhase(rounds).pending) {
+      const done = await syncSessionEnd(session, rounds);
+      return ok({
+        session: publicSession(done), ...(await roundStateFor(done, rounds, memberId)),
+        recap: await buildRecap(done, rounds),
+      });
+    }
+    // Otherwise stop at the intermission so the room can look at what just happened.
+    return ok({ session: publicSession(session), ...(await roundStateFor(session, rounds, memberId)) });
   }
 
   const next = roundPhase(rounds).pending;
   if (next) {
     await startRound(session, next);
     rounds = await loadRounds(session.id);
-    return ok({
-      session: publicSession(session),
-      ...(await roundStateFor(session, rounds, body.member_id ? String(body.member_id) : null)),
-    });
+    return ok({ session: publicSession(session), ...(await roundStateFor(session, rounds, memberId)) });
   }
 
   const ended = await syncSessionEnd(session, rounds);
   return ok({
-    session: publicSession(ended),
-    ...(await roundStateFor(ended, rounds, body.member_id ? String(body.member_id) : null)),
+    session: publicSession(ended), ...(await roundStateFor(ended, rounds, memberId)),
     recap: await buildRecap(ended, rounds),
   });
 }
