@@ -66,6 +66,46 @@ function cleanLabel(v: unknown, fallback = "Player"): string {
   return (String(v ?? "").trim() || fallback).slice(0, MAX_LABEL);
 }
 
+// ---------------------------------------------------------------------------
+// Who's who. Everyone in the room used to render behind the same 🏀, which made
+// the lobby, the shared board and the sudden-death seat rail a wall of identical
+// icons — you had to read four names to find yourself. One emoji each fixes that
+// at a glance, and it survives two people picking the same label.
+//
+// DERIVED from join order, not stored. joined_at never changes, so the value is
+// stable for the life of the session; a column would be a second copy of a fact
+// the row already carries, and assigning it on insert would race between two
+// phones joining at once. Every members query orders by (joined_at, id) — the id
+// tiebreak matters, because equal timestamps would otherwise let two members
+// swap emoji between polls.
+//
+// Distinct up to 20 people, which is well past the point where a room can hear
+// itself. Beyond that it wraps, and two people share — cosmetic, and preferable
+// to reaching for symbols nobody can tell apart at 14px.
+const PARTY_EMOJI = [
+  "🦊", "🐻", "🐼", "🦁", "🐯", "🐸", "🐙", "🦈", "🐝", "🦄",
+  "🐺", "🦉", "🐨", "🦅", "🐢", "🦖", "🐬", "🦋", "🐧", "🦩",
+];
+const MEMBER_ORDER = { ascending: true } as const;
+
+function withEmoji<T extends { id: string }>(rows: T[] | null | undefined) {
+  return (rows ?? []).map((m, i) => ({ ...m, emoji: PARTY_EMOJI[i % PARTY_EMOJI.length] }));
+}
+
+// The one place members are read, so join order (and therefore the emoji) can
+// never disagree between two callers.
+async function loadMembers(sessionId: string) {
+  const { data } = await db.from("mp_party_members").select("id, label")
+    .eq("session_id", sessionId)
+    .order("joined_at", MEMBER_ORDER).order("id", MEMBER_ORDER);
+  return withEmoji(data);
+}
+
+// member_id -> emoji, for the rows that denormalise a label rather than joining.
+async function emojiMap(sessionId: string): Promise<Map<string, string>> {
+  return new Map((await loadMembers(sessionId)).map((m) => [m.id, m.emoji]));
+}
+
 // Sessions end on their own so a host whose phone locks can't strand the room.
 // Called lazily from state/guess rather than by a scheduler.
 async function autoEndIfExpired(session: any) {
@@ -234,7 +274,7 @@ async function drawConsensusItems(session: any): Promise<TierItem[]> {
 // parameter and neither queries — which is the whole reason this round needs no
 // mp_tier_topics row: the room's opinions can never move a public theme's
 // consensus, and the live demo boards can never move the room's score.
-function consensusReveal(round: any, boards: any[]) {
+function consensusReveal(round: any, boards: any[], emoji?: Map<string, string>) {
   const items = (round.item_set ?? []) as TierItem[];
   const tiers = (round.tiers ?? CONSENSUS_RANKS) as string[];
   // Two boards is the floor for "the room" to mean anything at all. Below it the
@@ -272,7 +312,11 @@ function consensusReveal(round: any, boards: any[]) {
   const scores = boards.map((b) => {
     const s = scoreBoard(b.assignments, versusOrder, tiers);
     return {
-      label: b.member_label,
+      member_id: b.member_id, label: b.member_label,
+      // Their identity in the room. Distinct from `emoji` below, which is the
+      // spice BAND (🚨/🌶️/🧊) — two different things that both happen to be a
+      // glyph next to a name, so they get two different keys.
+      member_emoji: emoji?.get(b.member_id) ?? null,
       ...(s ?? { matched: 0, rated: 0, spice: 0, emoji: "🤷", title: "Didn't rank" }),
     };
   }).sort((a, b) => b.spice - a.spice);   // spiciest first — the Menace leads the reveal
@@ -311,15 +355,22 @@ async function roundStateFor(session: any, rounds: any[], memberId: string | nul
 
   if (cur.kind === "consensus") {
     const { data: boards } = await db.from("mp_party_round_boards")
-      .select("member_id, member_label, assignments").eq("round_id", cur.id);
+      .select("member_id, member_label, assignments, submitted_at").eq("round_id", cur.id);
     const rows = boards ?? [];
     const mine = memberId ? rows.find((b) => b.member_id === memberId) : null;
+    // Two different facts, and conflating them is what left the host guessing:
+    // a board EXISTS the moment anyone taps a number, because the round
+    // autosaves. Only submitted_at means "I'm done, move us on".
+    const submitted = rows.filter((b) => b.submitted_at);
     out.round = publicRound(cur, {
       // While live: only WHO has locked in, never what they said.
       boards_saved: rows.length,
       saved_by: rows.map((b) => b.member_label),
+      submitted: submitted.length,
+      submitted_ids: submitted.map((b) => b.member_id),
       your_assignments: mine?.assignments ?? {},
-      reveal: cur.status === "ended" ? consensusReveal(cur, rows) : null,
+      your_submitted: !!mine?.submitted_at,
+      reveal: cur.status === "ended" ? consensusReveal(cur, rows, await emojiMap(session.id)) : null,
     });
     return out;
   }
@@ -329,18 +380,18 @@ async function roundStateFor(session: any, rounds: any[], memberId: string | nul
     const nameOf = new Map(pool.map((p) => [p.player_key, p.display_name]));
     const [{ data: alive }, { data: turns }] = await Promise.all([
       db.rpc("mp_party_alive", { p_round: cur.id }),
-      db.from("mp_party_turns").select("member_label, guess, player_key, outcome")
+      db.from("mp_party_turns").select("member_id, member_label, guess, player_key, outcome")
         .eq("round_id", cur.id).order("id", { ascending: true }),
     ]);
     const log = turns ?? [];
     out.round = publicRound(cur, {
       alive: (alive ?? []).map((a: any) => ({ member_id: a.member_id, label: a.label })),
       eliminated: log.filter((t) => t.outcome !== "correct")
-        .map((t) => ({ label: t.member_label, outcome: t.outcome, guess: t.guess })),
+        .map((t) => ({ member_id: t.member_id, label: t.member_label, outcome: t.outcome, guess: t.guess })),
       // Resolved names, not the typed text, so a spent name reads the same to
       // everyone regardless of who shortened it.
       used: log.filter((t) => t.outcome === "correct")
-        .map((t) => ({ label: t.member_label, display_name: nameOf.get(t.player_key ?? "") ?? t.guess })),
+        .map((t) => ({ member_id: t.member_id, label: t.member_label, display_name: nameOf.get(t.player_key ?? "") ?? t.guess })),
     });
     return out;
   }
@@ -375,12 +426,15 @@ async function startRound(session: any, round: any) {
 
 async function boardSince(sessionId: string, sinceId: number) {
   const { data } = await db.from("mp_party_answers")
-    .select("id, player_key, display_name, rarity_tier, member_label")
+    .select("id, player_key, display_name, rarity_tier, member_id, member_label")
     .eq("session_id", sessionId).gt("id", sinceId).order("id", { ascending: true });
   return (data ?? []).map((a) => ({
     id: a.id, player_key: a.player_key, display_name: a.display_name,
     rarity_tier: a.rarity_tier, rarity_label: RARITY_LABEL[a.rarity_tier ?? ""] ?? null,
-    member_label: a.member_label,
+    // member_id rides along so the client can badge the row with whoever said it.
+    // The label is denormalised here (it survives a rename mid-game); the emoji is
+    // looked up live from PARTY.members, so it cannot go stale.
+    member_id: a.member_id, member_label: a.member_label,
   }));
 }
 
@@ -517,7 +571,7 @@ export async function actionPartyCreate(req: Request, body: any) {
   const roundRows = format === "night"
     ? [
         { idx: 1, kind: "rapid", prompt: promptText, target, time_limit_s: RAPID_S },
-        { idx: 2, kind: "consensus", prompt: "Rank five of them", tiers: CONSENSUS_RANKS },
+        { idx: 2, kind: "consensus", prompt: "Put five of them in order", tiers: CONSENSUS_RANKS },
         { idx: 3, kind: "sudden", prompt: promptText },
       ]
     : [{ idx: 1, kind: "rapid", prompt: promptText, target, time_limit_s: raw }];
@@ -534,7 +588,7 @@ export async function actionPartyCreate(req: Request, body: any) {
   return ok({
     session: publicSession(session), host_token: hostToken,
     member_id: member?.id, member_token: memberToken, is_host: true,
-    members: [{ id: member?.id, label: member?.label }],
+    members: await loadMembers(session.id),
     rounds: (await loadRounds(session.id)).map((r) => publicRound(r)),
   });
 }
@@ -594,14 +648,11 @@ export async function actionPartyJoin(req: Request, body: any) {
     } else member = data;
   }
 
-  const { data: members } = await db.from("mp_party_members")
-    .select("id, label").eq("session_id", live.id).order("joined_at", { ascending: true });
-
   return ok({
     session: publicSession(live),
     member_id: member!.id, member_token: member!.member_token,
     is_host: live.host_client_id === clientId,
-    members: members ?? [],
+    members: await loadMembers(live.id),
     board: await boardSince(live.id, 0),
     count: await answerCount(live.id),
     // A late joiner lands wherever the room already is, mid-night included.
@@ -759,11 +810,8 @@ export async function actionPartyState(_req: Request, body: any) {
   live = await syncSessionEnd(live, rounds);
 
   const sinceId = Number(body.since_id ?? 0);
-  const { data: members } = await db.from("mp_party_members")
-    .select("id, label").eq("session_id", live.id).order("joined_at", { ascending: true });
-
   const out: Record<string, unknown> = {
-    session: publicSession(live), members: members ?? [],
+    session: publicSession(live), members: await loadMembers(live.id),
     answers: await boardSince(live.id, sinceId), count: await answerCount(live.id),
     ...(await roundStateFor(live, rounds, body.member_id ? String(body.member_id) : null)),
   };
@@ -840,6 +888,12 @@ export async function actionPartyRoundNext(_req: Request, body: any) {
 
 // ---------------------------------------------------------------------------
 // Round 2: one board per member, upserted on the primary key.
+//
+// Two things arrive on this action because they are one user gesture apart: the
+// autosave that fires on every tap, and the explicit "Lock it in" that tells the
+// host the room can move. `submit` is tri-state — absent leaves the flag alone
+// (an autosave must never un-submit a locked board), true locks, false unlocks
+// so a mis-tap is recoverable.
 // ---------------------------------------------------------------------------
 export async function actionPartyTierSave(_req: Request, body: any) {
   const { data: session } = await db.from("mp_party_sessions").select("id")
@@ -870,18 +924,39 @@ export async function actionPartyTierSave(_req: Request, body: any) {
     taken.add(v as string); asg[k] = v as string;
   }
 
-  const { error } = await db.from("mp_party_round_boards").upsert({
+  // Locking in a half-finished order would tell the host the room is ready when
+  // it is not, so the full ordering is the price of the signal. Unlocking is
+  // always allowed.
+  const wantsSubmit = body.submit === true;
+  if (wantsSubmit && Object.keys(asg).length < validKeys.size) {
+    return err("ranking_incomplete", 409, { rated: Object.keys(asg).length, need: validKeys.size });
+  }
+
+  const row: Record<string, unknown> = {
     round_id: round.id, member_id: member.id, member_label: member.label,
     assignments: asg, updated_at: new Date().toISOString(),
-  }, { onConflict: "round_id,member_id" });
+  };
+  // Only touch submitted_at when the caller said something about it — an
+  // autosave (submit absent) must leave a locked board locked.
+  if (body.submit === true) row.submitted_at = new Date().toISOString();
+  if (body.submit === false) row.submitted_at = null;
+
+  const { error } = await db.from("mp_party_round_boards")
+    .upsert(row, { onConflict: "round_id,member_id" });
   if (error) return err(error.message, 500);
 
-  const { count } = await db.from("mp_party_round_boards")
-    .select("member_id", { count: "exact", head: true }).eq("round_id", round.id);
-  const { data: members } = await db.from("mp_party_members")
-    .select("id", { count: "exact" }).eq("session_id", session.id);
+  const { data: rows } = await db.from("mp_party_round_boards")
+    .select("member_id, submitted_at").eq("round_id", round.id);
+  const boards = rows ?? [];
+  const submitted = boards.filter((b) => b.submitted_at);
   return ok({
-    saved: true, boards_saved: count ?? 0, members: (members ?? []).length,
+    saved: true, boards_saved: boards.length,
+    submitted: submitted.length, submitted_ids: submitted.map((b) => b.member_id),
+    // Read back rather than echoing `submit`: an autosave leaves the flag alone,
+    // so echoing the request would report a locked board as unlocked and the
+    // client would re-enable the buttons under the player.
+    your_submitted: submitted.some((b) => b.member_id === member.id),
+    members: (await loadMembers(session.id)).length,
     rated: Object.keys(asg).length,
   });
 }
@@ -984,14 +1059,19 @@ export async function actionPartyTurn(_req: Request, body: any) {
 // the reason the co-op round has no leaderboard.
 async function buildRecap(session: any, rounds: any[] = []) {
   const { data: rows } = await db.from("mp_party_answers")
-    .select("player_key, display_name, rarity_tier, member_label")
+    .select("player_key, display_name, rarity_tier, member_id, member_label")
     .eq("session_id", session.id).order("id", { ascending: true });
   const answers = rows ?? [];
+  const emoji = await emojiMap(session.id);
 
-  const byMember = new Map<string, number>();
+  // Keyed on member_id, not the label: two people in a room can pick the same
+  // name, and merging their counts would credit one of them with both.
+  const byMember = new Map<string, { label: string; emoji: string | null; n: number }>();
   for (const a of answers) {
-    const k = a.member_label ?? "Someone";
-    byMember.set(k, (byMember.get(k) ?? 0) + 1);
+    const k = a.member_id ?? a.member_label ?? "someone";
+    const cur = byMember.get(k);
+    if (cur) cur.n++;
+    else byMember.set(k, { label: a.member_label ?? "Someone", emoji: emoji.get(a.member_id) ?? null, n: 1 });
   }
 
   const pool = (Array.isArray(session.answers_snapshot) ? session.answers_snapshot : []) as PoolEntry[];
@@ -1006,7 +1086,7 @@ async function buildRecap(session: any, rounds: any[] = []) {
     count: answers.length, misses: session.misses,
     deep_cuts: answers.filter((a) => a.rarity_tier === "deep_cut")
       .map((a) => a.display_name),
-    contributors: Array.from(byMember, ([label, n]) => ({ label, n }))
+    contributors: Array.from(byMember, ([member_id, v]) => ({ member_id, ...v }))
       .sort((a, b) => b.n - a.n),
     missed,
   };
@@ -1025,7 +1105,7 @@ async function buildRecap(session: any, rounds: any[] = []) {
         .select("member_id, member_label, assignments").eq("round_id", r.id);
       perRound.push({
         ...head, prompt: r.prompt, item_set: r.item_set ?? [], tiers: r.tiers ?? CONSENSUS_RANKS,
-        reveal: consensusReveal(r, boards ?? []),
+        reveal: consensusReveal(r, boards ?? [], emoji),
       });
       continue;
     }
@@ -1033,27 +1113,35 @@ async function buildRecap(session: any, rounds: any[] = []) {
     if (r.kind === "sudden") {
       const [{ data: alive }, { data: turns }] = await Promise.all([
         db.rpc("mp_party_alive", { p_round: r.id }),
-        db.from("mp_party_turns").select("member_label, guess, player_key, outcome")
+        db.from("mp_party_turns").select("member_id, member_label, guess, player_key, outcome")
           .eq("round_id", r.id).order("id", { ascending: true }),
       ]);
       const log = turns ?? [];
-      const standing = (alive ?? []).map((a: any) => a.label as string);
-      const said = new Map<string, number>();
+      const standing = (alive ?? []).map((a: any) => ({
+        member_id: a.member_id, label: a.label as string, emoji: emoji.get(a.member_id) ?? null,
+      }));
+      const said = new Map<string, { label: string; emoji: string | null; n: number }>();
       for (const t of log) {
         if (t.outcome !== "correct") continue;
-        const k = t.member_label ?? "Someone";
-        said.set(k, (said.get(k) ?? 0) + 1);
+        const k = t.member_id ?? t.member_label ?? "someone";
+        const cur = said.get(k);
+        if (cur) cur.n++;
+        else said.set(k, { label: t.member_label ?? "Someone", emoji: emoji.get(t.member_id) ?? null, n: 1 });
       }
       perRound.push({
         ...head, prompt: r.prompt,
         // One survivor is a winner. A round abandoned early leaves several
         // standing, and picking one of them would be a lie.
-        survivor: standing.length === 1 ? standing[0] : null,
-        still_standing: standing,
+        survivor: standing.length === 1 ? standing[0].label : null,
+        survivor_emoji: standing.length === 1 ? standing[0].emoji : null,
+        still_standing: standing.map((s) => s.label),
         names: log.filter((t) => t.outcome === "correct").length,
         knocked_out: log.filter((t) => t.outcome !== "correct")
-          .map((t) => ({ label: t.member_label, outcome: t.outcome, guess: t.guess })),
-        said: Array.from(said, ([label, n]) => ({ label, n })).sort((a, b) => b.n - a.n),
+          .map((t) => ({
+            member_id: t.member_id, label: t.member_label, emoji: emoji.get(t.member_id) ?? null,
+            outcome: t.outcome, guess: t.guess,
+          })),
+        said: Array.from(said, ([member_id, v]) => ({ member_id, ...v })).sort((a, b) => b.n - a.n),
       });
     }
   }

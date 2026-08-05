@@ -124,10 +124,21 @@
     background:var(--panel2);border:1px solid var(--line);color:var(--muted)}
   .seat.now{background:var(--accent);border-color:var(--accent);color:#0b1020}
   .seat.out{text-decoration:line-through;opacity:.5}
-  /* Round 2 ranks five names against four tiers. The tier BOARD (.tierrow) is
-     right for 8-12 chips across six tiers, but here it spends most of a phone
-     screen on an "Unranked" gutter — so this round is a list, one row per name,
-     every tier one tap away. */
+  /* THE ASK. Rounds 2 and 3 each restated the prompt in a .note — 12px grey,
+     wedged between the round label and a 22px "Your call" — and it read as
+     chrome, not as the question. A player on the clock in sudden death reported
+     no question on the screen at all when the text was demonstrably there. So
+     the ask gets a box of its own: eyebrow above, prompt at body size, accent
+     border. Duplicating the header prompt is the intended cost — the header is
+     the session's identity, this is what you have to do right now. */
+  .askbox{margin-top:10px;padding:9px 12px;border-radius:10px;text-align:center;
+    background:rgba(249,115,22,.09);border:1px solid var(--accent)}
+  .askbox .eb{font-size:10.5px;font-weight:800;letter-spacing:1.2px;color:var(--accent)}
+  .askbox .aq{font-size:15px;font-weight:700;line-height:1.35;margin-top:2px}
+  /* Round 2 puts five names in a 1-5 order. The tier BOARD (.tierrow) is right
+     for 8-12 chips across six tiers, but here it spends most of a phone screen
+     on an "Unranked" gutter — so this round is a list, one row per name, every
+     position one tap away. */
   /* Name on its own line, buttons spread underneath. Side by side, five numbers
      left about 110px for the name and "Kareem Abdul-Jabbar" became "Kareem A…" —
      you cannot rank players you cannot read. Stacking also makes each number a
@@ -804,10 +815,15 @@
       <div id="partyBoard" style="margin-top:6px"></div>
     </div>
 
-    <!-- ROUND 2 · guess the room. Reuses the tier board's markup and CSS. -->
+    <!-- ROUND 2 · guess the room. A 1-5 ordering, not a tier board. -->
     <div id="partyPanelTier" class="hidden">
-      <div class="note" style="margin-top:8px">Rank these five on your own phone. Nobody sees your board until everyone's in.</div>
+      <div class="askbox" id="partyTierAsk"></div>
+      <div class="note" style="margin-top:8px">1 is best. Tap a number to claim it — whoever had it swaps with you, so no two players share a spot. Nobody sees your order until the reveal.</div>
       <div id="partyTierRows" style="margin-top:10px"></div>
+      <!-- The round has no clock, so without this the host is guessing whether
+           the room is done. A board row exists from the first tap (it autosaves),
+           which is why "ready" needs its own button. -->
+      <button id="partyTierDone" style="margin-top:4px">Lock it in</button>
       <div class="note" id="partyTierState" style="margin-top:8px;min-height:16px"></div>
     </div>
 
@@ -815,7 +831,7 @@
     <div id="partyPanelSudden" class="hidden">
       <!-- The ask, in the round itself. Whoever is on the clock should not have to
            look back up at the header to remember what they are naming. -->
-      <div class="note" id="partySuddenAsk" style="margin-top:8px;text-align:center"></div>
+      <div class="askbox" id="partySuddenAsk"></div>
       <div id="partySuddenSeat" style="margin-top:6px;text-align:center"></div>
       <div class="turnbar" id="partySeats"></div>
       <div class="linkbox" style="margin-top:12px">
@@ -2446,11 +2462,31 @@ function partyAppend(rows){
 const PARTY_PANELS = { rapid:"partyPanelRapid", consensus:"partyPanelTier",
                        sudden:"partyPanelSudden", break:"partyPanelBreak" };
 
+// Everyone used to render behind the same 🏀, so the lobby, the shared board and
+// the seat rail were a wall of identical icons and you had to read four names to
+// find yourself. The server derives one emoji per member from join order; this
+// is the lookup for rows that only carry a member_id. Falls back to the ball for
+// a session that started before this shipped.
+function partyEmoji(memberId){
+  const m = (PARTY && PARTY.members || []).find(x=>x.id===memberId);
+  return (m && m.emoji) || "🏀";
+}
+// Recap rows arrive with their emoji already resolved server-side — PARTY.members
+// is gone by then on a rejoin, so they cannot be looked up.
+function partyWho(emoji, label){ return `${emoji||"🏀"} ${esc(label||"Someone")}`; }
+
+// The question, stated where the answer gets typed. Both rounds restate the
+// session prompt on purpose: the header is what the room is playing, this is
+// what you have to do right now.
+function askBox(el, eyebrow, question){
+  $(el).innerHTML = `<div class="eb">${eyebrow}</div><div class="aq">${esc(question)}</div>`;
+}
+
 function partyRender(){
   if(!PARTY) return;
   const s = PARTY.session;
   if(!$("partyHost").classList.contains("hidden")){
-    $("partyMembers").innerHTML = (PARTY.members||[]).map(m=>`<div class="slot"><div class="n">🏀</div><div class="name">${esc(m.label)}</div></div>`).join("")
+    $("partyMembers").innerHTML = (PARTY.members||[]).map(m=>`<div class="slot"><div class="n">${m.emoji||"🏀"}</div><div class="name">${esc(m.label)}${m.id===PARTY.member_id?` <span class="note">you</span>`:""}</div></div>`).join("")
       || `<div class="note">Nobody's joined yet.</div>`;
     $("partyMemberCount").textContent = `· ${(PARTY.members||[]).length}`;
     if(s.status==="live" || s.status==="ended") partyOpenPlay();
@@ -2502,33 +2538,39 @@ function partyRenderRapid(s){
   const rows = Array.from(PARTY.seen.values()).reverse();
   $("partyBoard").innerHTML = rows.length ? rows.map(a=>{
     const e = a.rarity_tier==="deep_cut"?"🔥 ":a.rarity_tier==="rare"?"💎 ":"";
-    return `<div class="slot"><div class="n">${e||"✓"}</div><div class="name">${esc(a.display_name)}</div><div class="ctx">${esc(a.member_label||"")}</div></div>`;
+    return `<div class="slot"><div class="n">${e||"✓"}</div><div class="name">${esc(a.display_name)}</div><div class="ctx">${partyEmoji(a.member_id)} ${esc(a.member_label||"")}</div></div>`;
   }).join("") : `<div class="note">Nothing yet — start shouting.</div>`;
 }
 
 // ---------------------------------------------------------------- round 2
-// Mirrors renderTierBoard/tierChip against party state and reuses their CSS
-// (.tierrow / .chip / .tbtn / TIER_COLORS) rather than editing the shipped tier
-// board, whose output is documented as must-not-shift.
-// Round 2 is an ORDERING: every name gets a distinct 1..5. A rank is a position,
-// so picking one somebody already holds SWAPS them rather than creating a tie —
-// which means the board is always a valid partial ordering and any mistake is one
-// tap to fix.
+// A 1-to-5 ORDERING, one row per name, every position one tap away.
+//
+// A rank is a POSITION, so two names can never hold the same one: tapping a
+// number somebody already has SWAPS them. That keeps the board a valid partial
+// ordering at every instant and makes any mistake one tap to fix. The server
+// de-dupes independently in party_tier_save — it cannot take the client's word
+// that this ran.
 function partyRenderTier(R){
   const items = R.item_set || [], ranks = R.tiers || ["1","2","3","4","5"];
   // Seed from the server ONCE per round. Re-seeding on every poll would clobber a
   // tap that is still inside its save debounce.
-  if(PARTY.tierRound !== R.id){ PARTY.tierRound = R.id; PARTY.tier = { ...(R.your_assignments||{}) }; }
+  if(PARTY.tierRound !== R.id){
+    PARTY.tierRound = R.id;
+    PARTY.tier = { ...(R.your_assignments||{}) };
+    PARTY.tierDone = !!R.your_submitted;
+  }
+  const locked = !!PARTY.tierDone;
+  askBox("partyTierAsk", "PUT THESE IN ORDER", PARTY.session.prompt);
   $("partyTierRows").innerHTML = items.map(it=>{
     const cur = PARTY.tier[it.key] || null;
     const btns = ranks.map(t=>{
       const style = cur===t ? `background:var(--accent);color:#0b1020` : "";
-      return `<button data-k="${esc(it.key)}" data-t="${t}" style="${style}">${t}</button>`;
+      return `<button data-k="${esc(it.key)}" data-t="${t}" style="${style}"${locked?" disabled":""}>${t}</button>`;
     }).join("");
     const badge = cur ? `<span class="rkno">${cur}</span>` : "";
-    return `<div class="prank ${cur?'set':''}"><div class="pn">${badge}${esc(it.label)}</div><div class="pb">${btns}</div></div>`;
+    return `<div class="prank ${cur?'set':''}" style="${locked?"opacity:.65":""}"><div class="pn">${badge}${esc(it.label)}</div><div class="pb">${btns}</div></div>`;
   }).join("");
-  Array.from($("partyTierRows").querySelectorAll(".pb button")).forEach(b=>b.onclick=()=>{
+  if(!locked) Array.from($("partyTierRows").querySelectorAll(".pb button")).forEach(b=>b.onclick=()=>{
     const k=b.dataset.k, t=b.dataset.t;
     if(PARTY.tier[k]===t){ delete PARTY.tier[k]; }        // tap your own number to clear it
     else {
@@ -2541,23 +2583,45 @@ function partyRenderTier(R){
     }
     partyRenderTier(R); partyTierSave();
   });
-  const done = Object.keys(PARTY.tier).length, n = R.boards_saved||0, m = (PARTY.members||[]).length;
-  $("partyTierState").textContent = done < items.length
-    ? `Put them 1 to ${items.length} — ${items.length-done} to go. 1 is best.`
-    : `${n} of ${m} locked in${n<m?" — waiting on the rest":". Host can reveal."}`;
-  if(PARTY.is_host) $("partySkipBtn").textContent = n>=m ? "Reveal the room →" : "Finish round →";
+
+  const done = Object.keys(PARTY.tier).length;
+  const ready = R.submitted||0, m = (PARTY.members||[]).length;
+  const btn = $("partyTierDone");
+  btn.disabled = !locked && done < items.length;
+  btn.className = locked ? "ghost" : "";
+  btn.textContent = locked ? "✅ Locked in — change my order"
+    : done < items.length ? `${items.length-done} more to place` : "Lock it in";
+  $("partyTierState").textContent = locked
+    ? `${ready} of ${m} ready${ready<m?" — waiting on the rest":". Host can reveal."}`
+    : done < items.length ? `1 is best, ${items.length} is worst.`
+    : `${ready} of ${m} ready — lock yours in so the host knows.`;
+  // The host still decides when to reveal, but should be able to see at a glance
+  // whether pressing it would cut somebody off mid-decision.
+  if(PARTY.is_host) $("partySkipBtn").textContent = ready>=m && m>0
+    ? "Reveal the room →" : `Reveal (${ready}/${m}) →`;
 }
 let PARTY_TIER_T = null;
-function partyTierSave(){
+// submit is tri-state on the wire: undefined from the autosave (leave the flag
+// alone), true from Lock it in, false from the undo.
+function partyTierSave(submit){
   clearTimeout(PARTY_TIER_T);
-  PARTY_TIER_T = setTimeout(async ()=>{
+  const fire = async ()=>{
     const R = PARTY && PARTY.round;
     if(!R || R.kind!=="consensus" || R.status!=="live") return;
-    const r = await api("party_tier_save",{ session_id:PARTY.session.id, member_id:PARTY.member_id,
-      member_token:PARTY.member_token, round_id:R.id, assignments:PARTY.tier });
-    if(r.ok){ R.boards_saved = r.boards_saved; partyRender(); }
-  }, 450);
+    const body = { session_id:PARTY.session.id, member_id:PARTY.member_id,
+      member_token:PARTY.member_token, round_id:R.id, assignments:PARTY.tier };
+    if(submit !== undefined) body.submit = submit;
+    const r = await api("party_tier_save", body);
+    if(r.ok){
+      R.boards_saved = r.boards_saved; R.submitted = r.submitted;
+      R.your_submitted = r.your_submitted; PARTY.tierDone = r.your_submitted;
+      partyRender();
+    }
+  };
+  // A tap debounces; pressing the button must not sit behind 450ms of nothing.
+  if(submit !== undefined) fire(); else PARTY_TIER_T = setTimeout(fire, 450);
 }
+$("partyTierDone").onclick = ()=>partyTierSave(!PARTY.tierDone);
 
 // ---------------------------------------------------------------- round 3
 function partyRenderSudden(R){
@@ -2566,21 +2630,21 @@ function partyRenderSudden(R){
   const mine = R.turn_member_id === PARTY.member_id;
   const holder = (PARTY.members||[]).find(m=>m.id===R.turn_member_id);
   const t = R.turn_seconds_left;
-  $("partySuddenAsk").innerHTML = `Name one — <b>${esc(PARTY.session.prompt)}</b>`;
+  askBox("partySuddenAsk", "NAME ONE", PARTY.session.prompt);
   $("partySuddenSeat").innerHTML = mine
     ? `<div style="font-size:22px;font-weight:900;color:var(--accent)">Your call${t!=null?` · ${t}s`:""}</div>`
-    : `<div style="font-size:18px;font-weight:800">${esc(holder?holder.label:"…")} is up${t!=null?` · ${t}s`:""}</div>`;
+    : `<div style="font-size:18px;font-weight:800">${holder?partyWho(holder.emoji,holder.label):"…"} is up${t!=null?` · ${t}s`:""}</div>`;
   // Out is derived from who's alive, not from matching labels — two people in a
   // room can pick the same name.
   $("partySeats").innerHTML = (PARTY.members||[]).map(m=>{
     const out = !aliveIds.has(m.id);
-    return `<span class="seat ${m.id===R.turn_member_id?'now':''} ${out?'out':''}">${esc(m.label)}</span>`;
+    return `<span class="seat ${m.id===R.turn_member_id?'now':''} ${out?'out':''}">${m.emoji||"🏀"} ${esc(m.label)}</span>`;
   }).join("");
   $("partyTurnGuess").disabled = !mine; $("partyTurnBtn").disabled = !mine;
   $("partyTurnGuess").placeholder = mine ? "Name one…" : "Waiting…";
   const used = R.used || [];
   $("partyUsed").innerHTML = used.length
-    ? `<div class="note">Gone: ${used.map(u=>esc(u.display_name)).join(", ")}</div>` : "";
+    ? `<div class="note">Gone: ${used.map(u=>`${partyEmoji(u.member_id)} ${esc(u.display_name)}`).join(" · ")}</div>` : "";
 }
 
 // ---------------------------------------------------------------- intermission
@@ -2616,8 +2680,10 @@ function partyConsensusHtml(rev){
       🌶️ Biggest argument: <b>${esc(rev.divisive.label)}</b> went as high as ${rev.divisive.low} and as low as ${rev.divisive.high}</div>`;
   }
   h += `<div style="font-weight:700;font-size:12px;color:var(--muted);letter-spacing:.5px;margin-top:16px">HOW CLOSE EACH OF YOU WAS</div>`;
+  // Two glyphs, two meanings: s.member_emoji is who they are, s.emoji is the
+  // spice band their take landed in.
   h += (rev.scores||[]).map(s=>`<div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:7px;font-size:14px">
-      <span>${s.emoji} <b>${esc(s.label)}</b> <span class="note">${esc(s.title)}</span></span>
+      <span>${s.member_emoji||""} <b>${esc(s.label)}</b> <span class="note">${s.emoji} ${esc(s.title)}</span></span>
       <span class="note">${s.matched}/${s.rated} in the right spot</span></div>`).join("");
   return h;
 }
@@ -2988,7 +3054,7 @@ function partyRapidRecapHtml(R, compact){
     const top = R.contributors[0].n || 1;
     h += `<div style="font-weight:700;font-size:12px;color:var(--muted);letter-spacing:.5px">WHO GOT WHAT</div>`;
     h += R.contributors.map(c=>`<div style="margin-top:6px">
-      <div style="display:flex;justify-content:space-between;font-size:14px"><span>${esc(c.label)}</span><b>${c.n}</b></div>
+      <div style="display:flex;justify-content:space-between;font-size:14px"><span>${partyWho(c.emoji,c.label)}</span><b>${c.n}</b></div>
       <div style="height:6px;background:var(--panel2);border-radius:99px;overflow:hidden;margin-top:2px">
         <div style="height:100%;width:${Math.round(100*c.n/top)}%;background:var(--accent)"></div></div></div>`).join("");
   }
@@ -3016,7 +3082,7 @@ function partyNightRecapHtml(R){
   const by = partyRoundsBy(R), men = partyMenace(by);
   const tiles = [];
   if(by.rapid) tiles.push([`${by.rapid.count}<span class="note" style="font-size:13px">/${by.rapid.target}</span>`, "named"]);
-  if(men) tiles.push([`${men.emoji} ${esc(men.label)}`, esc(men.title)]);
+  if(men) tiles.push([`${men.member_emoji||men.emoji} ${esc(men.label)}`, esc(men.title)]);
   if(by.sudden && by.sudden.survivor) tiles.push([`🏆 ${esc(by.sudden.survivor)}`, "last standing"]);
 
   let h = `<div class="note" style="text-align:center;margin-top:4px">${esc(R.prompt)}</div>`;
@@ -3034,11 +3100,11 @@ function partyNightRecapHtml(R){
 function partySuddenRecapHtml(S){
   let h = `<div style="font-weight:700;font-size:12px;color:var(--muted);letter-spacing:.5px;margin-top:18px">SUDDEN DEATH</div>`;
   h += `<div class="note" style="margin-top:5px">${S.names} name${S.names===1?"":"s"} called before it ran out.</div>`;
-  h += (S.knocked_out||[]).map(k=>`<div style="margin-top:5px;font-size:14px">💀 <b>${esc(k.label)}</b> <span class="note">${
+  h += (S.knocked_out||[]).map(k=>`<div style="margin-top:5px;font-size:14px">💀 <b>${partyWho(k.emoji,k.label)}</b> <span class="note">${
     k.outcome==="timeout" ? "ran out of clock"
       : k.outcome==="duplicate" ? `repeated ${esc(k.guess)}`
       : `said ${esc(k.guess)}`}</span></div>`).join("");
-  if(S.survivor) h += `<div style="margin-top:8px;font-size:15px">🏆 <b>${esc(S.survivor)}</b> survived.</div>`;
+  if(S.survivor) h += `<div style="margin-top:8px;font-size:15px">🏆 <b>${partyWho(S.survivor_emoji,S.survivor)}</b> survived.</div>`;
   else if((S.still_standing||[]).length>1) h += `<div class="note" style="margin-top:8px">Called early — ${S.still_standing.map(esc).join(" and ")} were still in.</div>`;
   return h;
 }
