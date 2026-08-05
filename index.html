@@ -2612,9 +2612,16 @@ function partyTierSave(submit){
       member_token:PARTY.member_token, round_id:R.id, assignments:PARTY.tier };
     if(submit !== undefined) body.submit = submit;
     const r = await api("party_tier_save", body);
-    if(r.ok){
-      R.boards_saved = r.boards_saved; R.submitted = r.submitted;
-      R.your_submitted = r.your_submitted; PARTY.tierDone = r.your_submitted;
+    // Re-read PARTY.round rather than writing onto the R captured above: a poll
+    // that started before this request can land while it is in flight and swap
+    // the object out, and the counts would then go onto a discarded copy. The
+    // next poll corrected it two seconds later, which is two seconds of the
+    // host being told nobody is ready — the exact thing this signal exists for.
+    const cur = PARTY && PARTY.round;
+    if(r.ok && cur && cur.id === body.round_id){
+      cur.boards_saved = r.boards_saved; cur.submitted = r.submitted;
+      cur.submitted_ids = r.submitted_ids; cur.your_submitted = r.your_submitted;
+      PARTY.tierDone = r.your_submitted;
       partyRender();
     }
   };
@@ -2643,8 +2650,10 @@ function partyRenderSudden(R){
   $("partyTurnGuess").disabled = !mine; $("partyTurnBtn").disabled = !mine;
   $("partyTurnGuess").placeholder = mine ? "Name one…" : "Waiting…";
   const used = R.used || [];
+  // Emoji AFTER the name — in front it reads as part of the player's name rather
+  // than as who called it.
   $("partyUsed").innerHTML = used.length
-    ? `<div class="note">Gone: ${used.map(u=>`${partyEmoji(u.member_id)} ${esc(u.display_name)}`).join(" · ")}</div>` : "";
+    ? `<div class="note">Gone: ${used.map(u=>`${esc(u.display_name)} ${partyEmoji(u.member_id)}`).join(" · ")}</div>` : "";
 }
 
 // ---------------------------------------------------------------- intermission
@@ -3083,7 +3092,7 @@ function partyNightRecapHtml(R){
   const tiles = [];
   if(by.rapid) tiles.push([`${by.rapid.count}<span class="note" style="font-size:13px">/${by.rapid.target}</span>`, "named"]);
   if(men) tiles.push([`${men.member_emoji||men.emoji} ${esc(men.label)}`, esc(men.title)]);
-  if(by.sudden && by.sudden.survivor) tiles.push([`🏆 ${esc(by.sudden.survivor)}`, "last standing"]);
+  if(by.sudden && by.sudden.survivor) tiles.push([`🏆 ${partyWho(by.sudden.survivor_emoji, by.sudden.survivor)}`, "last standing"]);
 
   let h = `<div class="note" style="text-align:center;margin-top:4px">${esc(R.prompt)}</div>`;
   if(tiles.length) h += `<div style="display:flex;gap:8px;margin:12px 0 4px">` + tiles.map(([big,small])=>
