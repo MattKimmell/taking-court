@@ -927,10 +927,7 @@ export async function actionPartyTierSave(_req: Request, body: any) {
   // Locking in a half-finished order would tell the host the room is ready when
   // it is not, so the full ordering is the price of the signal. Unlocking is
   // always allowed.
-  const wantsSubmit = body.submit === true;
-  if (wantsSubmit && Object.keys(asg).length < validKeys.size) {
-    return err("ranking_incomplete", 409, { rated: Object.keys(asg).length, need: validKeys.size });
-  }
+  const incomplete = body.submit === true && Object.keys(asg).length < validKeys.size;
 
   const row: Record<string, unknown> = {
     round_id: round.id, member_id: member.id, member_label: member.label,
@@ -938,12 +935,18 @@ export async function actionPartyTierSave(_req: Request, body: any) {
   };
   // Only touch submitted_at when the caller said something about it — an
   // autosave (submit absent) must leave a locked board locked.
-  if (body.submit === true) row.submitted_at = new Date().toISOString();
+  if (body.submit === true && !incomplete) row.submitted_at = new Date().toISOString();
   if (body.submit === false) row.submitted_at = null;
 
+  // Store first, refuse second. Rejecting outright would discard the taps this
+  // call carried — the order is saved on every tap precisely so nobody can lose
+  // work, and a refused SUBMIT is no reason to break that.
   const { error } = await db.from("mp_party_round_boards")
     .upsert(row, { onConflict: "round_id,member_id" });
   if (error) return err(error.message, 500);
+  if (incomplete) {
+    return err("ranking_incomplete", 409, { rated: Object.keys(asg).length, need: validKeys.size });
+  }
 
   const { data: rows } = await db.from("mp_party_round_boards")
     .select("member_id, submitted_at").eq("round_id", round.id);
