@@ -119,6 +119,10 @@ function turnSecondsLeft(r: any): number | null {
 
 function roundSecondsLeft(r: any): number | null {
   if (!r?.ends_at) return null;
+  // A round that filled its board ends before its clock does, and its ends_at is
+  // then still in the future — reporting it would put a ticking countdown on the
+  // intermission screen of a round that is already over.
+  if (r.status === "ended") return 0;
   return Math.max(0, Math.round((new Date(r.ends_at).getTime() - Date.now()) / 1000));
 }
 
