@@ -6,7 +6,7 @@ import { actionListCreate, actionListSave, actionListOpen, actionListCompare, ac
 import { actionTierCreate, actionTierReroll, actionTierOpen, actionTierSave, actionTierCompare, actionTierMine, actionTierBrowse, actionTierSubmit, actionTierThemes, actionDaily } from "./tiers.ts";
 import { actionCrewCreate, actionCrewJoin, actionCrewMine, actionCrewDaily, actionCrewReact } from "./crews.ts";
 import { actionTrack } from "./events.ts";
-import { actionPartyPrompts, actionPartyCreate, actionPartyJoin, actionPartyStart, actionPartyGuess, actionPartyState, actionPartyEnd } from "./party.ts";
+import { actionPartyPrompts, actionPartyCreate, actionPartyJoin, actionPartyStart, actionPartyGuess, actionPartyState, actionPartyEnd, actionPartyRoundNext, actionPartyTierSave, actionPartyTurn } from "./party.ts";
 import { actionQr } from "./qr.ts";
 
 // -----------------------------------------------------------------------------
@@ -111,6 +111,12 @@ Deno.serve(async (req: Request) => {
         return await actionPartyState(req, body);
       case "party_end":
         return await actionPartyEnd(req, body);
+      case "party_round_next":
+        return await actionPartyRoundNext(req, body);
+      case "party_tier_save":
+        return await actionPartyTierSave(req, body);
+      case "party_turn":
+        return await actionPartyTurn(req, body);
       case "qr":
         return await actionQr(req, body);
       default:
