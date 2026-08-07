@@ -431,17 +431,25 @@ async function drawOverUnder(session: any): Promise<OuQuestion[]> {
       for (const s of OU_STATS) {
         const pv = Number(p[s.col] ?? NaN), rv = Number(r[s.col] ?? NaN);
         if (!isFinite(pv) || !isFinite(rv) || pv === rv) continue;
-        // The best question is the one where the more famous player has FEWER.
-        // "Obviously Jordan" being wrong is the whole game; "obviously Jordan"
-        // being right is a formality. Ties in notability score neither way.
-        const fameGap = Number(p.notability ?? 0) - Number(r.notability ?? 0);
+        // Three things make a question worth asking, in this order.
+        //
+        // 1. UPSET — the more famous player has FEWER. "Obviously Jordan" being
+        //    wrong is the whole game; "obviously Jordan" being right is a
+        //    formality. Ties in notability score neither way.
+        const pn = Number(p.notability ?? 0), rn = Number(r.notability ?? 0);
+        const fameGap = pn - rn;
         const statGap = pv - rv;
         const upset = (fameGap > 0 && statGap < 0) || (fameGap < 0 && statGap > 0);
-        // Among upsets, prefer the close ones — a 6-to-11 is a debate, a
-        // 1-to-30 is a trick.
+        // 2. BOTH players recognisable — scored on the LESSER of the two, so a
+        //    superstar paired with a journeyman doesn't ride in on one name.
+        const fame = Math.min(Math.min(pn, rn), 100) / 5;                  // 0..20
+        // 3. A gap you could argue about. Peaks around 0.7 and falls off both
+        //    ways: 1-to-30 is a gimme, and 961-games-to-957 is a coin flip
+        //    nobody in the room could know. Neither starts an argument.
         const ratio = Math.min(Math.abs(pv), Math.abs(rv)) / Math.max(Math.abs(pv), Math.abs(rv), 1);
+        const arguable = (1 - Math.min(1, Math.abs(ratio - 0.7) / 0.7)) * 12;  // 0..12
         cands.push({
-          score: (upset ? 100 : 0) + ratio * 10 + Math.random() * 3,
+          score: (upset ? 60 : 0) + fame + arguable + Math.random() * 4,
           q: {
             key: "", stat: s.key, ask: s.ask,
             a: { key: p.player_key, label: p.player_name, v: pv, shown: s.fmt(pv) },
