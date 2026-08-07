@@ -49,9 +49,16 @@ const CONSENSUS_ITEMS = 5;
 // label vocabulary as a parameter and only ever use its INDEX — so ["1".."5"]
 // behaves exactly like a tier ladder with index 0 = best.
 const CONSENSUS_RANKS = ["1", "2", "3", "4", "5"];
+const OU_ITEMS = 5;               // questions in the Who's Got More round
+const OU_SIDES = ["a", "b"];      // the vote vocabulary, same slot as `tiers`
 const ROUND_LABEL: Record<string, string> = {
-  rapid: "Rapid Fire", consensus: "Guess the Room", sudden: "Sudden Death",
+  rapid: "Rapid Fire", consensus: "Guess the Room",
+  overunder: "Who's Got More", sudden: "Sudden Death",
 };
+// Rounds where a member submits one board of choices. Both use
+// mp_party_round_boards and therefore the same autosave, the same submitted_at
+// ready signal and the same primary-key dedupe.
+const BOARD_ROUNDS = new Set(["consensus", "overunder"]);
 
 async function uniquePartyCode(): Promise<string> {
   for (let i = 0; i < 8; i++) {
@@ -171,14 +178,27 @@ function roundSecondsLeft(r: any): number | null {
   return Math.max(0, Math.round((new Date(r.ends_at).getTime() - Date.now()) / 1000));
 }
 
-// item_set is safe to expose — the five names to rank ARE the round. Nothing here
-// leaks the answer pool or anyone else's assignments.
+// Round 2's item_set is safe to expose — the five names to rank ARE the round,
+// and there is no answer to leak.
+//
+// ⚠️ Round 3's is NOT. Each question carries both players' real numbers and
+// which side is right, so it goes out through stripAnswers() until the round has
+// ended. A "don't render it yet" client-side rule would be no rule at all.
+function itemSetFor(r: any) {
+  if (r.kind === "consensus") return r.item_set ?? [];
+  if (r.kind === "overunder") {
+    const items = (r.item_set ?? []) as OuQuestion[];
+    return r.status === "ended" ? items : stripAnswers(items);
+  }
+  return null;
+}
+
 function publicRound(r: any, extra: Record<string, unknown> = {}) {
   if (!r) return null;
   return {
     id: r.id, idx: r.idx, kind: r.kind, label: ROUND_LABEL[r.kind] ?? r.kind,
     status: r.status, prompt: r.prompt, target: r.target,
-    item_set: r.kind === "consensus" ? (r.item_set ?? []) : null,
+    item_set: itemSetFor(r),
     tiers: r.tiers ?? null,
     time_limit_s: r.time_limit_s, seconds_left: roundSecondsLeft(r),
     turn_member_id: r.turn_member_id, turn_seq: r.turn_seq,
@@ -341,6 +361,177 @@ function consensusReveal(round: any, boards: any[], emoji?: Map<string, string>)
   return { unlocked: true, have: boards.length, need, consensus, scores, order, divisive };
 }
 
+// ---------------------------------------------------------------------------
+// "Who's Got More" — the one round with a right answer.
+//
+// Every other round pays off in opinion, which means nobody can be told they
+// are wrong. This one can, and that is the point: a fact both people were sure
+// about is a better argument than a fact only one of them had.
+//
+// The facts come from mp_player_facets, which already holds every one of these
+// per player — so a question is a join, not a stats pipeline.
+// ---------------------------------------------------------------------------
+type OuStat = { key: string; col: string; ask: string; fmt: (n: number) => string };
+const plural = (n: number, one: string, many = one + "s") => `${n} ${n === 1 ? one : many}`;
+const OU_STATS: OuStat[] = [
+  { key: "rings", col: "rings", ask: "more championship rings", fmt: (n) => plural(n, "ring") },
+  { key: "allstar", col: "allstar_n", ask: "more All-Star selections", fmt: (n) => plural(n, "All-Star") },
+  { key: "points", col: "career_points", ask: "more career points", fmt: (n) => `${Math.round(n).toLocaleString("en-US")} pts` },
+  { key: "allnba", col: "allnba_n", ask: "more All-NBA selections", fmt: (n) => plural(n, "All-NBA team") },
+  { key: "alldef", col: "alldef_n", ask: "more All-Defensive selections", fmt: (n) => plural(n, "All-Defense team") },
+  { key: "mvp", col: "mvp_n", ask: "more MVPs", fmt: (n) => plural(n, "MVP") },
+  { key: "seasons", col: "seasons_n", ask: "more seasons in the league", fmt: (n) => plural(n, "season") },
+  { key: "games", col: "games_played", ask: "more games played", fmt: (n) => `${n.toLocaleString("en-US")} games` },
+];
+
+type OuQuestion = {
+  key: string; stat: string; ask: string;
+  a: { key: string; label: string; v: number; shown: string };
+  b: { key: string; label: string; v: number; shown: string };
+  answer: "a" | "b";
+};
+
+// ⚠️ item_set holds the answer. Never hand a live round's questions to a client
+// without running them through this.
+function stripAnswers(items: OuQuestion[]) {
+  return items.map((q) => ({
+    key: q.key, stat: q.stat, ask: q.ask,
+    a: { key: q.a.key, label: q.a.label },
+    b: { key: q.b.key, label: q.b.label },
+  }));
+}
+
+// Draws OU_ITEMS questions from the players the room named in round 1, for the
+// same reason round 2 does: it keeps the night one game, and it guarantees the
+// names are ones this room has proved it knows.
+async function drawOverUnder(session: any): Promise<OuQuestion[]> {
+  const pool = (Array.isArray(session.answers_snapshot) ? session.answers_snapshot : []) as PoolEntry[];
+  const { data: named } = await db.from("mp_party_answers")
+    .select("player_key").eq("session_id", session.id);
+  const keys = Array.from(new Set([
+    ...(named ?? []).map((a) => a.player_key),
+    // Top up from the pool so a short round 1 still produces a full round.
+    ...pool.map((p) => p.player_key),
+  ])).filter(Boolean).slice(0, 40);
+  if (keys.length < 2) return [];
+
+  const cols = ["player_key", "player_name", "notability", ...OU_STATS.map((s) => s.col)];
+  const { data: rows } = await db.from("mp_player_facets")
+    .select(cols.join(",")).in("player_key", keys);
+  // Only players the room would recognise on sight — a fact about someone
+  // nobody can place is a coin flip, not an argument.
+  const people = (rows ?? []).filter((p: any) => Number(p.notability ?? 0) >= 30);
+  if (people.length < 2) return [];
+
+  type Cand = { q: OuQuestion; score: number };
+  const cands: Cand[] = [];
+  for (let i = 0; i < people.length; i++) {
+    for (let j = i + 1; j < people.length; j++) {
+      const p: any = people[i], r: any = people[j];
+      for (const s of OU_STATS) {
+        const pv = Number(p[s.col] ?? NaN), rv = Number(r[s.col] ?? NaN);
+        if (!isFinite(pv) || !isFinite(rv) || pv === rv) continue;
+        // The best question is the one where the more famous player has FEWER.
+        // "Obviously Jordan" being wrong is the whole game; "obviously Jordan"
+        // being right is a formality. Ties in notability score neither way.
+        const fameGap = Number(p.notability ?? 0) - Number(r.notability ?? 0);
+        const statGap = pv - rv;
+        const upset = (fameGap > 0 && statGap < 0) || (fameGap < 0 && statGap > 0);
+        // Among upsets, prefer the close ones — a 6-to-11 is a debate, a
+        // 1-to-30 is a trick.
+        const ratio = Math.min(Math.abs(pv), Math.abs(rv)) / Math.max(Math.abs(pv), Math.abs(rv), 1);
+        cands.push({
+          score: (upset ? 100 : 0) + ratio * 10 + Math.random() * 3,
+          q: {
+            key: "", stat: s.key, ask: s.ask,
+            a: { key: p.player_key, label: p.player_name, v: pv, shown: s.fmt(pv) },
+            b: { key: r.player_key, label: r.player_name, v: rv, shown: s.fmt(rv) },
+            answer: pv > rv ? "a" : "b",
+          },
+        });
+      }
+    }
+  }
+  cands.sort((x, y) => y.score - x.score);
+
+  // Spread it out: nobody in more than two questions, no stat asked twice, so
+  // five questions feel like five questions.
+  const out: OuQuestion[] = [];
+  const seenPlayer = new Map<string, number>();
+  const seenStat = new Set<string>();
+  for (const c of cands) {
+    if (out.length >= OU_ITEMS) break;
+    const { a, b } = c.q;
+    if (seenStat.has(c.q.stat)) continue;
+    if ((seenPlayer.get(a.key) ?? 0) >= 2 || (seenPlayer.get(b.key) ?? 0) >= 2) continue;
+    seenStat.add(c.q.stat);
+    seenPlayer.set(a.key, (seenPlayer.get(a.key) ?? 0) + 1);
+    seenPlayer.set(b.key, (seenPlayer.get(b.key) ?? 0) + 1);
+    out.push({ ...c.q, key: "q" + (out.length + 1) });
+  }
+  // A thin room can run out of distinct stats before it runs out of questions.
+  // Better a three-question round than a padded one.
+  return out;
+}
+
+// Correctness bands. A different vocabulary from SPICE_TITLES on purpose — that
+// one grades how far from the room you were, this one grades how right you
+// were, and reusing it would imply the two rounds measure the same thing.
+const OU_TITLES: { min: number; emoji: string; title: string }[] = [
+  { min: 1.0, emoji: "🧠", title: "Knows ball" },
+  { min: 0.75, emoji: "📚", title: "Did the reading" },
+  { min: 0.5, emoji: "🎲", title: "Coin flip merchant" },
+  { min: 0.25, emoji: "🫠", title: "Confidently wrong" },
+  { min: -1, emoji: "🤡", title: "Every single one" },
+];
+
+function overUnderReveal(round: any, boards: any[], emoji?: Map<string, string>) {
+  const items = (round.item_set ?? []) as OuQuestion[];
+  if (!items.length) return { unlocked: false, have: boards.length, questions: [], scores: [], fooled: null };
+
+  const questions = items.map((q) => {
+    let a = 0, b = 0;
+    for (const bd of boards) {
+      const v = (bd.assignments || {})[q.key];
+      if (v === "a") a++; else if (v === "b") b++;
+    }
+    const majority = a === b ? null : (a > b ? "a" : "b");
+    return {
+      key: q.key, ask: q.ask,
+      a: { label: q.a.label, shown: q.a.shown, votes: a },
+      b: { label: q.b.label, shown: q.b.shown, votes: b },
+      answer: q.answer,
+      winner: q.answer === "a" ? q.a.label : q.b.label,
+      // The room got it wrong as a room. A tie is not "fooled" — nobody led.
+      room_wrong: majority != null && majority !== q.answer,
+    };
+  });
+
+  const scores = boards.map((bd) => {
+    let right = 0, answered = 0;
+    for (const q of items) {
+      const v = (bd.assignments || {})[q.key];
+      if (v !== "a" && v !== "b") continue;
+      answered++;
+      if (v === q.answer) right++;
+    }
+    const pct = answered ? right / answered : 0;
+    const band = OU_TITLES.find((t) => pct >= t.min)!;
+    return {
+      member_id: bd.member_id, label: bd.member_label,
+      member_emoji: emoji?.get(bd.member_id) ?? null,
+      right, answered, emoji: band.emoji, title: band.title,
+    };
+  }).sort((x, y) => y.right - x.right || x.label.localeCompare(y.label));
+
+  // The single best moment in the round: the one the room got wrong together.
+  // Widest margin first, so it is the most confidently wrong one.
+  const fooled = questions.filter((q) => q.room_wrong)
+    .sort((x, y) => Math.abs(y.a.votes - y.b.votes) - Math.abs(x.a.votes - x.b.votes))[0] ?? null;
+
+  return { unlocked: boards.length > 0, have: boards.length, questions, scores, fooled };
+}
+
 // Everything a client needs to render whichever round the room is on. Shared by
 // join and state so a late joiner lands mid-night in the right place.
 async function roundStateFor(session: any, rounds: any[], memberId: string | null) {
@@ -353,7 +544,9 @@ async function roundStateFor(session: any, rounds: any[], memberId: string | nul
   const cur = live ?? ended;
   if (!cur) return out;
 
-  if (cur.kind === "consensus") {
+  // One shape for both board rounds — they differ only in how the reveal reads
+  // the assignments, so everything up to that line is shared.
+  if (BOARD_ROUNDS.has(cur.kind)) {
     const { data: boards } = await db.from("mp_party_round_boards")
       .select("member_id, member_label, assignments, submitted_at").eq("round_id", cur.id);
     const rows = boards ?? [];
@@ -370,7 +563,10 @@ async function roundStateFor(session: any, rounds: any[], memberId: string | nul
       submitted_ids: submitted.map((b) => b.member_id),
       your_assignments: mine?.assignments ?? {},
       your_submitted: !!mine?.submitted_at,
-      reveal: cur.status === "ended" ? consensusReveal(cur, rows, await emojiMap(session.id)) : null,
+      reveal: cur.status !== "ended" ? null
+        : cur.kind === "overunder"
+          ? overUnderReveal(cur, rows, await emojiMap(session.id))
+          : consensusReveal(cur, rows, await emojiMap(session.id)),
     });
     return out;
   }
@@ -411,6 +607,9 @@ async function startRound(session: any, round: any) {
   }
   if (round.kind === "consensus") {
     patch.item_set = await drawConsensusItems(session);
+  }
+  if (round.kind === "overunder") {
+    patch.item_set = await drawOverUnder(session);
   }
   if (round.kind === "sudden") {
     const { data: first } = await db.from("mp_party_members").select("id")
@@ -572,7 +771,11 @@ export async function actionPartyCreate(req: Request, body: any) {
     ? [
         { idx: 1, kind: "rapid", prompt: promptText, target, time_limit_s: RAPID_S },
         { idx: 2, kind: "consensus", prompt: "Put five of them in order", tiers: CONSENSUS_RANKS },
-        { idx: 3, kind: "sudden", prompt: promptText },
+        // Deliberately third: a fast round with right answers between the long
+        // opinion round and the elimination one, so the night escalates rather
+        // than sagging in the middle.
+        { idx: 3, kind: "overunder", prompt: "Who's got more?", tiers: OU_SIDES },
+        { idx: 4, kind: "sudden", prompt: promptText },
       ]
     : [{ idx: 1, kind: "rapid", prompt: promptText, target, time_limit_s: raw }];
   const { error: rErr } = await db.from("mp_party_rounds")
@@ -887,7 +1090,10 @@ export async function actionPartyRoundNext(_req: Request, body: any) {
 }
 
 // ---------------------------------------------------------------------------
-// Round 2: one board per member, upserted on the primary key.
+// One board per member, upserted on the primary key. Serves BOTH board rounds —
+// round 2's 1-to-5 ordering and round 3's a/b votes — because they are the same
+// operation over a different vocabulary: validate the keys against item_set and
+// the values against `tiers`, then upsert.
 //
 // Two things arrive on this action because they are one user gesture apart: the
 // autosave that fires on every tap, and the explicit "Lock it in" that tells the
@@ -905,23 +1111,31 @@ export async function actionPartyTierSave(_req: Request, body: any) {
   const { data: round } = await db.from("mp_party_rounds").select("*")
     .eq("id", body.round_id).eq("session_id", session.id).maybeSingle();
   if (!round) return err("unknown_round", 404);
-  if (round.kind !== "consensus") return err("wrong_round_kind", 409);
+  if (!BOARD_ROUNDS.has(round.kind)) return err("wrong_round_kind", 409);
   if (round.status !== "live") return err("round_not_live", 409, { status: round.status });
 
   // Same validation shape as actionTierSave: anything not in this round's item_set
   // and label vocabulary is dropped rather than trusted.
   const validKeys = new Set(((round.item_set ?? []) as TierItem[]).map((i) => i.key));
   const validTiers = new Set((round.tiers ?? CONSENSUS_RANKS) as string[]);
-  const asg: Record<string, string> = {};
-  // A rank is a POSITION, so two players cannot hold the same one. Partial is
+  // A RANK is a position, so two players cannot hold the same one. Partial is
   // fine — this autosaves while someone is still deciding — but a duplicate is
   // never legitimate, and the server can't take the client's word that its swap
   // logic ran. First writer keeps the slot.
+  //
+  // ⚠️ That rule is specific to the ordering round and must not be generalised:
+  // in Who's Got More every answer is "a" or "b", so five questions share two
+  // values by construction and de-duping would throw three of them away.
+  const oneEach = round.kind === "consensus";
+  const asg: Record<string, string> = {};
   const taken = new Set<string>();
   for (const [k, v] of Object.entries(body.assignments ?? {})) {
     if (!validKeys.has(k) || !validTiers.has(v as string)) continue;
-    if (taken.has(v as string)) continue;
-    taken.add(v as string); asg[k] = v as string;
+    if (oneEach) {
+      if (taken.has(v as string)) continue;
+      taken.add(v as string);
+    }
+    asg[k] = v as string;
   }
 
   // Locking in a half-finished order would tell the host the room is ready when
@@ -1103,12 +1317,17 @@ async function buildRecap(session: any, rounds: any[] = []) {
       continue;
     }
 
-    if (r.kind === "consensus") {
+    if (BOARD_ROUNDS.has(r.kind)) {
       const { data: boards } = await db.from("mp_party_round_boards")
         .select("member_id, member_label, assignments").eq("round_id", r.id);
+      // The recap only exists once the night is over, so the answers are no
+      // longer secret — itemSetFor still gates on r.status for the abandoned
+      // case, where a round the room never finished must stay sealed.
       perRound.push({
-        ...head, prompt: r.prompt, item_set: r.item_set ?? [], tiers: r.tiers ?? CONSENSUS_RANKS,
-        reveal: consensusReveal(r, boards ?? [], emoji),
+        ...head, prompt: r.prompt, item_set: itemSetFor(r), tiers: r.tiers ?? CONSENSUS_RANKS,
+        reveal: r.kind === "overunder"
+          ? overUnderReveal(r, boards ?? [], emoji)
+          : consensusReveal(r, boards ?? [], emoji),
       });
       continue;
     }

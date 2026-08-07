@@ -152,6 +152,24 @@
   .prank.set{border-color:var(--accent)}
   .rkno{flex:0 0 auto;min-width:21px;padding:1px 0;text-align:center;
     border-radius:5px;background:var(--accent);color:#0b1020;font-weight:900;font-size:12px}
+  /* Who's Got More. Two full-width options stacked, same reasoning as .prank:
+     side by side, two player names on a phone truncate. */
+  .ouq{background:var(--panel2);border:1px solid var(--line);
+    border-radius:10px;padding:9px 11px 10px;margin-bottom:7px}
+  .ouq.set{border-color:var(--accent)}
+  .ouq .oun{font-size:13px;color:var(--muted);font-weight:600}
+  .ouq .oub{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+  .ouq .oub button{width:100%;min-height:40px;border-radius:8px;border:1px solid var(--line);
+    font-weight:700;font-size:14.5px;background:#243056;color:var(--ink);cursor:pointer;padding:8px 10px}
+  .ouq .oub button.on{background:var(--accent);border-color:var(--accent);color:#0b1020}
+  /* The reveal: name, the real number, and how the room split. */
+  .ourow{display:grid;grid-template-columns:1fr auto;gap:2px 10px;margin-top:6px;font-size:14px;opacity:.6}
+  .ourow.win{opacity:1;font-weight:700}
+  .ourow .ouv{text-align:right;font-variant-numeric:tabular-nums}
+  .ourow .oucount{grid-column:1/-1;font-size:11.5px;color:var(--muted);font-weight:400}
+  .ourow .oubar{grid-column:1/-1;height:5px;border-radius:99px;background:var(--panel2);overflow:hidden}
+  .ourow .oubar div{height:100%;background:var(--muted)}
+  .ourow.win .oubar div{background:var(--accent)}
   /* The room's ordering on the reveal. */
   .rrow{display:flex;align-items:baseline;gap:9px;margin-top:6px;font-size:14px}
   .rrow .rp{flex:0 0 22px;font-weight:900;color:var(--accent);text-align:right}
@@ -248,22 +266,29 @@
   <!-- ===================== LOBBY ===================== -->
   <div id="lobby" class="card">
     <button id="dailyBtn" style="width:100%;font-size:16px;padding:14px;margin-bottom:14px;background:linear-gradient(90deg,var(--accent),var(--gold))">🗓️ Play today's Daily <span id="dailyStreak"></span></button>
-    <!-- Three modes, and the distinction is what YOU supply: the right answers,
-         a ranking of a set we give you, or the names themselves. The old lobby
-         put one mode's config form here and hid the others behind nav buttons,
-         which made the recall game look like the whole app. -->
+    <!-- The distinction is what YOU supply: the right answers, or the names
+         themselves. The old lobby put one mode's config form here and hid the
+         others behind nav buttons, which made the recall game look like the
+         whole app.
+         The standalone Tier Lists tile is deliberately not here — see
+         #modeTiers below. -->
     <div class="slots">
       <div class="slot" id="modeNameIt" style="cursor:pointer">
         <div class="n">🎯</div>
-        <div class="name">Name It<div class="note" style="font-weight:400">Recall the right answers, against the clock</div></div>
+        <div class="name">Think you know ball?<div class="note" style="font-weight:400">Recall the right answers, against the clock</div></div>
       </div>
-      <div class="slot" id="modeTiers" style="cursor:pointer">
+      <!-- Tier Lists is hidden from the lobby, not removed. Everything built on
+           tier topics still runs: the Daily above, crews, curated themes, every
+           ?tier= share link, and My takes so nobody's existing boards vanish.
+           What's gone is the standalone "browse and build a tier list" entry
+           point. Unhide this one element to bring it back. -->
+      <div class="slot hidden" id="modeTiers" style="cursor:pointer">
         <div class="n">🪜</div>
         <div class="name">Tier Lists<div class="note" style="font-weight:400">We give you the names — you rank them</div></div>
       </div>
       <div class="slot" id="modeLists" style="cursor:pointer">
         <div class="n">📝</div>
-        <div class="name">Your Lists<div class="note" style="font-weight:400">No right answer — you pick who makes the cut</div></div>
+        <div class="name">What's your take<div class="note" style="font-weight:400">No right answers. You decide who makes your list.</div></div>
       </div>
       <div class="slot" id="modeParty" style="cursor:pointer;border-color:var(--accent)">
         <div class="n">🏀</div>
@@ -290,7 +315,7 @@
   <!-- ===================== NAME IT (recall challenges) ===================== -->
   <div id="nameHome" class="card hidden">
     <div class="head">
-      <div style="font-weight:700;font-size:18px">🎯 Name It</div>
+      <div style="font-weight:700;font-size:18px">🎯 Think you know ball?</div>
       <button class="ghost" id="nameHomeBack" style="flex:0 0 auto;padding:6px 12px">Home</button>
     </div>
     <div class="note">There <em>is</em> a right answer here. Three strikes, clock running.</div>
@@ -506,7 +531,7 @@
   <!-- ===================== LISTS HOME ===================== -->
   <div id="listsHome" class="card hidden">
     <div class="head">
-      <div style="font-weight:700;font-size:18px">📝 Your Lists</div>
+      <div style="font-weight:700;font-size:18px">📝 What's your take</div>
       <button class="ghost" id="listsHomeBack" style="flex:0 0 auto;padding:6px 12px">Home</button>
     </div>
     <div class="note">No right answer here. You pick who makes the cut — then see who else named them.</div>
@@ -744,7 +769,7 @@
           </select></div>
       </div>
       <div id="partyFormat" class="fmtpick">
-        <button class="fmt on" data-fmt="night">🌙 Full night<span>3 rounds · ~12 min</span></button>
+        <button class="fmt on" data-fmt="night">🌙 Full night<span>4 rounds · ~15 min</span></button>
         <button class="fmt" data-fmt="classic">⚡ One round<span>Rapid fire only</span></button>
       </div>
 
@@ -827,7 +852,18 @@
       <div class="note" id="partyTierState" style="margin-top:8px;min-height:16px"></div>
     </div>
 
-    <!-- ROUND 3 · sudden death. -->
+    <!-- ROUND 3 · who's got more. Two names, one stat, tap the one with more.
+         The numbers are not in this markup and not in the payload — the server
+         strips them off a live round. -->
+    <div id="partyPanelOU" class="hidden">
+      <div class="askbox" id="partyOUAsk"></div>
+      <div class="note" style="margin-top:8px">There's a right answer to these. Nobody sees your picks until everyone's locked in.</div>
+      <div id="partyOURows" style="margin-top:10px"></div>
+      <button id="partyOUDone" style="margin-top:4px">Lock it in</button>
+      <div class="note" id="partyOUState" style="margin-top:8px;min-height:16px"></div>
+    </div>
+
+    <!-- ROUND 4 · sudden death. -->
     <div id="partyPanelSudden" class="hidden">
       <!-- The ask, in the round itself. Whoever is on the clock should not have to
            look back up at the header to remember what they are naming. -->
@@ -1893,7 +1929,7 @@ function openListCategory(key){
         <div class="n">${c.icon}</div>
         <div class="name">${esc(t.prompt)}<div class="note" style="font-weight:400">${t.ranked?"Ranked":"Unordered"} · ${t.author_count} list${t.author_count===1?"":"s"}</div></div>
         <div class="ctx">→</div></div>`).join("")
-    : `<div class="banner wait" style="margin-top:10px">Nothing public here yet. Start one from Your Lists and tick “Submit to Browse”.</div>`;
+    : `<div class="banner wait" style="margin-top:10px">Nothing public here yet. Start one from What's your take and tick “Submit to Browse”.</div>`;
   openCatPage(`${c.icon} ${c.label}`, c.blurb, body, "listsHome", root=>{
     root.querySelectorAll(".slot[data-t]").forEach(el=>el.onclick=()=>openPublicList(el.dataset.t));
   });
@@ -2053,7 +2089,12 @@ async function autosaveFlush(stateEl){
 document.addEventListener("visibilitychange", ()=>{ if(document.hidden) autosaveFlush(); });
 $("tierBoardBack").onclick=async()=>{
   await autosaveFlush();
-  if(CREW_RETURN){ const c=CREW_RETURN; CREW_RETURN=null; openCrew(c); } else openTierHome();
+  // With the Tier Lists tile hidden, backing out of the Daily onto the tier
+  // home would strand you on a screen the lobby has no way to reach. Go where
+  // the player came from: the crew room, or the lobby.
+  if(CREW_RETURN){ const c=CREW_RETURN; CREW_RETURN=null; openCrew(c); }
+  else if($("modeTiers").classList.contains("hidden")) show("lobby");
+  else openTierHome();
 };
 // Skips the board entirely — deliberately does NOT save, so browsing doesn't
 // inflate author_count with empty entries.
@@ -2460,7 +2501,8 @@ function partyAppend(rows){
 // Which sub-panel of #partyPlay is showing. A one-round session only ever
 // reaches "rapid", so the classic screen is byte-for-byte what it was.
 const PARTY_PANELS = { rapid:"partyPanelRapid", consensus:"partyPanelTier",
-                       sudden:"partyPanelSudden", break:"partyPanelBreak" };
+                       overunder:"partyPanelOU", sudden:"partyPanelSudden",
+                       break:"partyPanelBreak" };
 
 // Everyone used to render behind the same 🏀, so the lobby, the shared board and
 // the seat rail were a wall of identical icons and you had to read four names to
@@ -2526,6 +2568,7 @@ function partyRender(){
 
   if(phase === "rapid")     partyRenderRapid(s);
   if(phase === "consensus") partyRenderTier(R);
+  if(phase === "overunder") partyRenderOU(R);
   if(phase === "sudden")    partyRenderSudden(R);
   if(phase === "break")     partyRenderBreak();
 }
@@ -2542,74 +2585,52 @@ function partyRenderRapid(s){
   }).join("") : `<div class="note">Nothing yet — start shouting.</div>`;
 }
 
-// ---------------------------------------------------------------- round 2
-// A 1-to-5 ORDERING, one row per name, every position one tap away.
+// ------------------------------------------------- the two board rounds
+// Round 2 (an ordering) and round 3 (a/b votes) are the same operation over a
+// different vocabulary: fill in a map of answers, autosave every tap, then lock
+// it in so the host knows you're done. PARTY.board holds that map for whichever
+// one is live, PARTY.boardRound guards the seeding, PARTY.boardDone mirrors the
+// server's submitted_at.
 //
-// A rank is a POSITION, so two names can never hold the same one: tapping a
-// number somebody already has SWAPS them. That keeps the board a valid partial
-// ordering at every instant and makes any mistake one tap to fix. The server
-// de-dupes independently in party_tier_save — it cannot take the client's word
-// that this ran.
-function partyRenderTier(R){
-  const items = R.item_set || [], ranks = R.tiers || ["1","2","3","4","5"];
-  // Seed from the server ONCE per round. Re-seeding on every poll would clobber a
-  // tap that is still inside its save debounce.
-  if(PARTY.tierRound !== R.id){
-    PARTY.tierRound = R.id;
-    PARTY.tier = { ...(R.your_assignments||{}) };
-    PARTY.tierDone = !!R.your_submitted;
-  }
-  const locked = !!PARTY.tierDone;
-  askBox("partyTierAsk", "PUT THESE IN ORDER", PARTY.session.prompt);
-  $("partyTierRows").innerHTML = items.map(it=>{
-    const cur = PARTY.tier[it.key] || null;
-    const btns = ranks.map(t=>{
-      const style = cur===t ? `background:var(--accent);color:#0b1020` : "";
-      return `<button data-k="${esc(it.key)}" data-t="${t}" style="${style}"${locked?" disabled":""}>${t}</button>`;
-    }).join("");
-    const badge = cur ? `<span class="rkno">${cur}</span>` : "";
-    return `<div class="prank ${cur?'set':''}" style="${locked?"opacity:.65":""}"><div class="pn">${badge}${esc(it.label)}</div><div class="pb">${btns}</div></div>`;
-  }).join("");
-  if(!locked) Array.from($("partyTierRows").querySelectorAll(".pb button")).forEach(b=>b.onclick=()=>{
-    const k=b.dataset.k, t=b.dataset.t;
-    if(PARTY.tier[k]===t){ delete PARTY.tier[k]; }        // tap your own number to clear it
-    else {
-      const holder = Object.keys(PARTY.tier).find(x=>PARTY.tier[x]===t);
-      const mine = PARTY.tier[k] || null;
-      PARTY.tier[k] = t;
-      // Whoever held that slot takes the one being vacated, or drops out of the
-      // order if this name had none — never two players on the same number.
-      if(holder && holder!==k){ if(mine) PARTY.tier[holder]=mine; else delete PARTY.tier[holder]; }
-    }
-    partyRenderTier(R); partyTierSave();
-  });
+// Seed from the server ONCE per round. Re-seeding on every poll would clobber a
+// tap still inside its save debounce.
+function partySeedBoard(R){
+  if(PARTY.boardRound === R.id) return;
+  PARTY.boardRound = R.id;
+  PARTY.board = { ...(R.your_assignments||{}) };
+  PARTY.boardDone = !!R.your_submitted;
+}
 
-  const done = Object.keys(PARTY.tier).length;
+// Shared footer: the Lock it in button and the "n of m ready" line. `hint` is
+// whatever the round wants to say while the board is still incomplete.
+function partyBoardFooter(R, doneId, stateId, filled, total, hint){
+  const locked = !!PARTY.boardDone;
   const ready = R.submitted||0, m = (PARTY.members||[]).length;
-  const btn = $("partyTierDone");
-  btn.disabled = !locked && done < items.length;
+  const btn = $(doneId);
+  btn.disabled = !locked && filled < total;
   btn.className = locked ? "ghost" : "";
-  btn.textContent = locked ? "✅ Locked in — change my order"
-    : done < items.length ? `${items.length-done} more to place` : "Lock it in";
-  $("partyTierState").textContent = locked
+  btn.textContent = locked ? "✅ Locked in — change my answers"
+    : filled < total ? `${total-filled} to go` : "Lock it in";
+  $(stateId).textContent = locked
     ? `${ready} of ${m} ready${ready<m?" — waiting on the rest":". Host can reveal."}`
-    : done < items.length ? `1 is best, ${items.length} is worst.`
+    : filled < total ? hint
     : `${ready} of ${m} ready — lock yours in so the host knows.`;
   // The host still decides when to reveal, but should be able to see at a glance
   // whether pressing it would cut somebody off mid-decision.
   if(PARTY.is_host) $("partySkipBtn").textContent = ready>=m && m>0
     ? "Reveal the room →" : `Reveal (${ready}/${m}) →`;
 }
-let PARTY_TIER_T = null;
+
+let PARTY_BOARD_T = null;
 // submit is tri-state on the wire: undefined from the autosave (leave the flag
 // alone), true from Lock it in, false from the undo.
-function partyTierSave(submit){
-  clearTimeout(PARTY_TIER_T);
+function partyBoardSave(submit){
+  clearTimeout(PARTY_BOARD_T);
   const fire = async ()=>{
     const R = PARTY && PARTY.round;
-    if(!R || R.kind!=="consensus" || R.status!=="live") return;
+    if(!R || R.status!=="live" || (R.kind!=="consensus" && R.kind!=="overunder")) return;
     const body = { session_id:PARTY.session.id, member_id:PARTY.member_id,
-      member_token:PARTY.member_token, round_id:R.id, assignments:PARTY.tier };
+      member_token:PARTY.member_token, round_id:R.id, assignments:PARTY.board };
     if(submit !== undefined) body.submit = submit;
     const r = await api("party_tier_save", body);
     // Re-read PARTY.round rather than writing onto the R captured above: a poll
@@ -2621,14 +2642,114 @@ function partyTierSave(submit){
     if(r.ok && cur && cur.id === body.round_id){
       cur.boards_saved = r.boards_saved; cur.submitted = r.submitted;
       cur.submitted_ids = r.submitted_ids; cur.your_submitted = r.your_submitted;
-      PARTY.tierDone = r.your_submitted;
+      PARTY.boardDone = r.your_submitted;
       partyRender();
     }
   };
   // A tap debounces; pressing the button must not sit behind 450ms of nothing.
-  if(submit !== undefined) fire(); else PARTY_TIER_T = setTimeout(fire, 450);
+  if(submit !== undefined) fire(); else PARTY_BOARD_T = setTimeout(fire, 450);
 }
-$("partyTierDone").onclick = ()=>partyTierSave(!PARTY.tierDone);
+$("partyTierDone").onclick = ()=>partyBoardSave(!PARTY.boardDone);
+$("partyOUDone").onclick   = ()=>partyBoardSave(!PARTY.boardDone);
+
+// ---------------------------------------------------------------- round 2
+// A 1-to-5 ORDERING, one row per name, every position one tap away.
+//
+// A rank is a POSITION, so two names can never hold the same one: tapping a
+// number somebody already has SWAPS them. That keeps the board a valid partial
+// ordering at every instant and makes any mistake one tap to fix. The server
+// de-dupes independently in party_tier_save — it cannot take the client's word
+// that this ran.
+function partyRenderTier(R){
+  const items = R.item_set || [], ranks = R.tiers || ["1","2","3","4","5"];
+  partySeedBoard(R);
+  const locked = !!PARTY.boardDone;
+  askBox("partyTierAsk", "PUT THESE IN ORDER", PARTY.session.prompt);
+  $("partyTierRows").innerHTML = items.map(it=>{
+    const cur = PARTY.board[it.key] || null;
+    const btns = ranks.map(t=>{
+      const style = cur===t ? `background:var(--accent);color:#0b1020` : "";
+      return `<button data-k="${esc(it.key)}" data-t="${t}" style="${style}"${locked?" disabled":""}>${t}</button>`;
+    }).join("");
+    const badge = cur ? `<span class="rkno">${cur}</span>` : "";
+    return `<div class="prank ${cur?'set':''}" style="${locked?"opacity:.65":""}"><div class="pn">${badge}${esc(it.label)}</div><div class="pb">${btns}</div></div>`;
+  }).join("");
+  if(!locked) Array.from($("partyTierRows").querySelectorAll(".pb button")).forEach(b=>b.onclick=()=>{
+    const k=b.dataset.k, t=b.dataset.t;
+    if(PARTY.board[k]===t){ delete PARTY.board[k]; }       // tap your own number to clear it
+    else {
+      const holder = Object.keys(PARTY.board).find(x=>PARTY.board[x]===t);
+      const mine = PARTY.board[k] || null;
+      PARTY.board[k] = t;
+      // Whoever held that slot takes the one being vacated, or drops out of the
+      // order if this name had none — never two players on the same number.
+      if(holder && holder!==k){ if(mine) PARTY.board[holder]=mine; else delete PARTY.board[holder]; }
+    }
+    partyRenderTier(R); partyBoardSave();
+  });
+  partyBoardFooter(R, "partyTierDone", "partyTierState",
+    Object.keys(PARTY.board).length, items.length, `1 is best, ${items.length} is worst.`);
+}
+
+// ------------------------------------------- round 3 · who's got more
+// The only round with a right answer. Two names, one stat, tap the one you
+// think has more. Nothing on screen says who is right until the reveal — the
+// server strips the numbers off a live round, so there is nothing here to leak
+// even if this code wanted to.
+function partyRenderOU(R){
+  const qs = R.item_set || [];
+  partySeedBoard(R);
+  const locked = !!PARTY.boardDone;
+  askBox("partyOUAsk", "WHO'S GOT MORE?", PARTY.session.prompt);
+  $("partyOURows").innerHTML = qs.map((q,i)=>{
+    const pick = PARTY.board[q.key] || null;
+    const side = (s,p)=>`<button class="ouopt ${pick===s?'on':''}" data-k="${esc(q.key)}" data-s="${s}"${locked?" disabled":""}>${esc(p.label)}</button>`;
+    return `<div class="ouq ${pick?'set':''}">
+      <div class="oun">${i+1}. Who's got ${esc(q.ask)}?</div>
+      <div class="oub">${side("a",q.a)}${side("b",q.b)}</div></div>`;
+  }).join("") || `<div class="note">Not enough known players in this one to build a round — the host can move on.</div>`;
+  if(!locked) Array.from($("partyOURows").querySelectorAll(".oub button")).forEach(b=>b.onclick=()=>{
+    // Tap the one you already picked to un-pick it; otherwise it just moves.
+    // Unlike the ordering round there is nothing to swap — two questions can
+    // absolutely share an answer.
+    if(PARTY.board[b.dataset.k]===b.dataset.s) delete PARTY.board[b.dataset.k];
+    else PARTY.board[b.dataset.k] = b.dataset.s;
+    partyRenderOU(R); partyBoardSave();
+  });
+  partyBoardFooter(R, "partyOUDone", "partyOUState",
+    Object.keys(PARTY.board).length, qs.length, "No clock. Argue about it first.");
+}
+
+// The reveal: what the room said, then what's true. In that order — seeing the
+// split before the answer is what makes being wrong together funny.
+function partyOverUnderHtml(rev){
+  if(!rev) return "";
+  if(!rev.unlocked) return `<div class="note">Nobody voted — nothing to reveal.</div>`;
+  let h = `<div style="font-weight:700;font-size:12px;color:var(--muted);letter-spacing:.5px">WHO'S GOT MORE</div>`;
+  h += (rev.questions||[]).map(q=>{
+    const tot = Math.max(1, q.a.votes + q.b.votes);
+    const row = (s,p)=>{
+      const right = q.answer===s;
+      return `<div class="ourow ${right?'win':''}">
+        <span class="oul">${right?"✅ ":""}${esc(p.label)}</span>
+        <span class="ouv">${esc(p.shown)}</span>
+        <span class="oucount">${p.votes} vote${p.votes===1?"":"s"}</span>
+        <div class="oubar"><div style="width:${Math.round(100*p.votes/tot)}%"></div></div></div>`;
+    };
+    return `<div style="margin-top:12px">
+      <div style="font-size:13px;color:var(--muted)">Who's got ${esc(q.ask)}?</div>
+      ${row("a",q.a)}${row("b",q.b)}</div>`;
+  }).join("");
+  if(rev.fooled){
+    h += `<div style="margin-top:14px;padding:10px 12px;border-radius:10px;background:rgba(249,115,22,.1);border:1px solid var(--accent);font-size:14px">
+      🎣 The room got fooled: most of you said <b>${esc(rev.fooled.answer==="a"?rev.fooled.b.label:rev.fooled.a.label)}</b>, but it's <b>${esc(rev.fooled.winner)}</b></div>`;
+  }
+  h += `<div style="font-weight:700;font-size:12px;color:var(--muted);letter-spacing:.5px;margin-top:16px">HOW MANY YOU GOT</div>`;
+  h += (rev.scores||[]).map(s=>`<div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:7px;font-size:14px">
+      <span>${s.member_emoji||""} <b>${esc(s.label)}</b> <span class="note">${s.emoji} ${esc(s.title)}</span></span>
+      <span class="note">${s.right}/${s.answered} right</span></div>`).join("");
+  return h;
+}
 
 // ---------------------------------------------------------------- round 3
 function partyRenderSudden(R){
@@ -2667,6 +2788,8 @@ function partyRenderBreak(){
       <div class="note">named in Rapid Fire</div></div>`;
   } else if(done && done.kind==="consensus"){
     h = partyConsensusHtml(done.reveal);
+  } else if(done && done.kind==="overunder"){
+    h = partyOverUnderHtml(done.reveal);
   } else if(done && done.kind==="sudden"){
     h = `<div class="note">Sudden death done.</div>`;
   }
@@ -3083,6 +3206,13 @@ function partyMenace(by){
   const rev = by.consensus && by.consensus.reveal;
   return (rev && rev.unlocked && (rev.scores||[]).length) ? rev.scores[0] : null;
 }
+// Who's Got More is sorted best-first, so the top score is the one who knew.
+// A room where everyone got zero has no winner worth a tile.
+function partyBrain(by){
+  const rev = by.overunder && by.overunder.reveal;
+  const top = (rev && rev.unlocked && (rev.scores||[])[0]) || null;
+  return (top && top.right > 0) ? top : null;
+}
 
 // Three headline tiles in three different currencies — a team number, a joke
 // title, a survivor — deliberately NOT summed. Totalling them would crown one
@@ -3092,6 +3222,8 @@ function partyNightRecapHtml(R){
   const tiles = [];
   if(by.rapid) tiles.push([`${by.rapid.count}<span class="note" style="font-size:13px">/${by.rapid.target}</span>`, "named"]);
   if(men) tiles.push([`${men.member_emoji||men.emoji} ${esc(men.label)}`, esc(men.title)]);
+  const brain = partyBrain(by);
+  if(brain) tiles.push([`${brain.member_emoji||brain.emoji} ${esc(brain.label)}`, `${brain.right}/${brain.answered} right`]);
   if(by.sudden && by.sudden.survivor) tiles.push([`🏆 ${partyWho(by.sudden.survivor_emoji, by.sudden.survivor)}`, "last standing"]);
 
   let h = `<div class="note" style="text-align:center;margin-top:4px">${esc(R.prompt)}</div>`;
@@ -3102,6 +3234,7 @@ function partyNightRecapHtml(R){
 
   if(by.rapid)     h += `<div style="margin-top:14px">${partyRapidRecapHtml(by.rapid, true)}</div>`;
   if(by.consensus) h += `<div style="margin-top:18px">${partyConsensusHtml(by.consensus.reveal)}</div>`;
+  if(by.overunder) h += `<div style="margin-top:18px">${partyOverUnderHtml(by.overunder.reveal)}</div>`;
   if(by.sudden)    h += partySuddenRecapHtml(by.sudden);
   return h;
 }
