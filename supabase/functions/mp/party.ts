@@ -462,17 +462,21 @@ async function drawOverUnder(session: any): Promise<OuQuestion[]> {
   }
   cands.sort((x, y) => y.score - x.score);
 
-  // Spread it out: nobody in more than two questions, no stat asked twice, so
-  // five questions feel like five questions.
+  // Spread it out so five questions feel like five questions: no stat asked
+  // twice, nobody in more than two, and — the one that actually bit — never the
+  // same MATCHUP twice. Capping players alone still served "Kobe or Jordan" on
+  // All-NBA and then again on All-Stars, which reads as one question stuttering.
   const out: OuQuestion[] = [];
   const seenPlayer = new Map<string, number>();
   const seenStat = new Set<string>();
+  const seenPair = new Set<string>();
   for (const c of cands) {
     if (out.length >= OU_ITEMS) break;
     const { a, b } = c.q;
-    if (seenStat.has(c.q.stat)) continue;
+    const pair = [a.key, b.key].sort().join("|");
+    if (seenStat.has(c.q.stat) || seenPair.has(pair)) continue;
     if ((seenPlayer.get(a.key) ?? 0) >= 2 || (seenPlayer.get(b.key) ?? 0) >= 2) continue;
-    seenStat.add(c.q.stat);
+    seenStat.add(c.q.stat); seenPair.add(pair);
     seenPlayer.set(a.key, (seenPlayer.get(a.key) ?? 0) + 1);
     seenPlayer.set(b.key, (seenPlayer.get(b.key) ?? 0) + 1);
     out.push({ ...c.q, key: "q" + (out.length + 1) });
