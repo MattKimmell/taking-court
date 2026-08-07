@@ -40,7 +40,10 @@ export async function actionListCreate(req: Request, body: any) {
   if (!prompt) return err("prompt_required", 400);
   const ranked = body.ranked !== false;
   const maxItems = Number.isFinite(body.max_items) ? Math.min(25, Math.max(1, Math.floor(body.max_items))) : 10;
-  const entryType = ["player", "team", "coach", "moment"].includes(body.entry_type) ? body.entry_type : "player";
+  // team_season is deliberately separate from team: "96 Bulls" and "Bulls" are
+  // different questions, and the entry_type is what the browse screen shelves on.
+  const entryType = ["player", "team", "team_season", "coach", "moment"].includes(body.entry_type)
+    ? body.entry_type : "player";
   // Public browse is opt-in and moderated (migration 0016): submitting only
   // queues the topic for review. Anything else — including an older cached
   // client still sending `visibility` — stays link-only, so this fails closed.

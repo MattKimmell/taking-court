@@ -549,7 +549,8 @@
         <div style="flex:0 0 auto"><label>About</label>
           <select id="listEntryType">
             <option value="player">Players</option>
-            <option value="team">Teams</option>
+            <option value="team">Franchises</option>
+            <option value="team_season">Teams by year</option>
             <option value="coach">Coaches</option>
             <option value="moment">Moments / anything</option>
           </select></div>
@@ -1664,8 +1665,13 @@ $("lbBots").onchange = showLeaderboard;
 // ------------------------------------------------------------------ lists (subjective)
 let LIST = { topic_id:null, share_token:null, prompt:"", ranked:true, max_items:10, entry_type:"player", items:[] };
 let LIST_POOL = []; let LIST_POOL_TYPE = null;
-const ENTRY_ICON = { player:"🏀", team:"🏟️", coach:"📋", moment:"✨" };
-const ENTRY_PH = { player:"Add a player…", team:"Add a team…", coach:"Add a coach…", moment:"Add a moment or anything…" };
+const ENTRY_ICON = { player:"🏀", team:"🏟️", team_season:"📅", coach:"📋", moment:"✨" };
+// team_season's placeholder carries an example because the YEAR is the whole
+// point of the type — "Bulls" answers a different, duller question than
+// "96 Bulls", and a bare "Add a team…" would invite the duller one.
+const ENTRY_PH = { player:"Add a player…", team:"Add a franchise…",
+  team_season:"Add a team and its year — e.g. 96 Bulls", coach:"Add a coach…",
+  moment:"Add a moment or anything…" };
 
 // --- public-browse review status (shared by lists + tier lists) -------------
 // A topic is link-only until its creator submits it and a moderator approves.
@@ -1724,7 +1730,7 @@ async function openListTopic(token, dest){
 async function openBuilder(){
   show("listBuild");
   $("listBuildPrompt").textContent=LIST.prompt;
-  $("listBuildMeta").textContent=`${ENTRY_ICON[LIST.entry_type]||""} ${LIST.entry_type} · ${LIST.ranked?"ranked":"unordered"} · up to ${LIST.max_items}`
+  $("listBuildMeta").textContent=`${ENTRY_ICON[LIST.entry_type]||""} ${catLabel(LIST.entry_type)} · ${LIST.ranked?"ranked":"unordered"} · up to ${LIST.max_items}`
     + (reviewTag(LIST.review_status)?" · "+reviewTag(LIST.review_status):"");
   $("listAddInput").placeholder=ENTRY_PH[LIST.entry_type]||"Add…";
   $("listBuildErr").textContent=""; $("listSaveState").textContent="";
@@ -1736,7 +1742,10 @@ async function loadListPool(){
   const et=LIST.entry_type||"player";
   if(LIST_POOL_TYPE===et) return;
   LIST_POOL_TYPE=et; LIST_POOL=[];
-  if(et==="coach"||et==="moment") return;                 // free text, no autocomplete
+  // Free text, no autocomplete. team_season belongs here even though a team list
+  // exists: the year is the point, and suggesting bare franchise names would
+  // steer people straight back to the question this type replaces.
+  if(et==="coach"||et==="moment"||et==="team_season") return;
   const r=await api("suggest",{pool: et==="team"?"teams":"players"});
   if(r.ok&&r.items) LIST_POOL=r.items.map(x=> typeof x==="string"?x:x.v);
 }
@@ -1880,7 +1889,8 @@ $("listCompareCopyBtn").onclick=()=>{
 // distinction that actually matters when choosing a list to fill in.
 const ENTRY_CATS = [
   { key:"player", icon:"🏀",  label:"Players",  blurb:"Who makes your cut." },
-  { key:"team",   icon:"🏟️", label:"Teams",    blurb:"Franchises, dynasties, eras." },
+  { key:"team_season", icon:"📅", label:"Teams by year", blurb:"96 Bulls, not just Bulls." },
+  { key:"team",   icon:"🏟️", label:"Franchises", blurb:"Sixty years in one word." },
   { key:"coach",  icon:"📋",  label:"Coaches",  blurb:"Sidelines and systems." },
   { key:"moment", icon:"✨",  label:"Moments",  blurb:"Shots, games, anything." },
 ];

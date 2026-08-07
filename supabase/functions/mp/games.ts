@@ -1007,6 +1007,17 @@ const DRAFT_PHRASE: Record<string, string> = {
   lottery: "were lottery picks", round1: "were first-round picks",
   round2: "were second-round picks",
 };
+// Awards won in a SEASON, so mp_facet_match ties them to the team the player was
+// on and the decade it happened in (0038). The sentence has to say so: "played
+// for the Lakers and won MVP" describes two unconnected facts and is exactly the
+// reading the predicate no longer allows.
+//
+// `hof` and `allstar10` are absent on purpose — a Hall of Fame induction and a
+// ten-All-Star career are properties of the whole career, so they keep the
+// plain "played for the Knicks and are in the Hall of Fame" construction.
+const SEASON_AWARDS = new Set([
+  "mvp", "dpoy", "roy", "smoy", "mip", "allnba", "alldef", "allstar", "ring",
+]);
 
 // Readable English from a filter set. Worth the fiddliness: the prompt is the
 // whole game, and "Name 8 players position=G team=LAL" would be unplayable as a
@@ -1016,17 +1027,30 @@ const DRAFT_PHRASE: Record<string, string> = {
 function filterPhrase(f: Record<string, any>): string {
   const noun = f.position ? POS_PLURAL[f.position] : "players";
   const clauses: string[] = [];
-  if (f.team) clauses.push(`played for the ${TEAM_NAMES[f.team] ?? f.team}`);
+  // A season award absorbs the team and the decade into its own clause — "won
+  // MVP with the Lakers in the 1980s" — because that is what the pool now
+  // contains. Listing them separately would promise a looser question than the
+  // sheet answers.
+  const seasonal = !!f.award && SEASON_AWARDS.has(f.award);
+  if (f.team && !seasonal) clauses.push(`played for the ${TEAM_NAMES[f.team] ?? f.team}`);
   // "went to Duke" / "came out of the Big East" — both read as natural speech,
   // which matters more here than consistency of construction. All six
-  // conferences take a definite article.
+  // conferences take a definite article. Neither is season-scoped: you go to
+  // college before the NBA, so it is a fact about the player, not the year.
   if (f.college) clauses.push(`went to ${f.college}`);
   if (f.conference) clauses.push(`came out of the ${f.conference}`);
-  if (f.award) clauses.push(AWARD_PHRASE[f.award]);
+  if (f.award) {
+    let a = AWARD_PHRASE[f.award];
+    if (seasonal && f.team) a += ` with the ${TEAM_NAMES[f.team] ?? f.team}`;
+    if (seasonal && f.decade) a += ` in the ${f.decade}s`;
+    clauses.push(a);
+  }
   if (f.draft) clauses.push(DRAFT_PHRASE[f.draft]);
   let s = noun;
   if (clauses.length) s += ` who ${clauses.join(" and ")}`;
-  if (f.decade) s += `${clauses.length ? " and were" : " who were"} active in the ${f.decade}s`;
+  if (f.decade && !seasonal) {
+    s += `${clauses.length ? " and were" : " who were"} active in the ${f.decade}s`;
+  }
   return s;
 }
 
