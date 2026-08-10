@@ -11,6 +11,11 @@ node_modules/
 CLAUDE.local.md
 82_0_research/
 
+# Agent skills setup (Matt Pocock flow) — local only; repo root is the public site
+AGENTS.md
+CLAUDE.md
+docs/agents/
+
 # Claude Code local config + worktrees (never published; repo root is the site)
 .claude/
 
