@@ -1020,6 +1020,15 @@ const SB = window.supabase
   : null;
 let AUTH = { session: null, user: null };
 function authToken(){ return AUTH.session?.access_token || CFG.key; }
+async function refreshSessionForRetry(){
+  if(!SB || !AUTH.session?.refresh_token) return false;
+  try{
+    const { data, error } = await SB.auth.refreshSession();
+    if(error || !data.session) return false;
+    AUTH.session = data.session; AUTH.user = data.session.user ?? null;
+    return true;
+  }catch(e){ return false; }
+}
 async function refreshAuth(){ if(!SB) return; try{ const { data } = await SB.auth.getSession(); AUTH.session = data.session; AUTH.user = data.session?.user ?? null; }catch(e){} }
 async function sendMagicLink(email){
   if(!SB) return { error: "auth unavailable" };
@@ -1053,11 +1062,13 @@ function track(event, props={}){
 }
 async function api(action, payload={}){
   const c = cfg();
-  const res = await fetch(c.url, {
+  const send = () => fetch(c.url, {
     method:"POST",
     headers:{ "Content-Type":"application/json", "Authorization":"Bearer "+authToken() },
     body: JSON.stringify({ action, ...payload })
   });
+  let res = await send();
+  if(res.status===401 && await refreshSessionForRetry()) res = await send();
   let data; try{ data = await res.json(); }catch{ data = {ok:false,error:"bad_response ("+res.status+")"}; }
   return data;
 }
