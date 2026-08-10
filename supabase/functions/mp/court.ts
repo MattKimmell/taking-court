@@ -1,5 +1,6 @@
-import { db, ok, err, authedUserId, ownerFilter, safeClientId, computeStreak } from "./shared.ts";
-import { courtDate, courtToken, houseTakeForDate, normalizeTakeAnswers, takeConsensus, validateTakeItems } from "./court_contract.js";
+import { actionGuess, actionStart } from "./games.ts";
+import { db, ok, err, json, authedUserId, ownerFilter, safeClientId, computeStreak, loadRosterPool } from "./shared.ts";
+import { courtDate, courtToken, dailyChallengeForDate, houseTakeForDate, normalizeTakeAnswers, takeConsensus, takeCourtBeats, validateDailyChallenge, validateTakeItems } from "./court_contract.js";
 
 type CourtDay = {
   id: string;
@@ -10,6 +11,7 @@ type CourtDay = {
     title: string;
     items: unknown[];
   };
+  challenge_definition: Record<string, any>;
 };
 
 function dayFromBody(body: any): string {
@@ -17,19 +19,95 @@ function dayFromBody(body: any): string {
   return /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : courtDate();
 }
 
+async function buildCourtChallenge(day: string) {
+  const definition = dailyChallengeForDate(day);
+  const structuralError = validateDailyChallenge(definition);
+  if (structuralError) throw new Error(`invalid_daily_challenge: ${structuralError}`);
+
+  const preview = await db.rpc("mp_challenge_preview", { f: definition.filters });
+  if (preview.error) throw preview.error;
+  const pv = preview.data as any;
+  if (pv?.verdict === "impossible" || pv?.unknown_filter || Number(pv?.known ?? 0) < definition.target) {
+    throw new Error("invalid_daily_challenge: unsafe_pool");
+  }
+
+  const built = await db.rpc("mp_build_filtered_roster", {
+    f: definition.filters,
+    p_prompt: definition.prompt,
+    p_target: definition.target,
+    p_difficulty: pv.difficulty === "easy" ? "normal" : "hard",
+  });
+  if (built.error) throw built.error;
+  const rosterSheetId = built.data as string;
+  const pool = await loadRosterPool(rosterSheetId);
+  if (pool.length < definition.target) throw new Error("invalid_daily_challenge: incomplete_pool");
+
+  const shareToken = `court_challenge_${day}`;
+  const existing = await db.from("mp_challenges").select("*").eq("share_token", shareToken).maybeSingle();
+  let challenge = existing.data;
+  if (!challenge) {
+    const expiresAt = new Date(new Date(`${day}T00:00:00Z`).getTime() + 3 * 86400000).toISOString();
+    const inserted = await db.from("mp_challenges").insert({
+      share_token: shareToken,
+      kind: "roster",
+      roster_sheet_id: rosterSheetId,
+      sheet_id: null,
+      mode: "competition",
+      status: "open",
+      prompt: definition.prompt,
+      answer_target: definition.target,
+      question_version: 1,
+      answers_snapshot: pool,
+      strike_limit: 3,
+      rules: { court_daily: true, strike_limit: 3, answer_target: definition.target, mode: "competition", kind: "roster" },
+      max_participants: null,
+      require_auth: false,
+      creator_label: "Daily Court",
+      expires_at: expiresAt,
+    }).select("*").single();
+    if (inserted.data) challenge = inserted.data;
+    else {
+      const raced = await db.from("mp_challenges").select("*").eq("share_token", shareToken).maybeSingle();
+      if (raced.data) challenge = raced.data;
+      else if (inserted.error) throw inserted.error;
+    }
+  }
+  if (!challenge) throw new Error("daily_challenge_unavailable");
+  return {
+    ...definition,
+    challenge_id: challenge.id,
+    share_token: challenge.share_token,
+    roster_sheet_id: rosterSheetId,
+    pool_size: pool.length,
+  };
+}
+
+async function ensureCourtChallenge(courtDay: CourtDay): Promise<CourtDay> {
+  if (courtDay.challenge_definition?.challenge_id) return courtDay;
+  const challenge = await buildCourtChallenge(courtDay.day);
+  const updated = await db.from("mp_court_days")
+    .update({ challenge_definition: challenge, updated_at: new Date().toISOString() })
+    .eq("id", courtDay.id)
+    .select("*")
+    .single();
+  return (updated.data as CourtDay | null) ?? { ...courtDay, challenge_definition: challenge };
+}
+
 async function getOrCreateCourtDay(day = courtDate()): Promise<CourtDay | null> {
   const token = courtToken(day);
   const existing = await db.from("mp_court_days").select("*").eq("day", day).maybeSingle();
-  if (existing.data) return existing.data as CourtDay;
+  if (existing.data) return await ensureCourtChallenge(existing.data as CourtDay);
 
   const houseTake = houseTakeForDate(day);
   const structuralError = validateTakeItems(houseTake.items);
   if (structuralError) throw new Error(`invalid_house_take: ${structuralError}`);
+  const challenge = await buildCourtChallenge(day);
 
   const row = {
     day,
     share_token: token,
     house_take: houseTake,
+    challenge_definition: challenge,
     status: "published",
   };
   const created = await db.from("mp_court_days").insert(row).select("*").single();
@@ -37,7 +115,7 @@ async function getOrCreateCourtDay(day = courtDate()): Promise<CourtDay | null> 
 
   // A concurrent first resolve can win the unique constraint race.
   const again = await db.from("mp_court_days").select("*").eq("day", day).maybeSingle();
-  return (again.data as CourtDay | null) ?? null;
+  return again.data ? await ensureCourtChallenge(again.data as CourtDay) : null;
 }
 
 async function courtStreak(userId: string | null, clientId: string | null, today: string) {
@@ -49,13 +127,16 @@ async function courtStreak(userId: string | null, clientId: string | null, today
     .select("day_id")
     .or(filter);
   const dayIds = [...new Set((locks ?? []).map((row: any) => row.day_id).filter(Boolean))];
-  if (!dayIds.length) return empty;
-
-  const { data: days } = await db.from("mp_court_days")
-    .select("id, day")
-    .in("id", dayIds);
   const dates = new Set<string>();
-  for (const row of days ?? []) dates.add(String(row.day));
+  if (dayIds.length) {
+    const { data: days } = await db.from("mp_court_days")
+      .select("id, day")
+      .in("id", dayIds);
+    for (const row of days ?? []) dates.add(String(row.day));
+  }
+
+  const challengeDates = await completedChallengeDates(userId, clientId);
+  for (const date of challengeDates) dates.add(date);
   if (!dates.size) return empty;
   const sorted = [...dates].sort();
   return {
@@ -63,6 +144,27 @@ async function courtStreak(userId: string | null, clientId: string | null, today
     last_played: sorted[sorted.length - 1],
     played_today: dates.has(today),
   };
+}
+
+async function completedChallengeDates(userId: string | null, clientId: string | null) {
+  if (!userId && !clientId) return new Set<string>();
+  const { data: days } = await db.from("mp_court_days").select("day, challenge_definition");
+  const byChallenge = new Map<string, string>();
+  for (const day of days ?? []) {
+    const id = (day.challenge_definition as any)?.challenge_id;
+    if (id) byChallenge.set(id, String(day.day));
+  }
+  if (!byChallenge.size) return new Set<string>();
+  const { data: attempts } = await db.from("mp_attempts")
+    .select("challenge_id, player_client_id, player_user_id, status")
+    .in("challenge_id", [...byChallenge.keys()])
+    .eq("status", "completed");
+  const dates = new Set<string>();
+  for (const attempt of attempts ?? []) {
+    const mine = (userId && attempt.player_user_id === userId) || (clientId && attempt.player_client_id === clientId);
+    if (mine) dates.add(byChallenge.get(attempt.challenge_id)!);
+  }
+  return dates;
 }
 
 async function takeLocks(dayId: string) {
@@ -73,6 +175,33 @@ async function takeLocks(dayId: string) {
   return data ?? [];
 }
 
+async function courtChallengeAttempt(courtDay: CourtDay, userId: string | null, clientId: string | null) {
+  const challengeId = courtDay.challenge_definition?.challenge_id;
+  if (!challengeId || (!userId && !clientId)) return null;
+  const { data } = await db.from("mp_attempts")
+    .select("id, attempt_token, status, started_at, correct_count, strikes, filled_slots, player_client_id, player_user_id")
+    .eq("challenge_id", challengeId);
+  return (data ?? []).find((a: any) => (userId && a.player_user_id === userId) || (clientId && a.player_client_id === clientId)) ?? null;
+}
+
+async function courtState(req: Request, body: any, courtDay: CourtDay) {
+  const userId = authedUserId(req);
+  const clientId = safeClientId(body.client_id);
+  const locks = await takeLocks(courtDay.id);
+  const mine = locks.find((l: any) => (userId && l.author_user_id === userId) || (clientId && l.author_client_id === clientId));
+  const challengeAttempt = await courtChallengeAttempt(courtDay, userId, clientId);
+  const challengeDone = challengeAttempt?.status === "completed";
+  const beats = takeCourtBeats({ takeDone: !!mine, challengeDone });
+  return {
+    locks,
+    mine,
+    challengeAttempt,
+    challengeDone,
+    beats,
+    streak: await courtStreak(userId, clientId, courtDay.day),
+  };
+}
+
 export async function actionCourtDaily(req: Request, body: any) {
   const userId = authedUserId(req);
   const clientId = safeClientId(body.client_id);
@@ -80,20 +209,29 @@ export async function actionCourtDaily(req: Request, body: any) {
   const courtDay = await getOrCreateCourtDay(day);
   if (!courtDay) return err("court_day_unavailable", 500);
 
-  const locks = await takeLocks(courtDay.id);
-  const mine = locks.find((l: any) => (userId && l.author_user_id === userId) || (clientId && l.author_client_id === clientId));
+  const state = await courtState(req, body, courtDay);
   const items = courtDay.house_take.items;
   return ok({
     date: courtDay.day,
     day: { id: courtDay.id, share_token: courtDay.share_token },
+    challenge: courtDay.challenge_definition,
     take: courtDay.house_take,
-    your_answers: mine?.answers ?? {},
-    take_done: !!mine,
-    done: !!mine,
-    beats: { take: !!mine, challenge: false, full_stack: false },
-    consensus: mine ? takeConsensus(items, locks as any[]) : null,
-    consensus_gate: { have: locks.length, honest_empty: locks.length <= 1 },
-    streak: await courtStreak(userId, clientId, courtDay.day),
+    your_answers: state.mine?.answers ?? {},
+    take_done: !!state.mine,
+    challenge_done: state.challengeDone,
+    done: state.beats.take || state.beats.challenge,
+    beats: state.beats,
+    challenge_attempt: state.challengeAttempt ? {
+      id: state.challengeAttempt.id,
+      status: state.challengeAttempt.status,
+      started: !!state.challengeAttempt.started_at,
+      correct_count: state.challengeAttempt.correct_count ?? 0,
+      strikes: state.challengeAttempt.strikes ?? 0,
+      filled_slots: state.challengeAttempt.filled_slots ?? {},
+    } : null,
+    consensus: state.mine ? takeConsensus(items, state.locks as any[]) : null,
+    consensus_gate: { have: state.locks.length, honest_empty: state.locks.length <= 1 },
+    streak: state.streak,
   });
 }
 
@@ -137,16 +275,71 @@ export async function actionCourtTakeLock(req: Request, body: any) {
   }
 
   const after = await takeLocks(courtDay.id);
+  const state = await courtState(req, body, courtDay);
   return ok({
     locked: true,
     date: courtDay.day,
     day: { id: courtDay.id, share_token: courtDay.share_token },
+    challenge: courtDay.challenge_definition,
     take: courtDay.house_take,
     your_answers: normalized.answers,
     done: true,
-    beats: { take: true, challenge: false, full_stack: false },
+    beats: state.beats,
     consensus: takeConsensus(items, after as any[]),
     consensus_gate: { have: after.length, honest_empty: after.length <= 1 },
-    streak: await courtStreak(userId, clientId, courtDay.day),
+    streak: state.streak,
+  });
+}
+
+export async function actionCourtChallengeStart(req: Request, body: any) {
+  const userId = authedUserId(req);
+  const clientId = safeClientId(body.client_id);
+  if (!userId && !clientId) return err("identity_required", 400);
+  const day = dayFromBody(body);
+  const courtDay = await getOrCreateCourtDay(day);
+  if (!courtDay) return err("court_day_unavailable", 500);
+  const res = await actionStart(req, {
+    ...body,
+    challenge_id: courtDay.challenge_definition.challenge_id,
+    share_token: courtDay.challenge_definition.share_token,
+  });
+  const data = await res.json();
+  if (!data.ok) return json(data, res.status);
+  const state = await courtState(req, body, courtDay);
+  return ok({
+    ...data,
+    date: courtDay.day,
+    court_day: { id: courtDay.id, share_token: courtDay.share_token },
+    court_challenge: courtDay.challenge_definition,
+    beats: state.beats,
+    streak: state.streak,
+  });
+}
+
+export async function actionCourtChallengeGuess(req: Request, body: any) {
+  const userId = authedUserId(req);
+  const clientId = safeClientId(body.client_id);
+  if (!userId && !clientId) return err("identity_required", 400);
+  const day = dayFromBody(body);
+  const courtDay = await getOrCreateCourtDay(day);
+  if (!courtDay) return err("court_day_unavailable", 500);
+  const { data: attempt } = await db.from("mp_attempts")
+    .select("challenge_id")
+    .eq("id", body.attempt_id ?? "")
+    .maybeSingle();
+  if (!attempt || attempt.challenge_id !== courtDay.challenge_definition.challenge_id) {
+    return err("court_challenge_attempt_required", 403);
+  }
+  const res = await actionGuess(req, body);
+  const data = await res.json();
+  if (!data.ok) return json(data, res.status);
+  const state = await courtState(req, body, courtDay);
+  return ok({
+    ...data,
+    date: courtDay.day,
+    court_day: { id: courtDay.id, share_token: courtDay.share_token },
+    court_challenge: courtDay.challenge_definition,
+    beats: state.beats,
+    streak: state.streak,
   });
 }

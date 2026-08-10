@@ -342,6 +342,7 @@
     <div class="note" id="courtConsensusNote" style="margin-top:2px"></div>
     <div id="courtConsensusRows" style="margin-top:10px"></div>
     <div class="row" style="margin-top:14px">
+      <button id="courtChallengeStart">Start Challenge</button>
       <button class="ghost" id="courtConsensusRefresh">Refresh</button>
     </div>
     <div class="err" id="courtConsensusErr"></div>
@@ -1054,7 +1055,8 @@ async function api(action, payload={}){
 // ------------------------------------------------------------------ state
 let ST = { challenge_id:null, share_token:null, attempt_id:null, attempt_token:null,
            answer_target:8, strike_limit:3, mode:"duel", prompt:"", startedMs:null,
-           filled:{}, strikes:0, correct:0, finished:false, sheet_id:null };
+           filled:{}, strikes:0, correct:0, finished:false, sheet_id:null,
+           isCourtDaily:false, courtDate:null };
 let timerInt=null;
 
 function show(id){ ["lobby","courtTake","courtConsensus","nameHome","catPage","share","preview","play","results","leaderboard","listsHome","listBuild","listCompare","tierHome","tierBoard","tierCompare","tierBrowse","partyHost","partyPlay","partyRecap","mine","crewHome","crewRoom"].forEach(s=>$(s).classList.toggle("hidden", s!==id)); }
@@ -1385,7 +1387,7 @@ async function createChallenge(sheet_id, kind, andPlay){
         attempt_token:r.attempt_token, answer_target:r.answer_target, strike_limit:r.strike_limit,
         mode:r.mode, kind:r.kind||kind||"top8", isRoster:(r.kind||kind)==="roster",
         prompt:r.prompt, sheet_id:sheet_id, finished:false, filled:{}, strikes:0, correct:0, startedMs:null,
-        vsBot:vsComp, botLabel:r.bot_label };
+        vsBot:vsComp, botLabel:r.bot_label, isCourtDaily:false, courtDate:null };
   if(vsComp || andPlay){ startPlay(); return; }   // bot already waiting / browsed-and-tapped
   const link = location.origin+location.pathname+"?ch="+r.share_token;
   $("shareUrl").value = link;
@@ -1411,7 +1413,8 @@ async function openChallenge(token){
   const c=r.challenge;
   ST = {...ST, challenge_id:c.id, share_token:c.share_token, answer_target:c.answer_target,
         strike_limit:c.strike_limit, mode:c.mode, kind:c.kind||"top8", isRoster:c.kind==="roster",
-        vsBot:false, prompt:c.prompt, finished:false, filled:{}, strikes:0, correct:0, startedMs:null };
+        vsBot:false, prompt:c.prompt, finished:false, filled:{}, strikes:0, correct:0, startedMs:null,
+        isCourtDaily:false, courtDate:null };
   $("previewMode").textContent=c.kind==="roster"?"roster":c.mode;
   $("previewPrompt").textContent=c.prompt;
   $("previewMeta").textContent=`Name ${c.answer_target} · ${c.strike_limit} strikes · `+
@@ -1430,7 +1433,8 @@ $("revealBtn").onclick=()=>startPlay();
 
 // ------------------------------------------------------------------ start + play
 async function startPlay(){
-  const r = await api("start",{
+  const r = await api(ST.isCourtDaily ? "court_challenge_start" : "start",{
+    day: ST.courtDate || COURT.date || undefined,
     challenge_id: ST.challenge_id, share_token: ST.share_token,
     client_id: clientId(), label: $("playerName").value.trim() || undefined
   });
@@ -1484,8 +1488,16 @@ function renderPlay(){
 async function submitGuess(){
   const g=$("guessInput").value.trim(); if(!g||ST.finished) return;
   $("guessInput").value=""; acHide();
-  const r = await api("guess",{ attempt_id:ST.attempt_id, attempt_token:ST.attempt_token, guess:g });
+  const r = await api(ST.isCourtDaily ? "court_challenge_guess" : "guess",{
+    day: ST.courtDate || COURT.date || undefined,
+    client_id: clientId(),
+    attempt_id:ST.attempt_id,
+    attempt_token:ST.attempt_token,
+    guess:g
+  });
   if(!r.ok){ feed(`<span class="x">${g} → ${r.error}</span>`); return; }
+  if(r.streak) setStreak(r.streak);
+  if(r.beats) COURT.beats=r.beats;
   ST.filled=r.filled_slots||ST.filled; ST.strikes=r.strikes; ST.correct=r.correct_count;
   if(r.result==="correct"){
     const el=$("slot"+r.slot); el.classList.add("filled");
@@ -1662,7 +1674,7 @@ $("rematchBtn").onclick=async()=>{
   if(!r.ok){ $("resultsErr").textContent="Error: "+r.error; return; }
   ST={...ST, challenge_id:r.challenge_id, share_token:r.share_token, attempt_id:r.attempt_id,
       attempt_token:r.attempt_token, kind:r.kind||ST.kind, isRoster:(r.kind||ST.kind)==="roster", botLabel:r.bot_label,
-      finished:false, filled:{}, strikes:0, correct:0, startedMs:null};
+      finished:false, filled:{}, strikes:0, correct:0, startedMs:null, isCourtDaily:false, courtDate:null};
   if(ST.vsBot){ startPlay(); return; }
   $("shareUrl").value=location.origin+location.pathname+"?ch="+r.share_token; show("share");
 };
@@ -2318,7 +2330,8 @@ function setStreak(srv){
   renderStreak();
 }
 $("dailyBtn").onclick=openDaily;
-let COURT = { date:null, day:null, take:null, answers:{}, consensus:null, gate:null };
+let COURT = { date:null, day:null, take:null, challenge:null, answers:{}, consensus:null, gate:null, beats:{} };
+let courtAutoTimer=null;
 function initCourtAnswers(take, saved){
   const out={...(saved||{})};
   (take.items||[]).forEach(item=>{
@@ -2379,9 +2392,11 @@ function renderCourtConsensus(){
   const take=COURT.take; if(!take) return;
   $("courtConsensusTitle").textContent=take.title||"Today's Take";
   const s=getStreak();
-  $("courtStreakLine").textContent=`Daily Court complete${s.streak>0?` · streak ${s.streak}`:""}`;
+  const full=COURT.beats&&COURT.beats.full_stack;
+  $("courtStreakLine").textContent=`${full?"Full stack complete":"Daily Court complete"}${s.streak>0?` · streak ${s.streak}`:""}`;
   const have=(COURT.gate&&COURT.gate.have)||0;
   $("courtConsensusNote").textContent=have<=1 ? "You are early. The room will fill in as more people lock." : `${have} players locked so far.`;
+  $("courtChallengeStart").textContent = COURT.beats&&COURT.beats.challenge ? "Review Challenge" : "Start Challenge";
   const rows=COURT.consensus||[];
   $("courtConsensusRows").innerHTML=rows.length ? rows.map(row=>{
     if(row.type==="rank"){
@@ -2397,16 +2412,18 @@ function renderCourtConsensus(){
   }).join("") : `<div class="note">No consensus yet.</div>`;
 }
 async function openDaily(){
+  clearTimeout(courtAutoTimer); courtAutoTimer=null;
   const r=await api("court_daily",{client_id:clientId()});
   if(!r.ok){ $("lobbyErr").style.color="var(--bad)"; $("lobbyErr").textContent="Daily unavailable: "+r.error; return; }
   setStreak(r.streak);   // reconcile the cached number against the server's
-  COURT={ date:r.date, day:r.day, take:r.take, answers:initCourtAnswers(r.take,r.your_answers), consensus:r.consensus, gate:r.consensus_gate };
-  if(r.done){ renderCourtConsensus(); show("courtConsensus"); }
+  COURT={ date:r.date, day:r.day, take:r.take, challenge:r.challenge, answers:initCourtAnswers(r.take,r.your_answers), consensus:r.consensus, gate:r.consensus_gate, beats:r.beats||{} };
+  if(r.take_done){ renderCourtConsensus(); show("courtConsensus"); }
   else { renderCourtTake(); show("courtTake"); }
 }
 $("courtTakeBack").onclick=()=>show("lobby");
-$("courtConsensusHome").onclick=()=>show("lobby");
+$("courtConsensusHome").onclick=()=>{ clearTimeout(courtAutoTimer); courtAutoTimer=null; show("lobby"); };
 $("courtConsensusRefresh").onclick=openDaily;
+$("courtChallengeStart").onclick=()=>startCourtChallenge();
 $("courtTakeLock").onclick=async()=>{
   $("courtTakeErr").textContent="";
   const missing=(COURT.take.items||[]).find(item=>item.type==="multiple_choice" && !COURT.answers[item.id]);
@@ -2415,9 +2432,28 @@ $("courtTakeLock").onclick=async()=>{
   if(!r.ok){ $("courtTakeErr").textContent="Error: "+r.error; return; }
   setStreak(r.streak);
   track("court_take_complete", { daily:true });
-  COURT={ date:r.date, day:r.day, take:r.take, answers:initCourtAnswers(r.take,r.your_answers), consensus:r.consensus, gate:r.consensus_gate };
+  COURT={ date:r.date, day:r.day, take:r.take, challenge:r.challenge, answers:initCourtAnswers(r.take,r.your_answers), consensus:r.consensus, gate:r.consensus_gate, beats:r.beats||{} };
   renderCourtConsensus(); show("courtConsensus");
+  clearTimeout(courtAutoTimer);
+  courtAutoTimer=setTimeout(()=>{ if(!$("courtConsensus").classList.contains("hidden")) startCourtChallenge(); }, 2200);
 };
+
+async function startCourtChallenge(){
+  clearTimeout(courtAutoTimer); courtAutoTimer=null;
+  $("courtConsensusErr").textContent="";
+  const r=await api("court_challenge_start",{ day:COURT.date, client_id:clientId(), label:ensureName() });
+  if(!r.ok){ $("courtConsensusErr").textContent="Error: "+r.error; return; }
+  setStreak(r.streak);
+  COURT.beats=r.beats||COURT.beats||{};
+  ST = {...ST, challenge_id:r.challenge_id, share_token:r.share_token, attempt_id:r.attempt_id,
+        attempt_token:r.attempt_token, answer_target:r.answer_target, strike_limit:r.strike_limit,
+        mode:r.mode, kind:r.kind||"roster", isRoster:true, isCourtDaily:true, courtDate:r.date||COURT.date,
+        prompt:r.prompt, sheet_id:null, finished:false, filled:r.filled_slots||{}, strikes:r.strikes||0,
+        correct:r.correct_count||0, startedMs:r.started_at ? new Date(r.started_at).getTime() : Date.now() };
+  store.set("mp_att_"+ST.challenge_id, JSON.stringify({attempt_id:ST.attempt_id,attempt_token:ST.attempt_token}));
+  buildBoard(); renderPlay(); show("play");
+  feed(""); $("guessInput").value=""; acHide(); loadSuggestPool(); $("guessInput").focus(); startTimer();
+}
 
 function _rr(ctx,x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
 function _trunc(ctx,text,maxW){ if(ctx.measureText(text).width<=maxW) return text; let t=text; while(t.length>4 && ctx.measureText(t+"…").width>maxW) t=t.slice(0,-1); return t+"…"; }

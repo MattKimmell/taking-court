@@ -115,6 +115,50 @@ export const HOUSE_TAKE_ROTATION = [
   },
 ];
 
+export const TEAM_NAMES = {
+  ATL: "Hawks",
+  BOS: "Celtics",
+  BRK: "Nets",
+  CHO: "Hornets",
+  CHI: "Bulls",
+  CLE: "Cavaliers",
+  DAL: "Mavericks",
+  DEN: "Nuggets",
+  DET: "Pistons",
+  GSW: "Warriors",
+  HOU: "Rockets",
+  IND: "Pacers",
+  LAC: "Clippers",
+  LAL: "Lakers",
+  MEM: "Grizzlies",
+  MIA: "Heat",
+  MIL: "Bucks",
+  MIN: "Timberwolves",
+  NOP: "Pelicans",
+  NYK: "Knicks",
+  OKC: "Thunder",
+  ORL: "Magic",
+  PHI: "76ers",
+  PHO: "Suns",
+  POR: "Trail Blazers",
+  SAC: "Kings",
+  SAS: "Spurs",
+  TOR: "Raptors",
+  UTA: "Jazz",
+  WAS: "Wizards",
+};
+
+export const HOUSE_CHALLENGE_ROTATION = [
+  { axis: "team", value: "LAL", position: "G", target: 5 },
+  { axis: "college", value: "Duke", position: "F", target: 4 },
+  { axis: "team", value: "CHI", position: "C", target: 3 },
+  { axis: "college", value: "UNC", position: "G", target: 4 },
+  { axis: "team", value: "BOS", position: "F", target: 5 },
+  { axis: "college", value: "Kentucky", position: "G", target: 5 },
+];
+
+const POSITION_NOUN = { G: "guards", F: "forwards", C: "centers" };
+
 export function courtDate(now = new Date()) {
   return now.toISOString().slice(0, 10);
 }
@@ -137,6 +181,49 @@ export function houseTakeForDate(date) {
       ...item,
       options: item.options.map((option) => ({ ...option })),
     })),
+  };
+}
+
+export function challengePrompt(challenge) {
+  const noun = POSITION_NOUN[challenge.position];
+  if (challenge.axis === "team") {
+    return `Name ${challenge.target} ${noun} who played for the ${TEAM_NAMES[challenge.value] ?? challenge.value}.`;
+  }
+  return `Name ${challenge.target} ${noun} who went to ${challenge.value}.`;
+}
+
+export function validateDailyChallenge(challenge) {
+  if (!challenge || typeof challenge !== "object") return "invalid_challenge";
+  if (challenge.axis !== "team" && challenge.axis !== "college") return "invalid_challenge_axis";
+  if (!["G", "F", "C"].includes(challenge.position)) return "invalid_challenge_position";
+  if (!Number.isInteger(challenge.target) || challenge.target < 3 || challenge.target > 8) return "invalid_challenge_target";
+  if (challenge.axis === "team" && !Object.prototype.hasOwnProperty.call(TEAM_NAMES, challenge.value)) return "invalid_challenge_team";
+  if (challenge.axis === "college" && !/^[A-Za-z0-9 .'()&-]{2,40}$/.test(String(challenge.value ?? ""))) return "invalid_challenge_college";
+  return null;
+}
+
+export function dailyChallengeForDate(date) {
+  const dayIndex = dayIndexFor(date);
+  const base = HOUSE_CHALLENGE_ROTATION[((dayIndex % HOUSE_CHALLENGE_ROTATION.length) + HOUSE_CHALLENGE_ROTATION.length) % HOUSE_CHALLENGE_ROTATION.length];
+  const challenge = { ...base };
+  return {
+    ...challenge,
+    id: `house_challenge_${date}`,
+    prompt: challengePrompt(challenge),
+    filters: {
+      mode: "roster",
+      position: challenge.position,
+      target: challenge.target,
+      ...(challenge.axis === "team" ? { team: challenge.value } : { college: challenge.value }),
+    },
+  };
+}
+
+export function takeCourtBeats({ takeDone, challengeDone }) {
+  return {
+    take: !!takeDone,
+    challenge: !!challengeDone,
+    full_stack: !!takeDone && !!challengeDone,
   };
 }
 
