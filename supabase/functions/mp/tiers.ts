@@ -1,4 +1,4 @@
-import { db, ok, err, authedUserId, randomToken, tierPool, drawSet, POOL_TYPE, DAILY_ROTATION, ownerFilter, creatorFilter, safeClientId, consensusFor, scoreBoard, minBoardsFor, computeStreak } from "./shared.ts";
+import { db, ok, err, authedUserId, randomToken, tierPool, drawSet, POOL_TYPE, TIER_POOLS, TEAM_SEASON_POOLS, DAILY_ROTATION, ownerFilter, creatorFilter, safeClientId, consensusFor, scoreBoard, minBoardsFor, computeStreak } from "./shared.ts";
 
 // ---------------------------------------------------------------------------
 // Tier-list mode (spin a set from a pool, sort into S/A/B/C/D/F, compare).
@@ -19,14 +19,22 @@ export async function actionTierCreate(req: Request, body: any) {
   if (!userId && !clientId) return err("identity_required", 400);
   const prompt = String(body.prompt ?? "").trim();
   if (!prompt) return err("prompt_required", 400);
-  const source = ["star_players", "all_teams", "champion_teams", "notable_coaches"].includes(body.pool_source) ? body.pool_source : "star_players";
+  // TIER_POOLS rather than a second literal list, so adding a pool in shared.ts
+  // cannot leave create rejecting a source that tier_reroll happily redraws.
+  // It still admits 'all_teams'/'champion_teams': the form no longer offers
+  // them, but a shell cached before 0041 will keep sending one.
+  const source = TIER_POOLS.includes(body.pool_source) ? body.pool_source : "star_players";
   const itemType = POOL_TYPE[source];
   const drawSize = Number.isFinite(body.draw_size) ? Math.min(16, Math.max(4, Math.floor(body.draw_size))) : 8;
   // Opt-in + moderated (migration 0016); an older cached client sending
   // `visibility` no longer publishes anything, which is the safe direction.
   const submitPublic = body.submit_public === true;
   const visibility = submitPublic ? "public" : "unlisted";
-  const era = (source === "star_players" && Number.isFinite(body.era)) ? Math.floor(body.era) : null;   // decade start year; players-only
+  // Decade start year. Means "career overlapped the decade" for players and
+  // "the season IS in the decade" for team-seasons — a team-season is one
+  // year, so it needs no loose reading. Not offered for teams or coaches.
+  const eraOK = source === "star_players" || TEAM_SEASON_POOLS.has(source);
+  const era = (eraOK && Number.isFinite(body.era)) ? Math.floor(body.era) : null;
   const pool = await tierPool(source, era);
   if (pool.length < 4) return err("pool_too_small", 500);
   const itemSet = drawSet(pool, drawSize);

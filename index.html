@@ -645,12 +645,12 @@
       <summary>Or spin your own random set</summary>
       <div class="row" style="margin-top:8px">
         <div><label>New tier list title</label>
-          <input id="tierTitle" placeholder="e.g. 1-on-1 tier list · Championship teams tier list" /></div>
+          <input id="tierTitle" placeholder="e.g. 1-on-1 tier list · Title teams tier list" /></div>
         <div style="flex:0 0 auto"><label>Pool</label>
           <select id="tierPool">
             <option value="star_players">Star players</option>
-            <option value="all_teams">All 30 teams</option>
-            <option value="champion_teams">Championship franchises</option>
+            <option value="title_teams">Title teams (by year)</option>
+            <option value="great_team_seasons">Great seasons (by year)</option>
             <option value="notable_coaches">Notable coaches</option>
           </select></div>
         <div style="flex:0 0 auto" id="tierEraWrap"><label>Era</label>
@@ -1960,7 +1960,9 @@ let TIER = { topic_id:null, share_token:null, prompt:"", item_type:"player", tie
 let TIER_RESULT = null;   // set by renderHotTakes once there's a room to compare against
 let TIER_GATE = null;     // {have, need, unlocked} from the server
 const TIER_COLORS = { S:"#fbbf24", A:"#4ade80", B:"#7dd3fc", C:"#aab6d8", D:"#fb923c", F:"#fca5a5" };
-const tierIcon = t => t==="team"?"🏟️":t==="coach"?"📋":"🏀";
+// 📅 for team_season matches ENTRY_ICON.team_season on the subjective-list side:
+// "96 Bulls" is the same kind of thing in both modes and should look like it.
+const tierIcon = t => t==="team_season"?"📅":t==="team"?"🏟️":t==="coach"?"📋":"🏀";
 
 $("modeTiers").onclick = openTierHome;
 $("tierHomeBack").onclick = ()=>show("lobby");
@@ -2006,14 +2008,17 @@ async function loadMyTiers(){
   Array.from(box.children).forEach(el=>el.onclick=()=>openTierTopic(el.dataset.t,"board"));
   wireSubmit(box, "tier_submit", "tierErr", loadMyTiers);
 }
-function syncTierEra(){ $("tierEraWrap").style.display = ($("tierPool").value==="star_players") ? "" : "none"; }
+// Era applies to players (career overlapped the decade) and to team-season
+// pools (the season IS in the decade). Not to coaches.
+const TIER_ERA_POOLS = ["star_players","title_teams","great_team_seasons"];
+function tierEraOK(){ return TIER_ERA_POOLS.includes($("tierPool").value); }
+function syncTierEra(){ $("tierEraWrap").style.display = tierEraOK() ? "" : "none"; }
 $("tierPool").onchange=syncTierEra;
 $("tierCreateBtn").onclick=async()=>{
   const prompt=$("tierTitle").value.trim();
   if(!prompt){ $("tierErr").textContent="Give it a title."; return; }
-  const isPlayers=$("tierPool").value==="star_players";
   const r=await api("tier_create",{ prompt, pool_source:$("tierPool").value, draw_size:parseInt($("tierDraw").value)||10,
-    era: (isPlayers && $("tierEra").value) ? parseInt($("tierEra").value) : undefined,
+    era: (tierEraOK() && $("tierEra").value) ? parseInt($("tierEra").value) : undefined,
     submit_public:$("tierDiscoverable").checked, client_id:clientId(), label:$("playerName").value.trim()||"You" });
   if(!r.ok){ $("tierErr").textContent="Error: "+r.error; return; }
   TIER={ topic_id:r.topic_id, share_token:r.share_token, prompt:r.prompt, item_type:r.item_type, tiers:r.tiers, item_set:r.item_set, review_status:r.review_status, assign:{}, is_creator:true };

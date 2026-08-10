@@ -287,7 +287,30 @@ export const NOTABLE_COACHES = [
   "Rick Adelman","Mike Brown","Dwane Casey","Billy Donovan","Monty Williams","Quin Snyder","Scott Brooks",
   "Nate McMillan","Mark Jackson",
 ];
-export const POOL_TYPE: Record<string, string> = { star_players: "player", all_teams: "team", champion_teams: "team", notable_coaches: "coach" };
+// 'all_teams' and 'champion_teams' draw FRANCHISES, which is the question
+// migration 0041 replaced: "Bulls vs Cavs" flattens sixty years into one word
+// and everyone answers the same way, where "96 Bulls vs 16 Cavs" is the
+// argument people actually have. They are kept here — and only here — because
+// topics created before 0041 store one in pool_source and tier_reroll reads it
+// back. Nothing offers them any more; the two team_season pools replaced them.
+export const POOL_TYPE: Record<string, string> = {
+  star_players: "player", all_teams: "team", champion_teams: "team",
+  title_teams: "team_season", great_team_seasons: "team_season",
+  notable_coaches: "coach",
+};
+// Pools whose items are a single season, so the era selector filters by the
+// season played rather than by a career overlapping the decade.
+export const TEAM_SEASON_POOLS = new Set(["title_teams", "great_team_seasons"]);
+// Floor for great_team_seasons. At 42 the pool is ~83: every champion worth
+// drawing plus the teams that won 60+ and no ring (73-9 Warriors, '07 Mavs,
+// '94 Sonics), which is what stops a draw being ten banners and no argument.
+export const TEAM_SEASON_FLOOR = 42;
+// title_teams needs a HIGHER floor, not the same one. A championship is a flat
+// +40 before recency, so a 43-29 champion from 1955 clears a bar that a team
+// has to win 60 games to reach on merit. At 42 the daily could serve the
+// 1952-53 Minneapolis Lakers next to the 2016-17 Warriors, and nobody in this
+// audience holds an opinion about the first one. 50 starts the list in 1959.
+export const TITLE_TEAM_FLOOR = 50;
 export const TIER_POOLS = Object.keys(POOL_TYPE);
 export async function tierPool(source: string, era?: number | null): Promise<{ key: string; label: string }[]> {
   // Fail loudly on an unknown source. Curated themes carry pool_source='curated'
@@ -299,6 +322,20 @@ export async function tierPool(source: string, era?: number | null): Promise<{ k
   if (source === "all_teams") return mk(TEAM_POOL.map((t) => t.v));
   if (source === "champion_teams") return mk(CHAMPION_TEAMS);
   if (source === "notable_coaches") return mk(NOTABLE_COACHES);
+  if (TEAM_SEASON_POOLS.has(source)) {
+    // Specific team-seasons ('1995-96 Chicago Bulls'), scored and stored by
+    // mp_rebuild_team_seasons. `key` is already mp_normalize(label) in the
+    // table, so it is read rather than recomputed — tier_save validates
+    // assignments against exactly this value.
+    let q = db.from("mp_team_seasons").select("key, label, notability");
+    if (source === "title_teams") q = q.eq("champion", true).gte("notability", TITLE_TEAM_FLOOR);
+    else q = q.gte("notability", TEAM_SEASON_FLOOR);
+    // Here `era` is the decade the season BELONGS to, not a career overlap:
+    // a team-season is one year, so it sits in exactly one decade.
+    if (typeof era === "number" && Number.isFinite(era)) q = q.eq("decade", era);
+    const { data } = await q.order("notability", { ascending: false }).limit(200);
+    return (data ?? []).map((r) => ({ key: r.key as string, label: r.label as string }));
+  }
   // star_players: draw from a notability-ranked pool (stars + memorable role players +
   // surviving legends, with a built-in recency lean) so tier sets are recognizable and
   // debatable — not just the top career scorers.
@@ -402,12 +439,18 @@ export function minBoardsFor(kind?: string | null): number {
 }
 
 // Rotating daily tier debate (one shared set per calendar day).
+// The two team days used to draw franchises and ask you to rank the Bulls
+// against the Kings across all of history — a question with one answer that
+// everybody already shares. They now draw specific seasons. The array KEEPS
+// ITS LENGTH so `dayIndex % 5` lands on the same slot it always did; only what
+// each slot serves changed, and past dailies are already materialised as
+// topics, so nothing retroactive moves.
 export const DAILY_ROTATION = [
   { prompt: "Daily 1-on-1: tier these players", pool_source: "star_players", draw_size: 10 },
-  { prompt: "Daily franchises: tier these teams", pool_source: "champion_teams", draw_size: 10 },
+  { prompt: "Daily banners: tier these title teams", pool_source: "title_teams", draw_size: 10 },
   { prompt: "Daily sidelines: tier these coaches", pool_source: "notable_coaches", draw_size: 8 },
   { prompt: "Daily hoopers: tier these legends", pool_source: "star_players", draw_size: 12 },
-  { prompt: "Daily dynasties: tier these teams", pool_source: "all_teams", draw_size: 10 },
+  { prompt: "Daily dynasties: tier these great teams", pool_source: "great_team_seasons", draw_size: 10 },
 ];
 
 // ---------------------------------------------------------------------------
