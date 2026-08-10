@@ -332,6 +332,12 @@ export async function tierPool(source: string, era?: number | null): Promise<{ k
     else q = q.gte("notability", TEAM_SEASON_FLOOR);
     // Here `era` is the decade the season BELONGS to, not a career overlap:
     // a team-season is one year, so it sits in exactly one decade.
+    // ⚠️ A season is filed under the year it ENDS, so the 1989-90 Pistons are
+    // a 1990s team and the 1999-00 Lakers are a 2000s one. That looks wrong
+    // next to the label until you notice it is the same rule
+    // mp_player_award_seasons.decade already uses — a title won in June 1990
+    // and an MVP won in June 1990 have to land in the same decade, or "Pistons
+    // of the 1990s" and "MVPs of the 1990s" would disagree about that spring.
     if (typeof era === "number" && Number.isFinite(era)) q = q.eq("decade", era);
     const { data } = await q.order("notability", { ascending: false }).limit(200);
     return (data ?? []).map((r) => ({ key: r.key as string, label: r.label as string }));
