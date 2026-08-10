@@ -245,13 +245,13 @@
 <div id="welcome">
   <img class="logo" src="icons/icon-192.png" alt="Taking Court" />
   <h2>Taking <span class="b">Court</span></h2>
-  <p>Draw a set, sort it into tiers, and defend your take. A quick daily hoops debate you can settle with the group.</p>
+  <p>Lock three hoops takes, see the room, and keep one Daily Court streak.</p>
   <div class="steps">
-    <div class="step"><div class="e">🎲</div><div class="t">Draw a set</div></div>
-    <div class="step"><div class="e">🪜</div><div class="t">Sort S→F</div></div>
+    <div class="step"><div class="e">🎲</div><div class="t">Get today's Take</div></div>
+    <div class="step"><div class="e">🪜</div><div class="t">Rank and pick</div></div>
     <div class="step"><div class="e">🔥</div><div class="t">See the room</div></div>
   </div>
-  <button class="cta" id="welcomePlay">🗓️ Play today's Daily</button>
+  <button class="cta" id="welcomePlay">Play Now</button>
   <button class="skip" id="welcomeSkip">Just looking around →</button>
 </div>
 <div class="wrap">
@@ -265,7 +265,7 @@
 
   <!-- ===================== LOBBY ===================== -->
   <div id="lobby" class="card">
-    <button id="dailyBtn" style="width:100%;font-size:16px;padding:14px;margin-bottom:14px;background:linear-gradient(90deg,var(--accent),var(--gold))">🗓️ Play today's Daily <span id="dailyStreak"></span></button>
+    <button id="dailyBtn" style="width:100%;font-size:16px;padding:14px;margin-bottom:14px;background:linear-gradient(90deg,var(--accent),var(--gold))">Play Now <span id="dailyStreak"></span></button>
     <!-- The distinction is what YOU supply: the right answers, or the names
          themselves. The old lobby put one mode's config form here and hid the
          others behind nav buttons, which made the recall game look like the
@@ -310,6 +310,41 @@
       </div>
     </details>
 
+  </div>
+
+  <!-- ===================== DAILY COURT TAKE ===================== -->
+  <div id="courtTake" class="card hidden">
+    <div class="head">
+      <div>
+        <div class="pill" style="display:inline-block;margin-bottom:6px">Daily Court</div>
+        <div style="font-weight:800;font-size:18px" id="courtTakeTitle"></div>
+      </div>
+      <button class="ghost" id="courtTakeBack" style="flex:0 0 auto;padding:6px 12px">Home</button>
+    </div>
+    <div class="note">Lock all three takes to complete today's beat and keep your streak alive.</div>
+    <div id="courtTakeItems" style="margin-top:12px"></div>
+    <div class="row" style="margin-top:14px">
+      <button id="courtTakeLock">Lock Take</button>
+    </div>
+    <div class="err" id="courtTakeErr"></div>
+  </div>
+
+  <div id="courtConsensus" class="card hidden">
+    <div class="head">
+      <div>
+        <div class="pill" style="display:inline-block;margin-bottom:6px">Take locked</div>
+        <div style="font-weight:800;font-size:18px" id="courtConsensusTitle"></div>
+      </div>
+      <button class="ghost" id="courtConsensusHome" style="flex:0 0 auto;padding:6px 12px">Home</button>
+    </div>
+    <div id="courtStreakLine" class="banner win" style="margin-top:8px"></div>
+    <div style="font-weight:700;margin-top:16px">Room consensus</div>
+    <div class="note" id="courtConsensusNote" style="margin-top:2px"></div>
+    <div id="courtConsensusRows" style="margin-top:10px"></div>
+    <div class="row" style="margin-top:14px">
+      <button class="ghost" id="courtConsensusRefresh">Refresh</button>
+    </div>
+    <div class="err" id="courtConsensusErr"></div>
   </div>
 
   <!-- ===================== NAME IT (recall challenges) ===================== -->
@@ -1022,7 +1057,7 @@ let ST = { challenge_id:null, share_token:null, attempt_id:null, attempt_token:n
            filled:{}, strikes:0, correct:0, finished:false, sheet_id:null };
 let timerInt=null;
 
-function show(id){ ["lobby","nameHome","catPage","share","preview","play","results","leaderboard","listsHome","listBuild","listCompare","tierHome","tierBoard","tierCompare","tierBrowse","partyHost","partyPlay","partyRecap","mine","crewHome","crewRoom"].forEach(s=>$(s).classList.toggle("hidden", s!==id)); }
+function show(id){ ["lobby","courtTake","courtConsensus","nameHome","catPage","share","preview","play","results","leaderboard","listsHome","listBuild","listCompare","tierHome","tierBoard","tierCompare","tierBrowse","partyHost","partyPlay","partyRecap","mine","crewHome","crewRoom"].forEach(s=>$(s).classList.toggle("hidden", s!==id)); }
 // Challenge setup moved off the lobby onto #nameHome, so lobbyErr is hidden
 // whenever Name It is open — a failed create would have reported into a screen
 // nobody is looking at. Always write to the error box on the visible screen.
@@ -2283,14 +2318,106 @@ function setStreak(srv){
   renderStreak();
 }
 $("dailyBtn").onclick=openDaily;
+let COURT = { date:null, day:null, take:null, answers:{}, consensus:null, gate:null };
+function initCourtAnswers(take, saved){
+  const out={...(saved||{})};
+  (take.items||[]).forEach(item=>{
+    if(item.type==="rank"){
+      const keys=(item.options||[]).map(o=>o.key);
+      if(!Array.isArray(out[item.id]) || out[item.id].length!==keys.length) out[item.id]=keys;
+    } else if(typeof out[item.id]!=="string") {
+      out[item.id]="";
+    }
+  });
+  return out;
+}
+function renderCourtTake(){
+  const take=COURT.take; if(!take) return;
+  $("courtTakeTitle").textContent=take.title||"Today's Take";
+  $("courtTakeErr").textContent="";
+  $("courtTakeItems").innerHTML=(take.items||[]).map((item,idx)=>{
+    const answer=COURT.answers[item.id];
+    if(item.type==="rank"){
+      const byKey={}; (item.options||[]).forEach(o=>byKey[o.key]=o);
+      const keys=Array.isArray(answer)?answer:(item.options||[]).map(o=>o.key);
+      return `<div class="card" style="background:var(--panel2);margin-top:10px">
+        <div class="note">Take ${idx+1} · Rank</div>
+        <div style="font-weight:800;margin-top:4px">${esc(item.prompt)}</div>
+        <div style="margin-top:10px">${keys.map((key,pos)=>`<div class="slot" style="align-items:center">
+          <div class="n">${pos+1}</div>
+          <div class="name">${esc((byKey[key]||{}).label||key)}</div>
+          <div class="row" style="flex:0 0 auto;gap:6px">
+            <button class="ghost court-rank" data-id="${esc(item.id)}" data-dir="-1" data-pos="${pos}" ${pos===0?"disabled":""} style="padding:5px 9px;min-height:34px">↑</button>
+            <button class="ghost court-rank" data-id="${esc(item.id)}" data-dir="1" data-pos="${pos}" ${pos===keys.length-1?"disabled":""} style="padding:5px 9px;min-height:34px">↓</button>
+          </div>
+        </div>`).join("")}</div>
+      </div>`;
+    }
+    return `<div class="card" style="background:var(--panel2);margin-top:10px">
+      <div class="note">Take ${idx+1} · Pick one</div>
+      <div style="font-weight:800;margin-top:4px">${esc(item.prompt)}</div>
+      <div class="slots" style="margin-top:10px">${(item.options||[]).map(o=>`<label class="slot" style="cursor:pointer">
+        <input type="radio" name="court_${esc(item.id)}" value="${esc(o.key)}" ${answer===o.key?"checked":""} style="flex:0 0 auto;width:auto;min-height:0" />
+        <div class="name">${esc(o.label)}</div>
+      </label>`).join("")}</div>
+    </div>`;
+  }).join("");
+  Array.from(document.querySelectorAll(".court-rank")).forEach(btn=>btn.onclick=()=>{
+    const id=btn.dataset.id, pos=parseInt(btn.dataset.pos), dir=parseInt(btn.dataset.dir);
+    const arr=(COURT.answers[id]||[]).slice(); const next=pos+dir;
+    if(next<0 || next>=arr.length) return;
+    [arr[pos],arr[next]]=[arr[next],arr[pos]];
+    COURT.answers[id]=arr; renderCourtTake();
+  });
+  (take.items||[]).filter(i=>i.type==="multiple_choice").forEach(item=>{
+    Array.from(document.querySelectorAll(`input[name="court_${CSS.escape(item.id)}"]`)).forEach(el=>el.onchange=()=>{
+      COURT.answers[item.id]=el.value;
+    });
+  });
+}
+function renderCourtConsensus(){
+  const take=COURT.take; if(!take) return;
+  $("courtConsensusTitle").textContent=take.title||"Today's Take";
+  const s=getStreak();
+  $("courtStreakLine").textContent=`Daily Court complete${s.streak>0?` · streak ${s.streak}`:""}`;
+  const have=(COURT.gate&&COURT.gate.have)||0;
+  $("courtConsensusNote").textContent=have<=1 ? "You are early. The room will fill in as more people lock." : `${have} players locked so far.`;
+  const rows=COURT.consensus||[];
+  $("courtConsensusRows").innerHTML=rows.length ? rows.map(row=>{
+    if(row.type==="rank"){
+      return `<div class="card" style="background:var(--panel2);margin-top:10px">
+        <div style="font-weight:800">${esc(row.prompt)}</div>
+        <div style="margin-top:8px">${(row.ranking||[]).map((r,i)=>`<div class="slot"><div class="n">${i+1}</div><div class="name">${esc(r.label)}</div><div class="ctx">${r.avg_rank?`avg ${r.avg_rank}`:"—"}</div></div>`).join("")}</div>
+      </div>`;
+    }
+    return `<div class="card" style="background:var(--panel2);margin-top:10px">
+      <div style="font-weight:800">${esc(row.prompt)}</div>
+      <div style="margin-top:8px">${(row.choices||[]).map(c=>`<div class="slot"><div class="name">${esc(c.label)}</div><div class="ctx">${c.count}</div></div>`).join("")}</div>
+    </div>`;
+  }).join("") : `<div class="note">No consensus yet.</div>`;
+}
 async function openDaily(){
-  const r=await api("daily",{client_id:clientId()});
+  const r=await api("court_daily",{client_id:clientId()});
   if(!r.ok){ $("lobbyErr").style.color="var(--bad)"; $("lobbyErr").textContent="Daily unavailable: "+r.error; return; }
   setStreak(r.streak);   // reconcile the cached number against the server's
-  TIER={ topic_id:r.topic.id, share_token:r.topic.share_token, prompt:r.topic.prompt, item_type:r.topic.item_type,
-         tiers:r.topic.tiers, item_set:r.topic.item_set, assign:{...(r.your_assignments||{})}, is_creator:false, isDaily:true, date:r.date };
-  if(CREW_RETURN) openTierBoard(); else if(r.done) showTierCompare(); else openTierBoard();
+  COURT={ date:r.date, day:r.day, take:r.take, answers:initCourtAnswers(r.take,r.your_answers), consensus:r.consensus, gate:r.consensus_gate };
+  if(r.done){ renderCourtConsensus(); show("courtConsensus"); }
+  else { renderCourtTake(); show("courtTake"); }
 }
+$("courtTakeBack").onclick=()=>show("lobby");
+$("courtConsensusHome").onclick=()=>show("lobby");
+$("courtConsensusRefresh").onclick=openDaily;
+$("courtTakeLock").onclick=async()=>{
+  $("courtTakeErr").textContent="";
+  const missing=(COURT.take.items||[]).find(item=>item.type==="multiple_choice" && !COURT.answers[item.id]);
+  if(missing){ $("courtTakeErr").textContent="Pick an answer for all three takes."; return; }
+  const r=await api("court_take_lock",{ day:COURT.date, answers:COURT.answers, client_id:clientId(), label:ensureName() });
+  if(!r.ok){ $("courtTakeErr").textContent="Error: "+r.error; return; }
+  setStreak(r.streak);
+  track("court_take_complete", { daily:true });
+  COURT={ date:r.date, day:r.day, take:r.take, answers:initCourtAnswers(r.take,r.your_answers), consensus:r.consensus, gate:r.consensus_gate };
+  renderCourtConsensus(); show("courtConsensus");
+};
 
 function _rr(ctx,x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
 function _trunc(ctx,text,maxW){ if(ctx.measureText(text).width<=maxW) return text; let t=text; while(t.length>4 && ctx.measureText(t+"…").width>maxW) t=t.slice(0,-1); return t+"…"; }

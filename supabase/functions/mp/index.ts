@@ -8,6 +8,7 @@ import { actionCrewCreate, actionCrewJoin, actionCrewMine, actionCrewDaily, acti
 import { actionTrack } from "./events.ts";
 import { actionPartyPrompts, actionPartyCreate, actionPartyJoin, actionPartyStart, actionPartyGuess, actionPartyState, actionPartyEnd, actionPartyRoundNext, actionPartyTierSave, actionPartyTurn } from "./party.ts";
 import { actionQr } from "./qr.ts";
+import { actionCourtDaily, actionCourtTakeLock } from "./court.ts";
 
 // -----------------------------------------------------------------------------
 // Router
@@ -85,6 +86,10 @@ Deno.serve(async (req: Request) => {
         return await actionTierThemes();
       case "daily":
         return await actionDaily(req, body);
+      case "court_daily":
+        return await actionCourtDaily(req, body);
+      case "court_take_lock":
+        return await actionCourtTakeLock(req, body);
       case "crew_create":
         return await actionCrewCreate(req, body);
       case "crew_join":
