@@ -1,0 +1,18 @@
+{
+  "name": "taking-court",
+  "private": true,
+  "version": "0.0.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test",
+    "check:functions": "deno check supabase/functions/mp/index.ts",
+    "check": "npm run check:functions && npm test",
+    "supabase": "supabase",
+    "serve:static": "python3 -m http.server 8000"
+  },
+  "devDependencies": {
+    "supabase": "2.110.0"
+  }
+}

@@ -361,6 +361,7 @@ export async function actionStart(req: Request, body: any) {
       mine = created as any;
     }
   }
+  if (!mine) return err("attempt_not_found", 500);
 
   // start the server clock (idempotent — never resets a running timer)
   if (!mine.started_at && mine.status === "in_progress") {
