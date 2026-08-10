@@ -1,6 +1,6 @@
 import { actionGuess, actionStart } from "./games.ts";
 import { db, ok, err, json, authedUserId, ownerFilter, safeClientId, computeStreak, loadRosterPool } from "./shared.ts";
-import { courtDate, courtToken, dailyChallengeForDate, houseTakeForDate, normalizeTakeAnswers, takeConsensus, takeCourtBeats, validateDailyChallenge, validateTakeItems } from "./court_contract.js";
+import { courtDate, courtShareSummary, courtToken, dailyChallengeForDate, houseTakeForDate, normalizeTakeAnswers, takeConsensus, takeCourtBeats, validateDailyChallenge, validateTakeItems } from "./court_contract.js";
 
 type CourtDay = {
   id: string;
@@ -192,13 +192,25 @@ async function courtState(req: Request, body: any, courtDay: CourtDay) {
   const challengeAttempt = await courtChallengeAttempt(courtDay, userId, clientId);
   const challengeDone = challengeAttempt?.status === "completed";
   const beats = takeCourtBeats({ takeDone: !!mine, challengeDone });
+  const streak = await courtStreak(userId, clientId, courtDay.day);
+  const gate = { have: locks.length, honest_empty: locks.length <= 1 };
   return {
     locks,
     mine,
     challengeAttempt,
     challengeDone,
     beats,
-    streak: await courtStreak(userId, clientId, courtDay.day),
+    consensus_gate: gate,
+    streak,
+    share: courtShareSummary({
+      date: courtDay.day,
+      take: courtDay.house_take,
+      challenge: courtDay.challenge_definition,
+      beats,
+      streak,
+      challengeAttempt,
+      consensusGate: gate,
+    }),
   };
 }
 
@@ -221,6 +233,7 @@ export async function actionCourtDaily(req: Request, body: any) {
     challenge_done: state.challengeDone,
     done: state.beats.take || state.beats.challenge,
     beats: state.beats,
+    share: state.share,
     challenge_attempt: state.challengeAttempt ? {
       id: state.challengeAttempt.id,
       status: state.challengeAttempt.status,
@@ -230,7 +243,7 @@ export async function actionCourtDaily(req: Request, body: any) {
       filled_slots: state.challengeAttempt.filled_slots ?? {},
     } : null,
     consensus: state.mine ? takeConsensus(items, state.locks as any[]) : null,
-    consensus_gate: { have: state.locks.length, honest_empty: state.locks.length <= 1 },
+    consensus_gate: state.consensus_gate,
     streak: state.streak,
   });
 }
@@ -285,6 +298,7 @@ export async function actionCourtTakeLock(req: Request, body: any) {
     your_answers: normalized.answers,
     done: true,
     beats: state.beats,
+    share: state.share,
     consensus: takeConsensus(items, after as any[]),
     consensus_gate: { have: after.length, honest_empty: after.length <= 1 },
     streak: state.streak,
@@ -312,6 +326,7 @@ export async function actionCourtChallengeStart(req: Request, body: any) {
     court_day: { id: courtDay.id, share_token: courtDay.share_token },
     court_challenge: courtDay.challenge_definition,
     beats: state.beats,
+    share: state.share,
     streak: state.streak,
   });
 }
@@ -340,6 +355,7 @@ export async function actionCourtChallengeGuess(req: Request, body: any) {
     court_day: { id: courtDay.id, share_token: courtDay.share_token },
     court_challenge: courtDay.challenge_definition,
     beats: state.beats,
+    share: state.share,
     streak: state.streak,
   });
 }

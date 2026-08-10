@@ -338,6 +338,11 @@
       <button class="ghost" id="courtConsensusHome" style="flex:0 0 auto;padding:6px 12px">Home</button>
     </div>
     <div id="courtStreakLine" class="banner win" style="margin-top:8px"></div>
+    <div id="courtShareCard" class="hidden" style="margin-top:10px;padding:12px;border-radius:8px;background:var(--panel2);border:1px solid var(--line)">
+      <div style="font-weight:800" id="courtShareTitle"></div>
+      <div class="note" id="courtShareText" style="white-space:pre-line;margin-top:4px"></div>
+      <button class="sky" id="courtShareBtn" style="margin-top:10px;width:100%">Share Court</button>
+    </div>
     <div style="font-weight:700;margin-top:16px">Room consensus</div>
     <div class="note" id="courtConsensusNote" style="margin-top:2px"></div>
     <div id="courtConsensusRows" style="margin-top:10px"></div>
@@ -536,6 +541,11 @@
   <!-- ===================== RESULTS ===================== -->
   <div id="results" class="card hidden">
     <div id="winnerBanner" class="banner draw">…</div>
+    <div id="resultsCourtShareCard" class="hidden" style="margin-top:10px;padding:12px;border-radius:8px;background:var(--panel2);border:1px solid var(--line)">
+      <div style="font-weight:800" id="resultsCourtShareTitle"></div>
+      <div class="note" id="resultsCourtShareText" style="white-space:pre-line;margin-top:4px"></div>
+      <button class="sky" id="resultsCourtShareBtn" style="margin-top:10px;width:100%">Share Court</button>
+    </div>
     <div id="board"></div>
     <div id="revealHdr" style="margin-top:16px;font-weight:700">The full Top 8</div>
     <div class="slots" id="answerList"></div>
@@ -1498,6 +1508,7 @@ async function submitGuess(){
   if(!r.ok){ feed(`<span class="x">${g} → ${r.error}</span>`); return; }
   if(r.streak) setStreak(r.streak);
   if(r.beats) COURT.beats=r.beats;
+  if(r.share) COURT.share=r.share;
   ST.filled=r.filled_slots||ST.filled; ST.strikes=r.strikes; ST.correct=r.correct_count;
   if(r.result==="correct"){
     const el=$("slot"+r.slot); el.classList.add("filled");
@@ -1603,6 +1614,7 @@ $("guessInput").addEventListener("blur",()=>setTimeout(acHide,120));
 // ------------------------------------------------------------------ results
 async function showResults(){
   show("results");
+  renderCourtShare("resultsCourtShare", ST.isCourtDaily ? COURT.share : null);
   const r = await api("results",{ challenge_id:ST.challenge_id, attempt_id:ST.attempt_id, attempt_token:ST.attempt_token });
   const errB=$("resultsErr"); errB.textContent="";
   if(!r.ok){
@@ -1666,6 +1678,7 @@ async function showResults(){
 }
 $("refreshBtn").onclick=showResults;
 $("homeBtn").onclick=()=>{ show("lobby"); };
+$("resultsCourtShareBtn").onclick=()=>shareCourt(COURT.share);
 $("rematchBtn").onclick=async()=>{
   // rematch: fresh challenge on the same category, same opponent type
   const r=await api("create",{ mode:ST.vsBot?"duel":ST.mode, sheet_id:ST.sheet_id, kind:ST.kind||undefined, client_id:clientId(),
@@ -2330,7 +2343,7 @@ function setStreak(srv){
   renderStreak();
 }
 $("dailyBtn").onclick=openDaily;
-let COURT = { date:null, day:null, take:null, challenge:null, answers:{}, consensus:null, gate:null, beats:{} };
+let COURT = { date:null, day:null, take:null, challenge:null, answers:{}, consensus:null, gate:null, beats:{}, share:null };
 let courtAutoTimer=null;
 function initCourtAnswers(take, saved){
   const out={...(saved||{})};
@@ -2388,12 +2401,33 @@ function renderCourtTake(){
     });
   });
 }
+function courtShareLink(){ return location.origin+location.pathname; }
+function courtShareText(summary){
+  if(!summary) return "";
+  return `${summary.text}\n${courtShareLink()}`;
+}
+async function shareCourt(summary){
+  if(!summary) return;
+  const text=courtShareText(summary);
+  track("court_share_click", { kind:summary.kind, daily:true });
+  if(navigator.share){ navigator.share({text}).catch(()=>{}); return; }
+  try{ await navigator.clipboard?.writeText(text); }catch(e){}
+}
+function renderCourtShare(prefix, summary){
+  const card=$(prefix+"Card");
+  if(!card) return;
+  card.classList.toggle("hidden", !summary);
+  if(!summary) return;
+  $(prefix+"Title").textContent=summary.title;
+  $(prefix+"Text").textContent=summary.text;
+}
 function renderCourtConsensus(){
   const take=COURT.take; if(!take) return;
   $("courtConsensusTitle").textContent=take.title||"Today's Take";
   const s=getStreak();
   const full=COURT.beats&&COURT.beats.full_stack;
   $("courtStreakLine").textContent=`${full?"Full stack complete":"Daily Court complete"}${s.streak>0?` · streak ${s.streak}`:""}`;
+  renderCourtShare("courtShare", COURT.share);
   const have=(COURT.gate&&COURT.gate.have)||0;
   $("courtConsensusNote").textContent=have<=1 ? "You are early. The room will fill in as more people lock." : `${have} players locked so far.`;
   $("courtChallengeStart").textContent = COURT.beats&&COURT.beats.challenge ? "Review Challenge" : "Start Challenge";
@@ -2416,7 +2450,7 @@ async function openDaily(){
   const r=await api("court_daily",{client_id:clientId()});
   if(!r.ok){ $("lobbyErr").style.color="var(--bad)"; $("lobbyErr").textContent="Daily unavailable: "+r.error; return; }
   setStreak(r.streak);   // reconcile the cached number against the server's
-  COURT={ date:r.date, day:r.day, take:r.take, challenge:r.challenge, answers:initCourtAnswers(r.take,r.your_answers), consensus:r.consensus, gate:r.consensus_gate, beats:r.beats||{} };
+  COURT={ date:r.date, day:r.day, take:r.take, challenge:r.challenge, answers:initCourtAnswers(r.take,r.your_answers), consensus:r.consensus, gate:r.consensus_gate, beats:r.beats||{}, share:r.share||null };
   if(r.take_done){ renderCourtConsensus(); show("courtConsensus"); }
   else { renderCourtTake(); show("courtTake"); }
 }
@@ -2424,6 +2458,7 @@ $("courtTakeBack").onclick=()=>show("lobby");
 $("courtConsensusHome").onclick=()=>{ clearTimeout(courtAutoTimer); courtAutoTimer=null; show("lobby"); };
 $("courtConsensusRefresh").onclick=openDaily;
 $("courtChallengeStart").onclick=()=>startCourtChallenge();
+$("courtShareBtn").onclick=()=>shareCourt(COURT.share);
 $("courtTakeLock").onclick=async()=>{
   $("courtTakeErr").textContent="";
   const missing=(COURT.take.items||[]).find(item=>item.type==="multiple_choice" && !COURT.answers[item.id]);
@@ -2432,7 +2467,7 @@ $("courtTakeLock").onclick=async()=>{
   if(!r.ok){ $("courtTakeErr").textContent="Error: "+r.error; return; }
   setStreak(r.streak);
   track("court_take_complete", { daily:true });
-  COURT={ date:r.date, day:r.day, take:r.take, challenge:r.challenge, answers:initCourtAnswers(r.take,r.your_answers), consensus:r.consensus, gate:r.consensus_gate, beats:r.beats||{} };
+  COURT={ date:r.date, day:r.day, take:r.take, challenge:r.challenge, answers:initCourtAnswers(r.take,r.your_answers), consensus:r.consensus, gate:r.consensus_gate, beats:r.beats||{}, share:r.share||null };
   renderCourtConsensus(); show("courtConsensus");
   clearTimeout(courtAutoTimer);
   courtAutoTimer=setTimeout(()=>{ if(!$("courtConsensus").classList.contains("hidden")) startCourtChallenge(); }, 2200);
@@ -2445,6 +2480,7 @@ async function startCourtChallenge(){
   if(!r.ok){ $("courtConsensusErr").textContent="Error: "+r.error; return; }
   setStreak(r.streak);
   COURT.beats=r.beats||COURT.beats||{};
+  COURT.share=r.share||COURT.share||null;
   ST = {...ST, challenge_id:r.challenge_id, share_token:r.share_token, attempt_id:r.attempt_id,
         attempt_token:r.attempt_token, answer_target:r.answer_target, strike_limit:r.strike_limit,
         mode:r.mode, kind:r.kind||"roster", isRoster:true, isCourtDaily:true, courtDate:r.date||COURT.date,

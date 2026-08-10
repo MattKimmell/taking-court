@@ -227,6 +227,45 @@ export function takeCourtBeats({ takeDone, challengeDone }) {
   };
 }
 
+export function courtShareSummary({ date, take, challenge, beats, streak, challengeAttempt, consensusGate }) {
+  const safeBeats = takeCourtBeats({
+    takeDone: beats?.take,
+    challengeDone: beats?.challenge,
+  });
+  if (!safeBeats.take && !safeBeats.challenge) return null;
+  const kind = safeBeats.full_stack ? "full_stack" : (safeBeats.challenge ? "challenge_only" : "take_only");
+  const title = kind === "full_stack"
+    ? "Daily Court full stack"
+    : (kind === "challenge_only" ? "Daily Court Challenge" : "Daily Court Take");
+  const prompt = kind === "challenge_only"
+    ? challenge?.prompt
+    : take?.title;
+  const challengeScore = safeBeats.challenge ? {
+    correct_count: Number(challengeAttempt?.correct_count ?? 0),
+    target: Number(challenge?.target ?? challengeAttempt?.answer_target ?? 0),
+    strikes: Number(challengeAttempt?.strikes ?? 0),
+    status: challengeAttempt?.status ?? "completed",
+  } : null;
+  const lines = [
+    title,
+    date ? `Court ${date}` : null,
+    safeBeats.take ? `Take locked: ${take?.title ?? "Today's Take"}` : null,
+    safeBeats.challenge ? `Challenge: ${challengeScore.correct_count}/${challengeScore.target || "?"}` : null,
+    streak?.current ? `Streak ${streak.current}` : null,
+  ].filter(Boolean);
+  return {
+    kind,
+    title,
+    prompt,
+    date,
+    beats: safeBeats,
+    streak: streak?.current ?? 0,
+    consensus_count: Number(consensusGate?.have ?? 0),
+    challenge_score: challengeScore,
+    text: `${lines.join("\n")}\nPlay today's Court`,
+  };
+}
+
 export function validateTakeItems(items) {
   if (!Array.isArray(items) || items.length !== 3) return "take_must_have_three_items";
   const ids = new Set();

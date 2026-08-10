@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   dailyChallengeForDate,
+  courtShareSummary,
   houseTakeForDate,
   normalizeTakeAnswers,
   takeCourtBeats,
@@ -73,4 +74,24 @@ test("court beats distinguish take-only, challenge-only, and full-stack", () => 
     challenge: true,
     full_stack: true,
   });
+});
+
+test("court share summaries prefer the right completion state", () => {
+  const take = houseTakeForDate("2026-08-10");
+  const challenge = dailyChallengeForDate("2026-08-10");
+  const base = {
+    date: "2026-08-10",
+    take,
+    challenge,
+    streak: { current: 4 },
+    consensusGate: { have: 2 },
+    challengeAttempt: { status: "completed", correct_count: 5, strikes: 1 },
+  };
+
+  assert.equal(courtShareSummary({ ...base, beats: { take: true, challenge: false } }).kind, "take_only");
+  assert.equal(courtShareSummary({ ...base, beats: { take: false, challenge: true } }).kind, "challenge_only");
+  const full = courtShareSummary({ ...base, beats: { take: true, challenge: true } });
+  assert.equal(full.kind, "full_stack");
+  assert.match(full.text, /Daily Court full stack/);
+  assert.equal(full.challenge_score.correct_count, 5);
 });
