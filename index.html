@@ -270,6 +270,11 @@
     <div class="note" id="lobbyCourtNote" style="margin-bottom:12px">Lock today's three-item Take, then the Challenge. One streak.</div>
     <button id="dailyBtn" style="width:100%;font-size:16px;padding:14px;margin-bottom:10px;background:linear-gradient(90deg,var(--accent),var(--gold))">Play Now <span id="dailyStreak"></span></button>
     <div id="lobbyDoneLine" class="banner win hidden" style="margin-bottom:10px"></div>
+    <div id="lobbyShareCard" class="hidden" style="margin-bottom:10px;padding:12px;border-radius:8px;background:var(--panel2);border:1px solid var(--line)">
+      <div style="font-weight:800" id="lobbyShareTitle"></div>
+      <div class="note" id="lobbyShareText" style="white-space:pre-line;margin-top:4px"></div>
+      <button class="sky" id="lobbyShareBtn" style="margin-top:10px;width:100%">Share Court</button>
+    </div>
     <div class="row" style="margin-top:4px">
       <button class="ghost" id="pickupBtn" style="flex:1">🏀 Pickup</button>
       <button class="ghost" id="crewBtn" style="flex:1">👥 Crew</button>
@@ -384,6 +389,7 @@
     <div class="linkbox" style="margin-top:8px">
       <input id="playerTakeUrl" readonly />
       <button class="sky" id="playerTakeCopy" style="flex:0 0 auto">Copy</button>
+      <button class="sky" id="playerTakeShare" style="flex:0 0 auto">Share</button>
     </div>
     <div id="playerTakeItems" style="margin-top:12px"></div>
     <button id="playerTakeLock" style="margin-top:12px;width:100%">Lock Take</button>
@@ -1745,7 +1751,7 @@ async function showResults(){
 }
 $("refreshBtn").onclick=showResults;
 $("homeBtn").onclick=()=>{ goHome(); };
-$("resultsCourtShareBtn").onclick=()=>shareCourt(COURT.share);
+$("resultsCourtShareBtn").onclick=()=>shareCourt(COURT.share, $("resultsCourtShareBtn"));
 $("rematchBtn").onclick=async()=>{
   // rematch: fresh challenge on the same category, same opponent type
   const r=await api("create",{ mode:ST.vsBot?"duel":ST.mode, sheet_id:ST.sheet_id, kind:ST.kind||undefined, client_id:clientId(),
@@ -2421,7 +2427,7 @@ async function refreshLobbyCourt(){
   if(!done || !btn) return;
   try{
     const r=await api("court_daily",{client_id:clientId()});
-    if(!r.ok){ done.classList.add("hidden"); return; }
+    if(!r.ok){ done.classList.add("hidden"); LOBBY_SHARE=null; renderCourtShare("lobbyShare", null); return; }
     setStreak(r.streak);
     const beats=r.beats||{};
     if(beats.full_stack){
@@ -2439,12 +2445,16 @@ async function refreshLobbyCourt(){
     const label = beats.full_stack ? "Review Court" : ((beats.take || beats.challenge) ? "Continue Court" : "Play Now");
     btn.innerHTML = label + ' <span id="dailyStreak"></span>';
     renderStreak();
-  }catch(e){ done.classList.add("hidden"); }
+    // #4: offer the server share card whenever any beat is done (Take-only / Challenge-only / full-stack).
+    LOBBY_SHARE = r.share||null;
+    renderCourtShare("lobbyShare", LOBBY_SHARE);
+  }catch(e){ done.classList.add("hidden"); LOBBY_SHARE=null; renderCourtShare("lobbyShare", null); }
 }
-$("dailyBtn").onclick=openDaily;
+$("dailyBtn").onclick=()=>openDaily();
 $("pickupBtn") && ($("pickupBtn").onclick = ()=>openPartyHome());
 $("freeplayBtn") && ($("freeplayBtn").onclick = ()=>{ const p=$("freeplayPanel"); if(p) p.open = true; p?.scrollIntoView({behavior:"smooth",block:"nearest"}); });
 let COURT = { date:null, day:null, take:null, challenge:null, answers:{}, consensus:null, gate:null, beats:{}, share:null, challenge_attempt:null };
+let LOBBY_SHARE = null;
 let courtAutoTimer=null;
 let CREW_RETURN = null;   // set when Court is launched from a crew room
 let CURRENT_CREW = null;
@@ -2512,17 +2522,27 @@ function renderCourtTake(){
     });
   });
 }
-function courtShareLink(){ return location.origin+location.pathname; }
+function courtShareLink(summary){
+  const base=location.origin+location.pathname;
+  const path=(summary && summary.path) ? summary.path : "?court=1";
+  return base + path;
+}
 function courtShareText(summary){
   if(!summary) return "";
-  return `${summary.text}\n${courtShareLink()}`;
+  return `${summary.text}\n${courtShareLink(summary)}`;
 }
-async function shareCourt(summary){
+async function shareCourt(summary, btn){
   if(!summary) return;
   const text=courtShareText(summary);
   track("court_share_click", { kind:summary.kind, daily:true });
-  if(navigator.share){ navigator.share({text}).catch(()=>{}); return; }
-  try{ await navigator.clipboard?.writeText(text); }catch(e){}
+  if(navigator.share){
+    try{ await navigator.share({ title: summary.title||"Daily Court", text }); if(btn){ const t=btn.textContent; btn.textContent="Shared!"; setTimeout(()=>btn.textContent=t,1200); } return; }
+    catch(e){ if(e && e.name==="AbortError") return; }
+  }
+  try{
+    await navigator.clipboard?.writeText(text);
+    if(btn){ const t=btn.textContent; btn.textContent="Copied!"; setTimeout(()=>btn.textContent=t,1200); }
+  }catch(e){}
 }
 function renderCourtShare(prefix, summary){
   const card=$(prefix+"Card");
@@ -2560,9 +2580,11 @@ function renderCourtConsensus(){
     </div>`;
   }).join("") : `<div class="note">No consensus yet.</div>`;
 }
-async function openDaily(){
+async function openDaily(dayOpt){
   clearTimeout(courtAutoTimer); courtAutoTimer=null;
-  const r=await api("court_daily",{client_id:clientId()});
+  const payload={client_id:clientId()};
+  if(dayOpt && /^\d{4}-\d{2}-\d{2}$/.test(String(dayOpt))) payload.day=String(dayOpt);
+  const r=await api("court_daily", payload);
   if(!r.ok){ $("lobbyErr").style.color="var(--bad)"; $("lobbyErr").textContent="Daily unavailable: "+r.error; return; }
   setStreak(r.streak);   // reconcile the cached number against the server's
   COURT={ date:r.date, day:r.day, take:r.take, challenge:r.challenge, answers:initCourtAnswers(r.take,r.your_answers), consensus:r.consensus, gate:r.consensus_gate, beats:r.beats||{}, share:r.share||null, challenge_attempt:r.challenge_attempt||null };
@@ -2583,10 +2605,11 @@ async function openDaily(){
 }
 $("courtTakeBack").onclick=()=>goHome();
 $("courtConsensusHome").onclick=()=>goHome();
-$("courtConsensusRefresh").onclick=openDaily;
+$("courtConsensusRefresh").onclick=()=>openDaily();
 $("courtChallengeStart").onclick=()=>startCourtChallenge();
 $("courtSkipChallenge").onclick=()=>goHome();
-$("courtShareBtn").onclick=()=>shareCourt(COURT.share);
+$("courtShareBtn").onclick=()=>shareCourt(COURT.share, $("courtShareBtn"));
+$("lobbyShareBtn") && ($("lobbyShareBtn").onclick=()=>shareCourt(LOBBY_SHARE || COURT.share, $("lobbyShareBtn")));
 $("playExitCourt") && ($("playExitCourt").onclick=()=>{
   if(timerInt) clearInterval(timerInt);
   goHome();
@@ -2763,9 +2786,27 @@ $("takeCreateBtn").onclick=openTakeBuild;
 $("takeBuildBack").onclick=()=>goHome();
 $("playerTakeHome").onclick=()=>goHome();
 $("playerTakeCopy").onclick=()=>{ $("playerTakeUrl").select(); navigator.clipboard?.writeText($("playerTakeUrl").value); $("playerTakeCopy").textContent="Copied!"; setTimeout(()=>$("playerTakeCopy").textContent="Copy",1200); };
+$("playerTakeShare") && ($("playerTakeShare").onclick=async()=>{
+  if(!PLAYER_TAKE.topic) return;
+  const url=playerTakeLink();
+  const text=`${PLAYER_TAKE.topic.title}\nLock this Take:\n${url}`;
+  track("player_take_share", { token: PLAYER_TAKE.topic.share_token });
+  if(navigator.share){
+    try{ await navigator.share({ title: PLAYER_TAKE.topic.title, text, url }); $("playerTakeShare").textContent="Shared!"; setTimeout(()=>$("playerTakeShare").textContent="Share",1200); return; }
+    catch(e){ if(e && e.name==="AbortError") return; }
+  }
+  try{ await navigator.clipboard?.writeText(url); $("playerTakeShare").textContent="Copied!"; setTimeout(()=>$("playerTakeShare").textContent="Share",1200); }catch(e){}
+});
 $("takeBuildSave").onclick=async()=>{
   $("takeBuildErr").textContent="";
   const payload=readTakeBuild();
+  if(!payload.title){ $("takeBuildErr").textContent="Add a title for your Take."; return; }
+  // Client mirror of validateTakeItems (server still enforces).
+  for(const item of payload.items){
+    if(!item.prompt){ $("takeBuildErr").textContent="Each item needs a prompt."; return; }
+    if(!item.options || item.options.length<2){ $("takeBuildErr").textContent="Each item needs at least two options (one per line)."; return; }
+    if(item.options.length>8){ $("takeBuildErr").textContent="Keep each item to 8 options or fewer."; return; }
+  }
   const r=await api("take_create",{ ...payload, client_id:clientId(), label:ensureName() });
   if(!r.ok){ $("takeBuildErr").textContent="Error: "+r.error; return; }
   await openPlayerTake(r.topic.share_token);
@@ -3929,10 +3970,13 @@ const urlList = new URLSearchParams(location.search).get("list");
 const urlTier = new URLSearchParams(location.search).get("tier");
 const urlParty = new URLSearchParams(location.search).get("p");
 const urlTake = new URLSearchParams(location.search).get("take");
-window.FROM_SHARE = !!(urlTier || urlList || urlTake);
+const urlCourt = new URLSearchParams(location.search).get("court");
+const urlDay = new URLSearchParams(location.search).get("day");
+window.FROM_SHARE = !!(urlTier || urlList || urlTake || urlCourt);
 track("landing", { from: urlParty ? "party" : (window.FROM_SHARE ? "share" : "direct") });
 if(urlParty){ $("playerName").value = store.get("mp_name",""); partyJoinByCode(urlParty); }
 else if(urlTake){ $("playerName").value = store.get("mp_name",""); openPlayerTake(urlTake); }
+else if(urlCourt){ $("playerName").value = store.get("mp_name",""); openDaily(urlDay); }
 else if(urlTier){
   $("playerName").value = store.get("mp_name","");
   // Legacy tier daily links: still open read/play path; Daily Court is Play Now.
@@ -3951,7 +3995,7 @@ $("playerName").value = store.get("mp_name","");
 (function(){
   // A party joiner is standing in a room waiting on their friends — never put
   // an onboarding overlay in front of them.
-  const hasShare = urlToken || urlList || urlTier || urlParty || urlTake;
+  const hasShare = urlToken || urlList || urlTier || urlParty || urlTake || urlCourt;
   if(hasShare || store.get("tc_seen","")) return;
   const w = $("welcome"); w.classList.add("show");
   const done = go => { w.classList.remove("show"); store.set("tc_seen","1"); if(go) $("dailyBtn").click(); };

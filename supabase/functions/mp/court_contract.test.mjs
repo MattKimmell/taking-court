@@ -10,10 +10,12 @@ import {
   frozenChallengePublicFields,
   houseTakeForDate,
   normalizeTakeAnswers,
+  playerTakeCreateDefaults,
   playerTakeLockOut,
   takeCourtBeats,
   takeConsensus,
   takeHotScore,
+  takeIsPubliclyListed,
   validateDailyChallenge,
   validateTakeItems,
 } from "./court_contract.js";
@@ -155,6 +157,52 @@ test("court share summaries prefer the right completion state", () => {
   assert.equal(full.kind, "full_stack");
   assert.match(full.text, /Daily Court full stack/);
   assert.equal(full.challenge_score.correct_count, 5);
+  assert.equal(full.path, "?court=1&day=2026-08-10");
+  assert.equal(courtShareSummary({ ...base, beats: { take: false, challenge: false } }), null);
+});
+
+test("share card facts come from server beats and challenge attempt, not client invent", () => {
+  const take = houseTakeForDate("2026-08-10");
+  const challenge = dailyChallengeForDate("2026-08-10");
+  const takeOnly = courtShareSummary({
+    date: "2026-08-10",
+    take,
+    challenge,
+    beats: { take: true, challenge: false },
+    streak: { current: 2 },
+    consensusGate: { have: 1 },
+    challengeAttempt: { status: "completed", correct_count: 99, strikes: 0 },
+  });
+  assert.equal(takeOnly.kind, "take_only");
+  assert.equal(takeOnly.challenge_score, null);
+  assert.match(takeOnly.text, /Take locked/);
+  assert.ok(!/Challenge:/.test(takeOnly.text));
+
+  const challengeOnly = courtShareSummary({
+    date: "2026-08-10",
+    take,
+    challenge,
+    beats: { take: false, challenge: true },
+    streak: { current: 1 },
+    consensusGate: { have: 0 },
+    challengeAttempt: { status: "completed", correct_count: 4, strikes: 2 },
+  });
+  assert.equal(challengeOnly.kind, "challenge_only");
+  assert.equal(challengeOnly.challenge_score.correct_count, 4);
+  assert.equal(challengeOnly.challenge_score.strikes, 2);
+  assert.equal(challengeOnly.challenge_score.target, challenge.target);
+
+  const both = courtShareSummary({
+    date: "2026-08-10",
+    take,
+    challenge,
+    beats: { take: true, challenge: true },
+    streak: { current: 3 },
+    consensusGate: { have: 5 },
+    challengeAttempt: { status: "completed", correct_count: 4, strikes: 1 },
+  });
+  assert.equal(both.kind, "full_stack");
+  assert.equal(both.beats.full_stack, true);
 });
 
 test("player-authored take uses the same three-item lock and compare contract", () => {
@@ -185,6 +233,20 @@ test("player-authored take uses the same three-item lock and compare contract", 
   assert.equal(validateTakeItems(take.items), null);
   assert.deepEqual(normalizeTakeAnswers(take.items, answers).answers, answers);
   assert.equal(takeConsensus(take.items, [{ answers }])[0].choices[0].count, 1);
+  assert.equal(validateTakeItems(take.items.slice(0, 2)), "take_must_have_three_items");
+  assert.equal(
+    validateTakeItems([{ ...take.items[0], options: [{ key: "a", label: "Only one" }] }, take.items[1], take.items[2]]),
+    "invalid_take_options",
+  );
+});
+
+test("player take create stays off Browse until reviewed public", () => {
+  const defaults = playerTakeCreateDefaults();
+  assert.deepEqual(defaults, { visibility: "unlisted", review_status: "unsubmitted" });
+  assert.equal(takeIsPubliclyListed(defaults), false);
+  assert.equal(takeIsPubliclyListed({ visibility: "public", review_status: "pending" }), false);
+  assert.equal(takeIsPubliclyListed({ visibility: "public", review_status: "approved" }), true);
+  assert.equal(takeIsPubliclyListed({ visibility: "unlisted", review_status: "approved" }), false);
 });
 
 test("player take lock response keeps full topic and locked true over compare payload", () => {
@@ -210,8 +272,41 @@ test("player take lock response keeps full topic and locked true over compare pa
   assert.deepEqual(out.topic, topicOut);
   assert.equal(out.your_answers.i1, "a");
   assert.equal(out.consensus_gate.have, 1);
+  assert.equal(out.consensus_gate.honest_empty, true);
   assert.ok(!("visibility" in compareOut.topic));
   assert.equal(out.topic.visibility, "unlisted");
+  assert.equal(takeIsPubliclyListed(out.topic), false);
+});
+
+test("player take compare requires lock first and honest empty when early", () => {
+  const items = [
+    {
+      id: "a",
+      type: "multiple_choice",
+      prompt: "Pick",
+      options: [{ key: "x", label: "X" }, { key: "y", label: "Y" }],
+    },
+    {
+      id: "b",
+      type: "rank",
+      prompt: "Rank",
+      options: [{ key: "p", label: "P" }, { key: "q", label: "Q" }],
+    },
+    {
+      id: "c",
+      type: "multiple_choice",
+      prompt: "Pick 2",
+      options: [{ key: "m", label: "M" }, { key: "n", label: "N" }],
+    },
+  ];
+  const one = { answers: { a: "x", b: ["p", "q"], c: "m" } };
+  const consensus = takeConsensus(items, [one]);
+  const gate = { have: 1, honest_empty: true };
+  assert.equal(gate.honest_empty, true);
+  assert.equal(consensus[0].choices.find((ch) => ch.key === "x").count, 1);
+  // Partial lock rejected (rank missing → invalid_rank_answer; MC missing → invalid_answer)
+  assert.equal(normalizeTakeAnswers(items, { a: "x" }).error, "invalid_rank_answer");
+  assert.equal(normalizeTakeAnswers(items, { a: "x", b: ["p", "q"] }).error, "invalid_answer");
 });
 
 test("crew reveal gates Takes until the viewer locked", () => {

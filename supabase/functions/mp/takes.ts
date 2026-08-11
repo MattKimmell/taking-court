@@ -1,5 +1,5 @@
 import { db, ok, err, authedUserId, randomToken, safeClientId } from "./shared.ts";
-import { normalizeTakeAnswers, playerTakeLockOut, takeConsensus, validateTakeItems } from "./court_contract.js";
+import { normalizeTakeAnswers, playerTakeCreateDefaults, playerTakeLockOut, takeConsensus, takeIsPubliclyListed, validateTakeItems } from "./court_contract.js";
 
 async function loadTake(body: any) {
   let q = db.from("mp_take_topics").select("*");
@@ -61,17 +61,20 @@ export async function actionTakeCreate(req: Request, body: any) {
   const structuralError = validateTakeItems(items);
   if (structuralError) return err(structuralError, 400);
 
+  const defaults = playerTakeCreateDefaults();
   const { data: take, error } = await db.from("mp_take_topics").insert({
     share_token: randomToken(9),
     title,
     items,
-    visibility: "unlisted",
-    review_status: "unsubmitted",
+    visibility: defaults.visibility,
+    review_status: defaults.review_status,
     creator_client_id: clientId,
     creator_user_id: userId,
     creator_label: String(body.label ?? "Anonymous").slice(0, 40),
   }).select("*").single();
   if (error || !take) return err(error?.message ?? "take_create_failed", 500);
+  // Contract: new Takes are never Browse-listed in this slice.
+  if (takeIsPubliclyListed(take)) return err("take_listed_without_review", 500);
   return ok({ topic: takeTopicOut(take, [], userId, clientId) });
 }
 

@@ -360,8 +360,20 @@ export function courtShareSummary({ date, take, challenge, beats, streak, challe
     streak: streak?.current ?? 0,
     consensus_count: Number(consensusGate?.have ?? 0),
     challenge_score: challengeScore,
+    // Recipients open Play Now via ?court=1 (client boot).
+    path: date ? `?court=1&day=${encodeURIComponent(date)}` : "?court=1",
     text: `${lines.join("\n")}\nPlay today's Court`,
   };
+}
+
+/** Player Take is link-only until review approves public listing (Browse out of this slice). */
+export function takeIsPubliclyListed({ visibility, review_status } = {}) {
+  return visibility === "public" && review_status === "approved";
+}
+
+/** Default create visibility for player-authored Takes. */
+export function playerTakeCreateDefaults() {
+  return { visibility: "unlisted", review_status: "unsubmitted" };
 }
 
 export function validateTakeItems(items) {
