@@ -267,7 +267,7 @@
   <div id="lobby" class="card">
     <div class="pill" style="display:inline-block;margin-bottom:8px">Daily Court</div>
     <div style="font-weight:800;font-size:18px;margin-bottom:4px">Today's ritual</div>
-    <div class="note" id="lobbyCourtNote" style="margin-bottom:12px">Take three takes, then today's Challenge. One streak.</div>
+    <div class="note" id="lobbyCourtNote" style="margin-bottom:12px">Lock today's three-item Take, then the Challenge. One streak.</div>
     <button id="dailyBtn" style="width:100%;font-size:16px;padding:14px;margin-bottom:10px;background:linear-gradient(90deg,var(--accent),var(--gold))">Play Now <span id="dailyStreak"></span></button>
     <div id="lobbyDoneLine" class="banner win hidden" style="margin-bottom:10px"></div>
     <div class="row" style="margin-top:4px">
@@ -294,7 +294,7 @@
       <div class="slots">
         <div class="slot" id="modeNameIt" style="cursor:pointer">
           <div class="n">🎯</div>
-          <div class="name">Top 8 / Name It<div class="note" style="font-weight:400">Recall challenges · freeplay only</div></div>
+          <div class="name">Recall challenges<div class="note" style="font-weight:400">Top 8 sheets · freeplay only</div></div>
         </div>
         <!-- Tier Lists kept available under freeplay (not a home peer). Hidden-from-lobby
              product intent from main is preserved: not a primary shelf tile. -->
@@ -324,7 +324,7 @@
       </div>
       <button class="ghost" id="courtTakeBack" style="flex:0 0 auto;padding:6px 12px">Home</button>
     </div>
-    <div class="note">Lock all three takes to complete today's beat and keep your streak alive.</div>
+    <div class="note">Lock all three items to complete today's Take beat and keep your streak alive.</div>
     <div id="courtTakeItems" style="margin-top:12px"></div>
     <div class="row" style="margin-top:14px">
       <button id="courtTakeLock">Lock Take</button>
@@ -2434,7 +2434,7 @@ async function refreshLobbyCourt(){
       if(note) note.textContent=beats.take&&!beats.challenge?"Bonus Challenge still available today.":"Take still available if you want the full stack.";
     } else {
       done.classList.add("hidden");
-      if(note) note.textContent="Take three takes, then today's Challenge. One streak.";
+      if(note) note.textContent="Lock today's three-item Take, then the Challenge. One streak.";
     }
     const label = beats.full_stack ? "Review Court" : ((beats.take || beats.challenge) ? "Continue Court" : "Play Now");
     btn.innerHTML = label + ' <span id="dailyStreak"></span>';
@@ -2570,7 +2570,7 @@ $("playExitCourt") && ($("playExitCourt").onclick=()=>{
 $("courtTakeLock").onclick=async()=>{
   $("courtTakeErr").textContent="";
   const missing=(COURT.take.items||[]).find(item=>item.type==="multiple_choice" && !COURT.answers[item.id]);
-  if(missing){ $("courtTakeErr").textContent="Pick an answer for all three takes."; return; }
+  if(missing){ $("courtTakeErr").textContent="Pick an answer for all three items."; return; }
   const r=await api("court_take_lock",{ day:COURT.date, answers:COURT.answers, client_id:clientId(), label:ensureName() });
   if(!r.ok){ $("courtTakeErr").textContent="Error: "+r.error; return; }
   setStreak(r.streak);
@@ -2734,7 +2734,7 @@ $("takeBuildSave").onclick=async()=>{
 $("playerTakeLock").onclick=async()=>{
   $("playerTakeErr").textContent="";
   const missing=(PLAYER_TAKE.topic.items||[]).find(item=>item.type==="multiple_choice" && !PLAYER_TAKE.answers[item.id]);
-  if(missing){ $("playerTakeErr").textContent="Pick an answer for all three takes."; return; }
+  if(missing){ $("playerTakeErr").textContent="Pick an answer for all three items."; return; }
   const r=await api("take_lock",{ share_token:PLAYER_TAKE.topic.share_token, answers:PLAYER_TAKE.answers, client_id:clientId(), label:ensureName() });
   if(!r.ok){ $("playerTakeErr").textContent="Error: "+r.error; return; }
   PLAYER_TAKE={ topic:r.topic, answers:r.your_answers||PLAYER_TAKE.answers, compare:r };
