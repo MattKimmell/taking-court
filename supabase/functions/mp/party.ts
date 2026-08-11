@@ -1368,7 +1368,7 @@ async function buildRecap(session: any, rounds: any[] = []) {
         // standing, and picking one of them would be a lie.
         survivor: standing.length === 1 ? standing[0].label : null,
         survivor_emoji: standing.length === 1 ? standing[0].emoji : null,
-        still_standing: standing.map((s) => s.label),
+        still_standing: standing.map((s: { label: string }) => s.label),
         names: log.filter((t) => t.outcome === "correct").length,
         knocked_out: log.filter((t) => t.outcome !== "correct")
           .map((t) => ({
