@@ -279,6 +279,7 @@
       <button class="ghost" id="pickupBtn" style="flex:1">🏀 Pickup</button>
       <button class="ghost" id="crewBtn" style="flex:1">👥 Crew</button>
     </div>
+    <div class="note" style="margin-top:6px;font-size:12px">Pickup is live same-room play — outside Daily Court streak.</div>
     <div class="row" style="margin-top:8px">
       <button class="ghost" id="takeCreateBtn" style="flex:1">Create Take</button>
       <button class="ghost" id="freeplayBtn" style="flex:1">Freeplay</button>
@@ -299,17 +300,17 @@
       <div class="slots">
         <div class="slot" id="modeNameIt" style="cursor:pointer">
           <div class="n">🎯</div>
-          <div class="name">Recall challenges<div class="note" style="font-weight:400">Top 8 sheets · freeplay only</div></div>
+          <div class="name">Top 8 / recall<div class="note" style="font-weight:400">Freeplay only · not Daily Court</div></div>
         </div>
         <!-- Tier Lists kept available under freeplay (not a home peer). Hidden-from-lobby
              product intent from main is preserved: not a primary shelf tile. -->
         <div class="slot" id="modeTiers" style="cursor:pointer">
           <div class="n">🪜</div>
-          <div class="name">Tier boards<div class="note" style="font-weight:400">Legacy freeplay rankings</div></div>
+          <div class="name">Tier boards<div class="note" style="font-weight:400">Legacy freeplay · not a home mode</div></div>
         </div>
         <div class="slot" id="modeLists" style="cursor:pointer">
           <div class="n">📝</div>
-          <div class="name">Custom lists<div class="note" style="font-weight:400">Legacy freeplay lists</div></div>
+          <div class="name">Custom lists<div class="note" style="font-weight:400">Legacy freeplay · not a home mode</div></div>
         </div>
       </div>
       <div class="row" style="margin-top:8px">
@@ -3931,6 +3932,7 @@ function renderCrewRoom(r){
   const chPrompt = r.challenge && r.challenge.prompt ? r.challenge.prompt : "";
   let h = `<div class="note" style="margin-top:8px">🗓️ Court ${r.date} — ${esc(takeTitle)}</div>`;
   if(chPrompt) h += `<div class="note">Challenge: ${esc(chPrompt)}</div>`;
+  if(r.challenge_only_note) h += `<div class="note" style="margin-top:6px">${esc(r.challenge_only_note)}</div>`;
   if(!r.i_take_done && !r.i_played){
     h += `<div class="banner wait" style="margin-top:12px">Lock today's Take to unlock the crew's Takes and hottest-take board. Challenge-only still counts for streak.</div>`;
     h += `<button id="crewPlayBtn" style="width:100%;margin-top:12px;font-size:16px;padding:14px;background:linear-gradient(90deg,var(--accent),var(--gold))">Play Now · Daily Court</button>`;

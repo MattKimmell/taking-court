@@ -290,6 +290,36 @@ export function crewMemberCourtFlags({ takeDone, challengeDone }) {
 }
 
 /**
+ * Crew room must use the same Daily Court day identity as solo for that UTC date.
+ * Compare share tokens (court_YYYY-MM-DD) and/or calendar day strings.
+ */
+export function crewDayMatchesSolo({ crewDate, soloDate, crewShareToken, soloShareToken }) {
+  if (crewDate && soloDate && String(crewDate) !== String(soloDate)) return false;
+  if (crewShareToken && soloShareToken && String(crewShareToken) !== String(soloShareToken)) return false;
+  if (!crewDate && !soloDate && !crewShareToken && !soloShareToken) return false;
+  return true;
+}
+
+/**
+ * Hottest-take social needs lock-to-reveal open and at least two Take locks.
+ * Challenge-only members count for streak/played_today but do not enter hottest-take.
+ */
+export function crewHottestTakeEligible({ revealTakes, takeLockCount }) {
+  return !!revealTakes && Number(takeLockCount) >= 2;
+}
+
+/** Copy for Challenge-only edge when some members finished Challenge without Take. */
+export function crewChallengeOnlySocialNote({ challengeOnlyCount, takeLockCount }) {
+  const n = Number(challengeOnlyCount) || 0;
+  if (n <= 0) return null;
+  const locks = Number(takeLockCount) || 0;
+  if (locks === 0) {
+    return `${n} member${n === 1 ? "" : "s"} finished Challenge only — hottest Take waits on locked Takes.`;
+  }
+  return `${n} Challenge-only today (streak counts; hottest Take uses locked Takes only).`;
+}
+
+/**
  * Divergence from crew modal Take answers. Higher = hotter take.
  * MC: 1 when off-modal, 0 when on-modal. Rank: mean |rank - modalRank| / (n-1).
  */
@@ -374,6 +404,27 @@ export function takeIsPubliclyListed({ visibility, review_status } = {}) {
 /** Default create visibility for player-authored Takes. */
 export function playerTakeCreateDefaults() {
   return { visibility: "unlisted", review_status: "unsubmitted" };
+}
+
+/** Home chrome contract for Daily Court IA (#7) — product nouns, not peer mode cards. */
+export const HOME_CHROME = {
+  product: "Daily Court",
+  primaryCta: "Play Now",
+  beats: ["Take", "Challenge"],
+  secondary: ["Pickup", "Crew"],
+  quiet: ["Create Take", "Freeplay"],
+  join: "Join with a link or token",
+  freeplayLabels: {
+    top8: "Top 8 / recall",
+    tiers: "Tier boards",
+    lists: "Custom lists",
+  },
+  // Peer mode picker (Name It / Tier Lists / Your Lists / Pickup as equals) is folded.
+  peerModePicker: false,
+};
+
+export function homeHasPeerModePicker() {
+  return HOME_CHROME.peerModePicker === true;
 }
 
 export function validateTakeItems(items) {

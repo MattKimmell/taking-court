@@ -2,12 +2,18 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   courtContinueRoute,
+  courtToken,
   dailyChallengeForDate,
   courtShareSummary,
   crewCanRevealTakes,
+  crewChallengeOnlySocialNote,
+  crewDayMatchesSolo,
+  crewHottestTakeEligible,
   crewMemberCourtFlags,
   dayCountsForStreak,
   frozenChallengePublicFields,
+  HOME_CHROME,
+  homeHasPeerModePicker,
   houseTakeForDate,
   normalizeTakeAnswers,
   playerTakeCreateDefaults,
@@ -327,6 +333,72 @@ test("crew reveal gates Takes until the viewer locked", () => {
     challenge_done: false,
     played_today: false,
   });
+});
+
+test("crew same-day identity matches solo Daily Court token and date", () => {
+  const date = "2026-08-11";
+  const token = courtToken(date);
+  assert.equal(
+    crewDayMatchesSolo({
+      crewDate: date,
+      soloDate: date,
+      crewShareToken: token,
+      soloShareToken: token,
+    }),
+    true,
+  );
+  assert.equal(
+    crewDayMatchesSolo({
+      crewDate: date,
+      soloDate: "2026-08-10",
+      crewShareToken: token,
+      soloShareToken: courtToken("2026-08-10"),
+    }),
+    false,
+  );
+  assert.equal(
+    crewDayMatchesSolo({
+      crewDate: date,
+      soloDate: date,
+      crewShareToken: "court_other",
+      soloShareToken: token,
+    }),
+    false,
+  );
+});
+
+test("crew hottest-take eligible only with reveal + 2+ Take locks; Challenge-only noted", () => {
+  assert.equal(crewHottestTakeEligible({ revealTakes: false, takeLockCount: 5 }), false);
+  assert.equal(crewHottestTakeEligible({ revealTakes: true, takeLockCount: 1 }), false);
+  assert.equal(crewHottestTakeEligible({ revealTakes: true, takeLockCount: 2 }), true);
+  assert.equal(crewChallengeOnlySocialNote({ challengeOnlyCount: 0, takeLockCount: 2 }), null);
+  assert.match(
+    crewChallengeOnlySocialNote({ challengeOnlyCount: 2, takeLockCount: 0 }),
+    /Challenge only/,
+  );
+  assert.match(
+    crewChallengeOnlySocialNote({ challengeOnlyCount: 1, takeLockCount: 3 }),
+    /hottest Take uses locked Takes only/,
+  );
+  // Challenge-only member still played_today via crewMemberCourtFlags
+  assert.equal(crewMemberCourtFlags({ takeDone: false, challengeDone: true }).played_today, true);
+});
+
+test("home IA has no peer mode picker and uses Daily Court glossary", () => {
+  assert.equal(homeHasPeerModePicker(), false);
+  assert.equal(HOME_CHROME.product, "Daily Court");
+  assert.equal(HOME_CHROME.primaryCta, "Play Now");
+  assert.deepEqual(HOME_CHROME.beats, ["Take", "Challenge"]);
+  assert.ok(HOME_CHROME.secondary.includes("Pickup"));
+  assert.ok(HOME_CHROME.secondary.includes("Crew"));
+  assert.ok(HOME_CHROME.quiet.includes("Create Take"));
+  assert.ok(HOME_CHROME.quiet.includes("Freeplay"));
+  assert.match(HOME_CHROME.join, /link or token/i);
+  assert.equal(HOME_CHROME.freeplayLabels.top8, "Top 8 / recall");
+  // Old top-level product names are not home peers
+  assert.ok(!HOME_CHROME.secondary.includes("Name It"));
+  assert.ok(!HOME_CHROME.secondary.includes("Tier Lists"));
+  assert.ok(!HOME_CHROME.secondary.includes("Your Lists"));
 });
 
 test("hottest take scores divergence from crew consensus", () => {

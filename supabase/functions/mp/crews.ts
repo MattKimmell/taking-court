@@ -2,6 +2,9 @@ import { db, ok, err, authedUserId, computeStreak } from "./shared.ts";
 import { getOrCreateCourtDay } from "./court.ts";
 import {
   crewCanRevealTakes,
+  crewChallengeOnlySocialNote,
+  crewDayMatchesSolo,
+  crewHottestTakeEligible,
   crewMemberCourtFlags,
   takeConsensus,
   takeHotScore,
@@ -163,7 +166,7 @@ export async function actionCrewDaily(req: Request, body: any) {
   const consensus_gate = { have: crewLocks.length, honest_empty: crewLocks.length <= 1 };
 
   let hottest: { user_id: string; score: number } | null = null;
-  if (revealTakes && crewLocks.length >= 2) {
+  if (crewHottestTakeEligible({ revealTakes, takeLockCount: crewLocks.length })) {
     for (const lock of crewLocks) {
       const score = takeHotScore(items, lock.answers, consensus);
       if (!hottest || score > hottest.score) hottest = { user_id: lock.author_user_id, score };
@@ -207,6 +210,7 @@ export async function actionCrewDaily(req: Request, body: any) {
         strikes: attempt.strikes ?? 0,
       } : null,
       // Tier reactions do not apply to Court Takes; keep empty for client compat.
+      // Social in this slice: hottest Take + beat flags (see crewChallengeOnlySocialNote).
       reactions: [],
       board_id: null,
       assignments: null,
@@ -215,11 +219,27 @@ export async function actionCrewDaily(req: Request, body: any) {
 
   const playersToday = memberOut.filter((m) => m.played_today).length;
   const iPlayed = !!memberOut.find((m) => m.is_you)?.played_today;
+  const challengeOnlyCount = memberOut.filter((m) => m.challenge_done && !m.take_done).length;
+  const challenge_only_note = crewChallengeOnlySocialNote({
+    challengeOnlyCount,
+    takeLockCount: crewLocks.length,
+  });
+
+  // Same day identity as solo Daily Court (court_<date>).
+  const dayOut = { id: courtDay.id, share_token: courtDay.share_token };
+  if (!crewDayMatchesSolo({
+    crewDate: date,
+    soloDate: courtDay.day,
+    crewShareToken: dayOut.share_token,
+    soloShareToken: courtDay.share_token,
+  })) {
+    return err("crew_day_mismatch", 500);
+  }
 
   return ok({
     crew: { id: crew.id, code: crew.code, name: crew.name, member_count: (members ?? []).length },
     date,
-    day: { id: courtDay.id, share_token: courtDay.share_token },
+    day: dayOut,
     take: courtDay.house_take,
     challenge: {
       prompt: courtDay.challenge_definition?.prompt ?? null,
@@ -239,6 +259,7 @@ export async function actionCrewDaily(req: Request, body: any) {
     reveal_takes: revealTakes,
     your_answers: viewerLock?.answers ?? {},
     players_today: playersToday,
+    challenge_only_note,
     consensus: revealTakes ? consensus : null,
     consensus_gate,
     hottest_take: revealTakes && hottest ? { user_id: hottest.user_id, display_name: nameBy.get(hottest.user_id) } : null,
