@@ -227,6 +227,44 @@ export function takeCourtBeats({ takeDone, challengeDone }) {
   };
 }
 
+/** One calendar day contributes to streak at most once when any beat is done. */
+export function dayCountsForStreak(beats) {
+  return !!(beats?.take || beats?.challenge);
+}
+
+/**
+ * Where Play Now / Continue Court should land (client routing).
+ * - resume_challenge: in-progress Court Challenge attempt
+ * - challenge_ready: Take locked, Challenge not finished — consensus then start/resume
+ * - take: still need the Take (including challenge-only days wanting full stack)
+ * - consensus: review / share surface when Take is locked (and Challenge not mid-run)
+ */
+export function courtContinueRoute({ takeDone, challengeDone, attemptStatus }) {
+  const take = !!takeDone;
+  const challenge = !!challengeDone;
+  const status = attemptStatus || null;
+  if (status === "in_progress") return "resume_challenge";
+  if (!take) return "take";
+  if (challenge || status === "completed" || status === "eliminated" || status === "expired") {
+    return "consensus";
+  }
+  return "challenge_ready";
+}
+
+/** Frozen house Challenge payload shape every player should share for a date. */
+export function frozenChallengePublicFields(definition) {
+  if (!definition || typeof definition !== "object") return null;
+  return {
+    id: definition.id ?? null,
+    axis: definition.axis ?? null,
+    value: definition.value ?? null,
+    position: definition.position ?? null,
+    target: definition.target ?? null,
+    prompt: definition.prompt ?? null,
+    filters: definition.filters ? { ...definition.filters } : null,
+  };
+}
+
 /** Player Take lock response: compare payload first, then explicit lock + full topic. */
 export function playerTakeLockOut(compareOut, topicOut) {
   return {

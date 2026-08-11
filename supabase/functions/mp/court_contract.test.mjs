@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  courtContinueRoute,
   dailyChallengeForDate,
   courtShareSummary,
   crewCanRevealTakes,
   crewMemberCourtFlags,
+  dayCountsForStreak,
+  frozenChallengePublicFields,
   houseTakeForDate,
   normalizeTakeAnswers,
   playerTakeLockOut,
@@ -78,6 +81,60 @@ test("court beats distinguish take-only, challenge-only, and full-stack", () => 
     challenge: true,
     full_stack: true,
   });
+});
+
+test("challenge beat: frozen definition is identical for a date and coverage-safe", () => {
+  const a = dailyChallengeForDate("2026-08-10");
+  const b = dailyChallengeForDate("2026-08-10");
+  assert.equal(validateDailyChallenge(a), null);
+  assert.deepEqual(frozenChallengePublicFields(a), frozenChallengePublicFields(b));
+  assert.equal(a.axis === "team" || a.axis === "college", true);
+  assert.ok(["G", "F", "C"].includes(a.position));
+  assert.ok(a.target >= 3 && a.target <= 8);
+  assert.ok(a.prompt);
+  assert.equal(validateDailyChallenge({ ...a, axis: "height" }), "invalid_challenge_axis");
+  assert.equal(validateDailyChallenge({ ...a, target: 2 }), "invalid_challenge_target");
+  assert.equal(validateDailyChallenge({ ...a, target: 9 }), "invalid_challenge_target");
+  assert.equal(validateDailyChallenge({ ...a, position: "PG" }), "invalid_challenge_position");
+});
+
+test("challenge beat: take-then-exit, challenge-only, and double-complete stay one streak day", () => {
+  const takeOnly = takeCourtBeats({ takeDone: true, challengeDone: false });
+  const challengeOnly = takeCourtBeats({ takeDone: false, challengeDone: true });
+  const full = takeCourtBeats({ takeDone: true, challengeDone: true });
+  const none = takeCourtBeats({ takeDone: false, challengeDone: false });
+
+  assert.equal(dayCountsForStreak(takeOnly), true);
+  assert.equal(dayCountsForStreak(challengeOnly), true);
+  assert.equal(dayCountsForStreak(full), true);
+  assert.equal(dayCountsForStreak(none), false);
+  // double-submit / full-stack does not create a second day contribution
+  assert.equal(dayCountsForStreak(takeOnly), dayCountsForStreak(full));
+  assert.equal(full.full_stack, true);
+  assert.equal(takeOnly.full_stack, false);
+});
+
+test("challenge beat: continue route resumes in-progress Challenge and keeps Take-first otherwise", () => {
+  assert.equal(
+    courtContinueRoute({ takeDone: true, challengeDone: false, attemptStatus: "in_progress" }),
+    "resume_challenge",
+  );
+  assert.equal(
+    courtContinueRoute({ takeDone: true, challengeDone: false, attemptStatus: null }),
+    "challenge_ready",
+  );
+  assert.equal(
+    courtContinueRoute({ takeDone: false, challengeDone: false, attemptStatus: null }),
+    "take",
+  );
+  assert.equal(
+    courtContinueRoute({ takeDone: false, challengeDone: true, attemptStatus: "completed" }),
+    "take",
+  );
+  assert.equal(
+    courtContinueRoute({ takeDone: true, challengeDone: true, attemptStatus: "completed" }),
+    "consensus",
+  );
 });
 
 test("court share summaries prefer the right completion state", () => {

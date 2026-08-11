@@ -2444,10 +2444,18 @@ async function refreshLobbyCourt(){
 $("dailyBtn").onclick=openDaily;
 $("pickupBtn") && ($("pickupBtn").onclick = ()=>openPartyHome());
 $("freeplayBtn") && ($("freeplayBtn").onclick = ()=>{ const p=$("freeplayPanel"); if(p) p.open = true; p?.scrollIntoView({behavior:"smooth",block:"nearest"}); });
-let COURT = { date:null, day:null, take:null, challenge:null, answers:{}, consensus:null, gate:null, beats:{}, share:null };
+let COURT = { date:null, day:null, take:null, challenge:null, answers:{}, consensus:null, gate:null, beats:{}, share:null, challenge_attempt:null };
 let courtAutoTimer=null;
 let CREW_RETURN = null;   // set when Court is launched from a crew room
 let CURRENT_CREW = null;
+// Mirror of court_contract.js courtContinueRoute — keep behavior in sync (#3).
+function courtContinueRoute({ takeDone, challengeDone, attemptStatus }){
+  const take=!!takeDone, challenge=!!challengeDone, status=attemptStatus||null;
+  if(status==="in_progress") return "resume_challenge";
+  if(!take) return "take";
+  if(challenge || status==="completed" || status==="eliminated" || status==="expired") return "consensus";
+  return "challenge_ready";
+}
 function initCourtAnswers(take, saved){
   const out={...(saved||{})};
   (take.items||[]).forEach(item=>{
@@ -2533,7 +2541,11 @@ function renderCourtConsensus(){
   renderCourtShare("courtShare", COURT.share);
   const have=(COURT.gate&&COURT.gate.have)||0;
   $("courtConsensusNote").textContent=have<=1 ? "You are early. The room will fill in as more people lock." : `${have} players locked so far.`;
-  $("courtChallengeStart").textContent = COURT.beats&&COURT.beats.challenge ? "Review Challenge" : "Start Challenge";
+  const att=COURT.challenge_attempt;
+  const chDone=COURT.beats&&COURT.beats.challenge;
+  if(chDone || (att && att.status && att.status!=="in_progress")) $("courtChallengeStart").textContent="Review Challenge";
+  else if(att && att.status==="in_progress") $("courtChallengeStart").textContent="Resume Challenge";
+  else $("courtChallengeStart").textContent="Start Challenge";
   const rows=COURT.consensus||[];
   $("courtConsensusRows").innerHTML=rows.length ? rows.map(row=>{
     if(row.type==="rank"){
@@ -2553,9 +2565,21 @@ async function openDaily(){
   const r=await api("court_daily",{client_id:clientId()});
   if(!r.ok){ $("lobbyErr").style.color="var(--bad)"; $("lobbyErr").textContent="Daily unavailable: "+r.error; return; }
   setStreak(r.streak);   // reconcile the cached number against the server's
-  COURT={ date:r.date, day:r.day, take:r.take, challenge:r.challenge, answers:initCourtAnswers(r.take,r.your_answers), consensus:r.consensus, gate:r.consensus_gate, beats:r.beats||{}, share:r.share||null };
-  if(r.take_done){ renderCourtConsensus(); show("courtConsensus"); }
-  else { renderCourtTake(); show("courtTake"); }
+  COURT={ date:r.date, day:r.day, take:r.take, challenge:r.challenge, answers:initCourtAnswers(r.take,r.your_answers), consensus:r.consensus, gate:r.consensus_gate, beats:r.beats||{}, share:r.share||null, challenge_attempt:r.challenge_attempt||null };
+  // Keep in lockstep with courtContinueRoute in court_contract.js (#3 resume / stack order).
+  const route = courtContinueRoute({
+    takeDone: r.take_done,
+    challengeDone: r.challenge_done,
+    attemptStatus: r.challenge_attempt && r.challenge_attempt.status,
+  });
+  if(route==="resume_challenge"){
+    // Keep consensus mounted so start errors have a surface; success replaces it.
+    renderCourtConsensus(); show("courtConsensus");
+    await startCourtChallenge();
+    return;
+  }
+  if(route==="take"){ renderCourtTake(); show("courtTake"); return; }
+  renderCourtConsensus(); show("courtConsensus");
 }
 $("courtTakeBack").onclick=()=>goHome();
 $("courtConsensusHome").onclick=()=>goHome();
@@ -2589,12 +2613,27 @@ async function startCourtChallenge(){
   setStreak(r.streak);
   COURT.beats=r.beats||COURT.beats||{};
   COURT.share=r.share||COURT.share||null;
+  COURT.challenge_attempt={
+    id:r.attempt_id,
+    status:r.status||"in_progress",
+    started:!!r.started_at,
+    correct_count:r.correct_count||0,
+    strikes:r.strikes||0,
+    filled_slots:r.filled_slots||{},
+  };
   ST = {...ST, challenge_id:r.challenge_id, share_token:r.share_token, attempt_id:r.attempt_id,
         attempt_token:r.attempt_token, answer_target:r.answer_target, strike_limit:r.strike_limit,
         mode:r.mode, kind:r.kind||"roster", isRoster:true, isCourtDaily:true, courtDate:r.date||COURT.date,
         prompt:r.prompt, sheet_id:null, finished:false, filled:r.filled_slots||{}, strikes:r.strikes||0,
         correct:r.correct_count||0, startedMs:r.started_at ? new Date(r.started_at).getTime() : Date.now() };
   store.set("mp_att_"+ST.challenge_id, JSON.stringify({attempt_id:ST.attempt_id,attempt_token:ST.attempt_token}));
+  // Finished attempt (review / double-open): results, not a fresh board.
+  if(r.status && r.status!=="in_progress"){
+    ST.finished=true;
+    if(timerInt) clearInterval(timerInt);
+    showResults();
+    return;
+  }
   buildBoard(); renderPlay(); show("play");
   feed(""); $("guessInput").value=""; acHide(); loadSuggestPool(); $("guessInput").focus(); startTimer();
 }
