@@ -3,10 +3,14 @@ import test from "node:test";
 import {
   dailyChallengeForDate,
   courtShareSummary,
+  crewCanRevealTakes,
+  crewMemberCourtFlags,
   houseTakeForDate,
   normalizeTakeAnswers,
+  playerTakeLockOut,
   takeCourtBeats,
   takeConsensus,
+  takeHotScore,
   validateDailyChallenge,
   validateTakeItems,
 } from "./court_contract.js";
@@ -94,4 +98,106 @@ test("court share summaries prefer the right completion state", () => {
   assert.equal(full.kind, "full_stack");
   assert.match(full.text, /Daily Court full stack/);
   assert.equal(full.challenge_score.correct_count, 5);
+});
+
+test("player-authored take uses the same three-item lock and compare contract", () => {
+  const take = {
+    title: "Group chat agenda",
+    items: [
+      {
+        id: "first-pick",
+        type: "multiple_choice",
+        prompt: "Who starts the argument?",
+        options: [{ key: "a", label: "Player A" }, { key: "b", label: "Player B" }],
+      },
+      {
+        id: "trust",
+        type: "rank",
+        prompt: "Rank who you trust late.",
+        options: [{ key: "c", label: "Player C" }, { key: "d", label: "Player D" }],
+      },
+      {
+        id: "closer",
+        type: "multiple_choice",
+        prompt: "Who closes?",
+        options: [{ key: "e", label: "Player E" }, { key: "f", label: "Player F" }],
+      },
+    ],
+  };
+  const answers = { "first-pick": "a", trust: ["d", "c"], closer: "e" };
+  assert.equal(validateTakeItems(take.items), null);
+  assert.deepEqual(normalizeTakeAnswers(take.items, answers).answers, answers);
+  assert.equal(takeConsensus(take.items, [{ answers }])[0].choices[0].count, 1);
+});
+
+test("player take lock response keeps full topic and locked true over compare payload", () => {
+  const topicOut = {
+    id: "t1",
+    share_token: "abc",
+    title: "Title",
+    items: [{ id: "i1" }],
+    visibility: "unlisted",
+    review_status: "unsubmitted",
+    is_creator: true,
+    author_count: 1,
+  };
+  const compareOut = {
+    topic: { id: "t1", share_token: "abc", title: "Title", author_count: 1 },
+    locked: false,
+    your_answers: { i1: "a" },
+    consensus: [],
+    consensus_gate: { have: 1, honest_empty: true },
+  };
+  const out = playerTakeLockOut(compareOut, topicOut);
+  assert.equal(out.locked, true);
+  assert.deepEqual(out.topic, topicOut);
+  assert.equal(out.your_answers.i1, "a");
+  assert.equal(out.consensus_gate.have, 1);
+  assert.ok(!("visibility" in compareOut.topic));
+  assert.equal(out.topic.visibility, "unlisted");
+});
+
+test("crew reveal gates Takes until the viewer locked", () => {
+  assert.equal(crewCanRevealTakes(false), false);
+  assert.equal(crewCanRevealTakes(true), true);
+  assert.deepEqual(crewMemberCourtFlags({ takeDone: true, challengeDone: false }), {
+    take_done: true,
+    challenge_done: false,
+    played_today: true,
+  });
+  assert.deepEqual(crewMemberCourtFlags({ takeDone: false, challengeDone: true }), {
+    take_done: false,
+    challenge_done: true,
+    played_today: true,
+  });
+  assert.deepEqual(crewMemberCourtFlags({ takeDone: false, challengeDone: false }), {
+    take_done: false,
+    challenge_done: false,
+    played_today: false,
+  });
+});
+
+test("hottest take scores divergence from crew consensus", () => {
+  const items = [
+    {
+      id: "mc",
+      type: "multiple_choice",
+      prompt: "Who?",
+      options: [{ key: "a", label: "A" }, { key: "b", label: "B" }],
+    },
+    {
+      id: "rk",
+      type: "rank",
+      prompt: "Rank",
+      options: [{ key: "x", label: "X" }, { key: "y", label: "Y" }],
+    },
+  ];
+  const consensus = takeConsensus(items, [
+    { answers: { mc: "a", rk: ["x", "y"] } },
+    { answers: { mc: "a", rk: ["x", "y"] } },
+  ]);
+  const modal = takeHotScore(items, { mc: "a", rk: ["x", "y"] }, consensus);
+  const hot = takeHotScore(items, { mc: "b", rk: ["y", "x"] }, consensus);
+  assert.ok(hot > modal);
+  assert.equal(modal, 0);
 });

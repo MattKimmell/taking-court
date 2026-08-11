@@ -227,6 +227,66 @@ export function takeCourtBeats({ takeDone, challengeDone }) {
   };
 }
 
+/** Player Take lock response: compare payload first, then explicit lock + full topic. */
+export function playerTakeLockOut(compareOut, topicOut) {
+  return {
+    ...(compareOut || {}),
+    locked: true,
+    topic: topicOut,
+  };
+}
+
+/** Crew Take reveal: others' answers stay hidden until the viewer locked today's Take. */
+export function crewCanRevealTakes(viewerTakeDone) {
+  return !!viewerTakeDone;
+}
+
+export function crewMemberCourtFlags({ takeDone, challengeDone }) {
+  const take_done = !!takeDone;
+  const challenge_done = !!challengeDone;
+  return {
+    take_done,
+    challenge_done,
+    played_today: take_done || challenge_done,
+  };
+}
+
+/**
+ * Divergence from crew modal Take answers. Higher = hotter take.
+ * MC: 1 when off-modal, 0 when on-modal. Rank: mean |rank - modalRank| / (n-1).
+ */
+export function takeHotScore(items, answers, consensusRows) {
+  if (!items?.length || !answers || !consensusRows?.length) return 0;
+  let sum = 0;
+  let n = 0;
+  for (const item of items) {
+    const row = consensusRows.find((c) => c.item_id === item.id);
+    const mine = answers[item.id];
+    if (!row) continue;
+    if (item.type === "multiple_choice") {
+      const modal = row.choices?.[0]?.key;
+      if (!modal || typeof mine !== "string") continue;
+      sum += mine === modal ? 0 : 1;
+      n += 1;
+    } else if (item.type === "rank" && Array.isArray(mine) && Array.isArray(row.ranking)) {
+      const modalRank = new Map(row.ranking.map((r, i) => [r.key, i]));
+      const denom = Math.max(1, mine.length - 1);
+      let local = 0;
+      let count = 0;
+      mine.forEach((key, idx) => {
+        if (!modalRank.has(key)) return;
+        local += Math.abs(idx - modalRank.get(key)) / denom;
+        count += 1;
+      });
+      if (count) {
+        sum += local / count;
+        n += 1;
+      }
+    }
+  }
+  return n ? sum / n : 0;
+}
+
 export function courtShareSummary({ date, take, challenge, beats, streak, challengeAttempt, consensusGate }) {
   const safeBeats = takeCourtBeats({
     takeDone: beats?.take,

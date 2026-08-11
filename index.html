@@ -265,48 +265,51 @@
 
   <!-- ===================== LOBBY ===================== -->
   <div id="lobby" class="card">
-    <button id="dailyBtn" style="width:100%;font-size:16px;padding:14px;margin-bottom:14px;background:linear-gradient(90deg,var(--accent),var(--gold))">Play Now <span id="dailyStreak"></span></button>
-    <!-- The distinction is what YOU supply: the right answers, or the names
-         themselves. The old lobby put one mode's config form here and hid the
-         others behind nav buttons, which made the recall game look like the
-         whole app.
-         The standalone Tier Lists tile is deliberately not here — see
-         #modeTiers below. -->
-    <div class="slots">
-      <div class="slot" id="modeNameIt" style="cursor:pointer">
-        <div class="n">🎯</div>
-        <div class="name">Think you know ball?<div class="note" style="font-weight:400">Recall the right answers, against the clock</div></div>
-      </div>
-      <!-- Tier Lists is hidden from the lobby, not removed. Everything built on
-           tier topics still runs: the Daily above, crews, curated themes, every
-           ?tier= share link, and My takes so nobody's existing boards vanish.
-           What's gone is the standalone "browse and build a tier list" entry
-           point. Unhide this one element to bring it back. -->
-      <div class="slot hidden" id="modeTiers" style="cursor:pointer">
-        <div class="n">🪜</div>
-        <div class="name">Tier Lists<div class="note" style="font-weight:400">We give you the names — you rank them</div></div>
-      </div>
-      <div class="slot" id="modeLists" style="cursor:pointer">
-        <div class="n">📝</div>
-        <div class="name">What's your take<div class="note" style="font-weight:400">No right answers. You decide who makes your list.</div></div>
-      </div>
-      <div class="slot" id="modeParty" style="cursor:pointer;border-color:var(--accent)">
-        <div class="n">🏀</div>
-        <div class="name">Pickup<div class="note" style="font-weight:400">Everyone in the room, one shared board</div></div>
-      </div>
+    <div class="pill" style="display:inline-block;margin-bottom:8px">Daily Court</div>
+    <div style="font-weight:800;font-size:18px;margin-bottom:4px">Today's ritual</div>
+    <div class="note" id="lobbyCourtNote" style="margin-bottom:12px">Take three takes, then today's Challenge. One streak.</div>
+    <button id="dailyBtn" style="width:100%;font-size:16px;padding:14px;margin-bottom:10px;background:linear-gradient(90deg,var(--accent),var(--gold))">Play Now <span id="dailyStreak"></span></button>
+    <div id="lobbyDoneLine" class="banner win hidden" style="margin-bottom:10px"></div>
+    <div class="row" style="margin-top:4px">
+      <button class="ghost" id="pickupBtn" style="flex:1">🏀 Pickup</button>
+      <button class="ghost" id="crewBtn" style="flex:1">👥 Crew</button>
     </div>
-    <div class="row" style="margin-top:12px">
-      <button class="ghost" id="crewBtn">👥 Crews</button>
-      <button class="ghost" id="mineBtn">🗂️ My takes</button>
-      <button class="ghost" id="lbBtn">🏆 Leaderboard</button>
+    <div class="row" style="margin-top:8px">
+      <button class="ghost" id="takeCreateBtn" style="flex:1">Create Take</button>
+      <button class="ghost" id="freeplayBtn" style="flex:1">Freeplay</button>
     </div>
     <div class="err" id="lobbyErr"></div>
 
-    <details>
-      <summary>Or join with a challenge link / token</summary>
+    <details style="margin-top:12px">
+      <summary>Join with a link or token</summary>
       <div class="linkbox">
         <input id="joinToken" placeholder="Paste share link or token" />
         <button class="sky" id="joinBtn" style="flex:0 0 auto">Open</button>
+      </div>
+    </details>
+
+    <details id="freeplayPanel" style="margin-top:8px">
+      <summary>More freeplay</summary>
+      <div class="note" style="margin:8px 0">Quiet entries — not part of Daily Court.</div>
+      <div class="slots">
+        <div class="slot" id="modeNameIt" style="cursor:pointer">
+          <div class="n">🎯</div>
+          <div class="name">Top 8 / Name It<div class="note" style="font-weight:400">Recall challenges · freeplay only</div></div>
+        </div>
+        <!-- Tier Lists kept available under freeplay (not a home peer). Hidden-from-lobby
+             product intent from main is preserved: not a primary shelf tile. -->
+        <div class="slot" id="modeTiers" style="cursor:pointer">
+          <div class="n">🪜</div>
+          <div class="name">Tier boards<div class="note" style="font-weight:400">Legacy freeplay rankings</div></div>
+        </div>
+        <div class="slot" id="modeLists" style="cursor:pointer">
+          <div class="n">📝</div>
+          <div class="name">Custom lists<div class="note" style="font-weight:400">Legacy freeplay lists</div></div>
+        </div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button class="ghost" id="mineBtn">🗂️ My stuff</button>
+        <button class="ghost" id="lbBtn">🏆 Leaderboard</button>
       </div>
     </details>
 
@@ -349,8 +352,43 @@
     <div class="row" style="margin-top:14px">
       <button id="courtChallengeStart">Start Challenge</button>
       <button class="ghost" id="courtConsensusRefresh">Refresh</button>
+      <button class="ghost" id="courtSkipChallenge">Leave for now</button>
     </div>
     <div class="err" id="courtConsensusErr"></div>
+  </div>
+
+  <!-- ===================== PLAYER TAKE ===================== -->
+  <div id="takeBuild" class="card hidden">
+    <div class="head">
+      <div>
+        <div class="pill" style="display:inline-block;margin-bottom:6px">Create Take</div>
+        <div style="font-weight:800;font-size:18px">Three questions, one share link</div>
+      </div>
+      <button class="ghost" id="takeBuildBack" style="flex:0 0 auto;padding:6px 12px">Home</button>
+    </div>
+    <label>Take title</label>
+    <input id="takeBuildTitle" placeholder="e.g. Most stressful playoff teams" />
+    <div id="takeBuildItems" style="margin-top:12px"></div>
+    <button id="takeBuildSave" style="margin-top:12px;width:100%">Create share link</button>
+    <div class="err" id="takeBuildErr"></div>
+  </div>
+
+  <div id="playerTake" class="card hidden">
+    <div class="head">
+      <div>
+        <div class="pill" style="display:inline-block;margin-bottom:6px">Take</div>
+        <div style="font-weight:800;font-size:18px" id="playerTakeTitle"></div>
+      </div>
+      <button class="ghost" id="playerTakeHome" style="flex:0 0 auto;padding:6px 12px">Home</button>
+    </div>
+    <div class="linkbox" style="margin-top:8px">
+      <input id="playerTakeUrl" readonly />
+      <button class="sky" id="playerTakeCopy" style="flex:0 0 auto">Copy</button>
+    </div>
+    <div id="playerTakeItems" style="margin-top:12px"></div>
+    <button id="playerTakeLock" style="margin-top:12px;width:100%">Lock Take</button>
+    <div id="playerTakeCompare" style="margin-top:14px"></div>
+    <div class="err" id="playerTakeErr"></div>
   </div>
 
   <!-- ===================== NAME IT (recall challenges) ===================== -->
@@ -536,6 +574,9 @@
       <button id="guessBtn" style="flex:0 0 auto">Guess</button>
     </div>
     <div class="feed" id="feed"></div>
+    <div class="row" style="margin-top:12px">
+      <button class="ghost" id="playExitCourt" style="width:100%">Exit Challenge · keep streak</button>
+    </div>
   </div>
 
   <!-- ===================== RESULTS ===================== -->
@@ -565,6 +606,12 @@
       <button class="ghost" id="lbHome" style="flex:0 0 auto;padding:6px 12px">Home</button>
     </div>
     <div class="note">Ranked by completion, then fastest time. Only finished runs appear.</div>
+    <label>Time</label>
+    <select id="lbScope">
+      <option value="today">Today</option>
+      <option value="week">Last 7 days</option>
+      <option value="all">All time</option>
+    </select>
     <label>Category</label>
     <select id="lbCat"><option value="">All categories</option></select>
     <div class="row" style="margin-top:10px">
@@ -1080,7 +1127,7 @@ let ST = { challenge_id:null, share_token:null, attempt_id:null, attempt_token:n
            isCourtDaily:false, courtDate:null };
 let timerInt=null;
 
-function show(id){ ["lobby","courtTake","courtConsensus","nameHome","catPage","share","preview","play","results","leaderboard","listsHome","listBuild","listCompare","tierHome","tierBoard","tierCompare","tierBrowse","partyHost","partyPlay","partyRecap","mine","crewHome","crewRoom"].forEach(s=>$(s).classList.toggle("hidden", s!==id)); }
+function show(id){ ["lobby","courtTake","courtConsensus","takeBuild","playerTake","nameHome","catPage","share","preview","play","results","leaderboard","listsHome","listBuild","listCompare","tierHome","tierBoard","tierCompare","tierBrowse","partyHost","partyPlay","partyRecap","mine","crewHome","crewRoom"].forEach(s=>$(s).classList.toggle("hidden", s!==id)); }
 // Challenge setup moved off the lobby onto #nameHome, so lobbyErr is hidden
 // whenever Name It is open — a failed create would have reported into a screen
 // nobody is looking at. Always write to the error box on the visible screen.
@@ -1423,7 +1470,14 @@ $("playNowBtn").onclick = ()=>startPlay();
 // join by pasted link/token
 $("joinBtn").onclick = ()=>{
   let v=$("joinToken").value.trim(); if(!v) return;
-  const m=v.match(/[?&]ch=([^&\s]+)/); const token=m?m[1]:v;
+  const tm=v.match(/[?&]take=([^&\s]+)/);
+  if(tm){ openPlayerTake(decodeURIComponent(tm[1])); return; }
+  const lm=v.match(/[?&]list=([^&\s]+)/);
+  if(lm){ openListTopic(decodeURIComponent(lm[1]),"build"); return; }
+  const tr=v.match(/[?&]tier=([^&\s]+)/);
+  if(tr){ openTierTopic(decodeURIComponent(tr[1]),"board"); return; }
+  const m=v.match(/[?&]ch=([^&\s]+)/); const token=m?decodeURIComponent(m[1]):v;
+  if(String(token).startsWith("court_")){ openDaily(); return; }
   openChallenge(token);
 };
 
@@ -1504,6 +1558,8 @@ function renderPlay(){
     }
   });
   for(let i=0;i<ST.strike_limit;i++) $("strk"+i).classList.toggle("on", i<ST.strikes);
+  const exit=$("playExitCourt");
+  if(exit) exit.classList.toggle("hidden", !ST.isCourtDaily);
 }
 
 async function submitGuess(){
@@ -1688,7 +1744,7 @@ async function showResults(){
   });
 }
 $("refreshBtn").onclick=showResults;
-$("homeBtn").onclick=()=>{ show("lobby"); };
+$("homeBtn").onclick=()=>{ goHome(); };
 $("resultsCourtShareBtn").onclick=()=>shareCourt(COURT.share);
 $("rematchBtn").onclick=async()=>{
   // rematch: fresh challenge on the same category, same opponent type
@@ -1707,11 +1763,12 @@ $("rematchBtn").onclick=async()=>{
 async function showLeaderboard(){
   show("leaderboard");
   const sheet_id = $("lbCat").value || undefined;
+  const scope = $("lbScope").value;
   const include_bots = $("lbBots").checked;
   $("lbErr").textContent="";
-  const r = await api("leaderboard",{ sheet_id, include_bots, client_id:clientId(), limit:25 });
+  const r = await api("leaderboard",{ sheet_id, scope, include_bots, client_id:clientId(), limit:25 });
   if(!r.ok){ $("lbErr").textContent="Error: "+r.error; $("lbBoard").innerHTML=""; return; }
-  if(!r.entries.length){ $("lbBoard").innerHTML=`<div class="note" style="margin-top:12px">No finished runs yet — play a game to get on the board.</div>`; return; }
+  if(!r.entries.length){ $("lbBoard").innerHTML=`<div class="note" style="margin-top:12px">No finished runs in this scope yet — play a game to get on the board.</div>`; return; }
   const showCat = !sheet_id;
   const rows = r.entries.map(e=>{
     const medal = e.rank===1?"🥇":e.rank===2?"🥈":e.rank===3?"🥉":("#"+e.rank);
@@ -1730,6 +1787,7 @@ async function showLeaderboard(){
 $("lbBtn").onclick = showLeaderboard;
 $("lbBtn2").onclick = showLeaderboard;
 $("lbHome").onclick = ()=>show("lobby");
+$("lbScope").onchange = showLeaderboard;
 $("lbCat").onchange = showLeaderboard;
 $("lbBots").onchange = showLeaderboard;
 
@@ -2353,9 +2411,43 @@ function setStreak(srv){
   localStorage.setItem("mp_streak", JSON.stringify({ streak:srv.current, last:srv.last_played||null }));
   renderStreak();
 }
+function goHome(){
+  clearTimeout(courtAutoTimer); courtAutoTimer=null;
+  if(CREW_RETURN){ const c=CREW_RETURN; CREW_RETURN=null; openCrew(c); return; }
+  show("lobby"); refreshLobbyCourt();
+}
+async function refreshLobbyCourt(){
+  const done=$("lobbyDoneLine"), note=$("lobbyCourtNote"), btn=$("dailyBtn");
+  if(!done || !btn) return;
+  try{
+    const r=await api("court_daily",{client_id:clientId()});
+    if(!r.ok){ done.classList.add("hidden"); return; }
+    setStreak(r.streak);
+    const beats=r.beats||{};
+    if(beats.full_stack){
+      done.classList.remove("hidden"); done.className="banner win";
+      done.textContent="Full stack done today · streak safe";
+      if(note) note.textContent="You finished Take and Challenge. Come back tomorrow.";
+    } else if(beats.take || beats.challenge){
+      done.classList.remove("hidden"); done.className="banner win";
+      done.textContent=(beats.take?"Take locked":"Challenge done")+(beats.take&&!beats.challenge?" · Challenge still open":"");
+      if(note) note.textContent=beats.take&&!beats.challenge?"Bonus Challenge still available today.":"Take still available if you want the full stack.";
+    } else {
+      done.classList.add("hidden");
+      if(note) note.textContent="Take three takes, then today's Challenge. One streak.";
+    }
+    const label = beats.full_stack ? "Review Court" : ((beats.take || beats.challenge) ? "Continue Court" : "Play Now");
+    btn.innerHTML = label + ' <span id="dailyStreak"></span>';
+    renderStreak();
+  }catch(e){ done.classList.add("hidden"); }
+}
 $("dailyBtn").onclick=openDaily;
+$("pickupBtn") && ($("pickupBtn").onclick = ()=>openPartyHome());
+$("freeplayBtn") && ($("freeplayBtn").onclick = ()=>{ const p=$("freeplayPanel"); if(p) p.open = true; p?.scrollIntoView({behavior:"smooth",block:"nearest"}); });
 let COURT = { date:null, day:null, take:null, challenge:null, answers:{}, consensus:null, gate:null, beats:{}, share:null };
 let courtAutoTimer=null;
+let CREW_RETURN = null;   // set when Court is launched from a crew room
+let CURRENT_CREW = null;
 function initCourtAnswers(take, saved){
   const out={...(saved||{})};
   (take.items||[]).forEach(item=>{
@@ -2465,11 +2557,16 @@ async function openDaily(){
   if(r.take_done){ renderCourtConsensus(); show("courtConsensus"); }
   else { renderCourtTake(); show("courtTake"); }
 }
-$("courtTakeBack").onclick=()=>show("lobby");
-$("courtConsensusHome").onclick=()=>{ clearTimeout(courtAutoTimer); courtAutoTimer=null; show("lobby"); };
+$("courtTakeBack").onclick=()=>goHome();
+$("courtConsensusHome").onclick=()=>goHome();
 $("courtConsensusRefresh").onclick=openDaily;
 $("courtChallengeStart").onclick=()=>startCourtChallenge();
+$("courtSkipChallenge").onclick=()=>goHome();
 $("courtShareBtn").onclick=()=>shareCourt(COURT.share);
+$("playExitCourt") && ($("playExitCourt").onclick=()=>{
+  if(timerInt) clearInterval(timerInt);
+  goHome();
+});
 $("courtTakeLock").onclick=async()=>{
   $("courtTakeErr").textContent="";
   const missing=(COURT.take.items||[]).find(item=>item.type==="multiple_choice" && !COURT.answers[item.id]);
@@ -2501,6 +2598,148 @@ async function startCourtChallenge(){
   buildBoard(); renderPlay(); show("play");
   feed(""); $("guessInput").value=""; acHide(); loadSuggestPool(); $("guessInput").focus(); startTimer();
 }
+
+// ------------------------------------------------------------------ player-authored Takes
+let PLAYER_TAKE = { topic:null, answers:{}, compare:null };
+function takeOptionKey(label, idx){
+  const base=normStr(label).replace(/\s+/g,"-").slice(0,48);
+  return base || `option-${idx+1}`;
+}
+function openTakeBuild(){
+  $("takeBuildErr").textContent="";
+  $("takeBuildTitle").value="";
+  $("takeBuildItems").innerHTML=[0,1,2].map(i=>`<div style="background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:12px;margin-top:10px">
+    <div class="note">Item ${i+1}</div>
+    <label>Type</label>
+    <select class="take-build-type" data-i="${i}">
+      <option value="multiple_choice">Pick one</option>
+      <option value="rank">Rank</option>
+    </select>
+    <label>Prompt</label>
+    <input class="take-build-prompt" data-i="${i}" placeholder="The argument…" />
+    <label>Options</label>
+    <textarea class="take-build-options" data-i="${i}" rows="4" placeholder="One option per line"></textarea>
+  </div>`).join("");
+  show("takeBuild");
+}
+function readTakeBuild(){
+  const items=[];
+  for(let i=0;i<3;i++){
+    const type=document.querySelector(`.take-build-type[data-i="${i}"]`).value;
+    const prompt=document.querySelector(`.take-build-prompt[data-i="${i}"]`).value.trim();
+    const labels=document.querySelector(`.take-build-options[data-i="${i}"]`).value.split("\n").map(s=>s.trim()).filter(Boolean);
+    const seen=new Set();
+    const options=labels.map((label,idx)=>{
+      let key=takeOptionKey(label, idx), n=2;
+      while(seen.has(key)) key=`${key}-${n++}`;
+      seen.add(key);
+      return { key, label };
+    });
+    items.push({ id:`item-${i+1}`, type, prompt, options });
+  }
+  return { title:$("takeBuildTitle").value.trim(), items };
+}
+function initPlayerTakeAnswers(topic, saved){
+  const out={...(saved||{})};
+  (topic.items||[]).forEach(item=>{
+    if(item.type==="rank"){
+      const keys=(item.options||[]).map(o=>o.key);
+      if(!Array.isArray(out[item.id]) || out[item.id].length!==keys.length) out[item.id]=keys;
+    } else if(typeof out[item.id]!=="string") out[item.id]="";
+  });
+  return out;
+}
+function playerTakeLink(){ return location.origin+location.pathname+"?take="+PLAYER_TAKE.topic.share_token; }
+function renderPlayerTake(){
+  const topic=PLAYER_TAKE.topic; if(!topic) return;
+  $("playerTakeTitle").textContent=topic.title;
+  $("playerTakeUrl").value=playerTakeLink();
+  $("playerTakeErr").textContent="";
+  $("playerTakeLock").classList.toggle("hidden", !!PLAYER_TAKE.compare);
+  $("playerTakeItems").innerHTML=(topic.items||[]).map((item,idx)=>{
+    const answer=PLAYER_TAKE.answers[item.id];
+    if(item.type==="rank"){
+      const byKey={}; (item.options||[]).forEach(o=>byKey[o.key]=o);
+      const keys=Array.isArray(answer)?answer:(item.options||[]).map(o=>o.key);
+      return `<div style="background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:12px;margin-top:10px">
+        <div class="note">Take ${idx+1} · Rank</div>
+        <div style="font-weight:800;margin-top:4px">${esc(item.prompt)}</div>
+        <div style="margin-top:10px">${keys.map((key,pos)=>`<div class="slot" style="align-items:center">
+          <div class="n">${pos+1}</div>
+          <div class="name">${esc((byKey[key]||{}).label||key)}</div>
+          <div class="row" style="flex:0 0 auto;gap:6px">
+            <button class="ghost take-rank" data-id="${esc(item.id)}" data-dir="-1" data-pos="${pos}" ${pos===0?"disabled":""} style="padding:5px 9px;min-height:34px">↑</button>
+            <button class="ghost take-rank" data-id="${esc(item.id)}" data-dir="1" data-pos="${pos}" ${pos===keys.length-1?"disabled":""} style="padding:5px 9px;min-height:34px">↓</button>
+          </div>
+        </div>`).join("")}</div>
+      </div>`;
+    }
+    return `<div style="background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:12px;margin-top:10px">
+      <div class="note">Take ${idx+1} · Pick one</div>
+      <div style="font-weight:800;margin-top:4px">${esc(item.prompt)}</div>
+      <div class="slots" style="margin-top:10px">${(item.options||[]).map(o=>`<label class="slot" style="cursor:pointer">
+        <input type="radio" name="take_${esc(item.id)}" value="${esc(o.key)}" ${answer===o.key?"checked":""} style="flex:0 0 auto;width:auto;min-height:0" />
+        <div class="name">${esc(o.label)}</div>
+      </label>`).join("")}</div>
+    </div>`;
+  }).join("");
+  Array.from(document.querySelectorAll(".take-rank")).forEach(btn=>btn.onclick=()=>{
+    const id=btn.dataset.id, pos=parseInt(btn.dataset.pos), dir=parseInt(btn.dataset.dir);
+    const arr=(PLAYER_TAKE.answers[id]||[]).slice(), next=pos+dir;
+    if(next<0 || next>=arr.length) return;
+    [arr[pos],arr[next]]=[arr[next],arr[pos]];
+    PLAYER_TAKE.answers[id]=arr; renderPlayerTake();
+  });
+  (topic.items||[]).filter(i=>i.type==="multiple_choice").forEach(item=>{
+    Array.from(document.querySelectorAll(`input[name="take_${CSS.escape(item.id)}"]`)).forEach(el=>el.onchange=()=>{
+      PLAYER_TAKE.answers[item.id]=el.value;
+    });
+  });
+  renderPlayerTakeCompare();
+}
+function renderPlayerTakeCompare(){
+  const c=PLAYER_TAKE.compare;
+  if(!c){ $("playerTakeCompare").innerHTML=""; return; }
+  const have=(c.consensus_gate&&c.consensus_gate.have)||0;
+  $("playerTakeCompare").innerHTML=`<div class="banner win">Take locked${have>1?` · ${have} players in`:""}</div>
+    <div class="note" style="margin-top:8px">${have<=1?"You are early. Share the link to bring in the room.":"Room consensus"}</div>
+    ${(c.consensus||[]).map(row=>{
+      if(row.type==="rank") return `<div style="background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:12px;margin-top:10px">
+        <div style="font-weight:800">${esc(row.prompt)}</div>
+        ${(row.ranking||[]).map((r,i)=>`<div class="slot"><div class="n">${i+1}</div><div class="name">${esc(r.label)}</div><div class="ctx">${r.avg_rank?`avg ${r.avg_rank}`:"-"}</div></div>`).join("")}
+      </div>`;
+      return `<div style="background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:12px;margin-top:10px">
+        <div style="font-weight:800">${esc(row.prompt)}</div>
+        ${(row.choices||[]).map(choice=>`<div class="slot"><div class="name">${esc(choice.label)}</div><div class="ctx">${choice.count}</div></div>`).join("")}
+      </div>`;
+    }).join("")}`;
+}
+async function openPlayerTake(token){
+  const r=await api("take_open",{ share_token:token, client_id:clientId() });
+  if(!r.ok){ $("lobbyErr").style.color="var(--bad)"; $("lobbyErr").textContent="Take unavailable: "+r.error; return; }
+  PLAYER_TAKE={ topic:r.topic, answers:initPlayerTakeAnswers(r.topic,r.your_answers), compare:r.compare||null };
+  renderPlayerTake(); show("playerTake");
+}
+$("takeCreateBtn").onclick=openTakeBuild;
+$("takeBuildBack").onclick=()=>goHome();
+$("playerTakeHome").onclick=()=>goHome();
+$("playerTakeCopy").onclick=()=>{ $("playerTakeUrl").select(); navigator.clipboard?.writeText($("playerTakeUrl").value); $("playerTakeCopy").textContent="Copied!"; setTimeout(()=>$("playerTakeCopy").textContent="Copy",1200); };
+$("takeBuildSave").onclick=async()=>{
+  $("takeBuildErr").textContent="";
+  const payload=readTakeBuild();
+  const r=await api("take_create",{ ...payload, client_id:clientId(), label:ensureName() });
+  if(!r.ok){ $("takeBuildErr").textContent="Error: "+r.error; return; }
+  await openPlayerTake(r.topic.share_token);
+};
+$("playerTakeLock").onclick=async()=>{
+  $("playerTakeErr").textContent="";
+  const missing=(PLAYER_TAKE.topic.items||[]).find(item=>item.type==="multiple_choice" && !PLAYER_TAKE.answers[item.id]);
+  if(missing){ $("playerTakeErr").textContent="Pick an answer for all three takes."; return; }
+  const r=await api("take_lock",{ share_token:PLAYER_TAKE.topic.share_token, answers:PLAYER_TAKE.answers, client_id:clientId(), label:ensureName() });
+  if(!r.ok){ $("playerTakeErr").textContent="Error: "+r.error; return; }
+  PLAYER_TAKE={ topic:r.topic, answers:r.your_answers||PLAYER_TAKE.answers, compare:r };
+  renderPlayerTake();
+};
 
 function _rr(ctx,x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
 function _trunc(ctx,text,maxW){ if(ctx.measureText(text).width<=maxW) return text; let t=text; while(t.length>4 && ctx.measureText(t+"…").width>maxW) t=t.slice(0,-1); return t+"…"; }
@@ -3509,8 +3748,6 @@ $("partyRecapShare").onclick = ()=>{
 
 // ------------------------------------------------------------------ crews
 const REACTIONS = ["🔥","💀","🧢","👑","😂"];
-let CREW_RETURN = null;   // set when the daily is launched from a crew room
-let CURRENT_CREW = null;
 
 $("crewBtn").onclick = openCrewHome;
 $("crewHomeBack").onclick = ()=>show("lobby");
@@ -3568,23 +3805,38 @@ async function openCrew(crewId){
 }
 function crewPlayDaily(crewId){ CREW_RETURN = crewId; openDaily(); }
 
-function crewBoardHtml(m, r){
-  const byTier = r.topic.tiers.map(t=>{
-    const names = r.topic.item_set.filter(it => (m.assignments||{})[it.key]===t).map(it=>it.label);
-    return names.length ? `<div style="margin-top:2px"><b style="color:${TIER_COLORS[t]}">${t}</b> ${names.join(", ")}</div>` : "";
-  }).filter(Boolean).join("");
-  const existing = (m.reactions||[]).map(x=>`<button class="rxn ${x.mine?'on':''}" data-b="${m.board_id}" data-e="${x.emoji}">${x.emoji} ${x.count}</button>`).join("");
-  const palette = m.is_you ? "" : REACTIONS.map(e=>`<button class="rxn add" data-b="${m.board_id}" data-e="${e}">${e}</button>`).join("");
+function crewMemberBeatLabel(m){
+  const bits=[];
+  if(m.take_done) bits.push("Take");
+  if(m.challenge_done) bits.push("Challenge");
+  if(!bits.length) return "not yet";
+  return bits.join(" + ");
+}
+function crewTakeHtml(m, r){
+  if(!r.reveal_takes) return "";
+  if(!m.take_done) return `<div class="note" style="margin-top:4px">No Take yet${m.challenge_done?" · Challenge done":""}</div>`;
+  const answers=m.answers||{};
+  const items=(r.take&&r.take.items)||[];
+  const rows=items.map(item=>{
+    const a=answers[item.id];
+    if(item.type==="rank" && Array.isArray(a)){
+      const byKey={}; (item.options||[]).forEach(o=>byKey[o.key]=o.label);
+      return `<div style="margin-top:6px"><b>${esc(item.prompt)}</b><div class="note">${a.map((k,i)=>`${i+1}. ${esc(byKey[k]||k)}`).join(" · ")}</div></div>`;
+    }
+    const lab=((item.options||[]).find(o=>o.key===a)||{}).label||a||"—";
+    return `<div style="margin-top:6px"><b>${esc(item.prompt)}</b><div class="note">${esc(lab)}</div></div>`;
+  }).join("");
+  const ch = m.challenge_attempt ? `<div class="note" style="margin-top:6px">Challenge: ${m.challenge_attempt.correct_count} correct · ${m.challenge_attempt.status}</div>` : (m.challenge_done?`<div class="note" style="margin-top:6px">Challenge done</div>`:"");
   return `<div class="card" style="margin-top:10px;background:var(--panel2)">
-    <div style="font-weight:700">${m.display_name}${m.is_you?' <span class="pill" style="padding:1px 7px">you</span>':''}${m.streak?` · 🔥 ${m.streak}`:''}</div>
-    <div style="margin-top:4px;font-size:14px">${byTier||'<span class="note">no picks</span>'}</div>
-    <div class="rxnbar">${existing}${palette}</div>
+    <div style="font-weight:700">${esc(m.display_name)}${m.is_you?' <span class="pill" style="padding:1px 7px">you</span>':''}${m.streak?` · 🔥 ${m.streak}`:''}</div>
+    <div class="note">${crewMemberBeatLabel(m)}</div>
+    ${rows}${ch}
   </div>`;
 }
 function crewStandingsHtml(r){
   const rows = r.members.map(m=>`<div class="slot" style="min-height:42px">
     <div class="n" style="background:${m.played_today?'var(--good)':'#0e1730'};color:${m.played_today?'#04210f':'var(--muted)'}">${m.played_today?'✓':'·'}</div>
-    <div class="name">${m.display_name}${m.is_you?' <span class="pill" style="padding:1px 7px">you</span>':''}</div>
+    <div class="name">${esc(m.display_name)}${m.is_you?' <span class="pill" style="padding:1px 7px">you</span>':''}<div class="note" style="font-weight:400">${crewMemberBeatLabel(m)}</div></div>
     <div class="ctx">${m.streak?('🔥 '+m.streak):'—'}</div>
   </div>`).join("");
   return `<div style="font-weight:700;margin-top:18px">Standings <span class="note">· ${r.members.length} in the crew</span></div><div class="slots" style="margin-top:8px">${rows}</div>`;
@@ -3595,42 +3847,62 @@ function renderCrewRoom(r){
   $("crewRoomCode").innerHTML = `Code <b class="mono" style="letter-spacing:1px;color:var(--accent)">${r.crew.code}</b> · ${r.crew.member_count} member${r.crew.member_count===1?'':'s'} · tap to copy`;
   $("crewRoomCode").onclick = ()=>{ try{ navigator.clipboard?.writeText(r.crew.code); const el=$("crewRoomCode"); const prev=el.innerHTML; el.textContent="Copied!"; setTimeout(()=>el.innerHTML=prev,1200); }catch(e){} };
   const body = $("crewRoomBody");
-  let h = `<div class="note" style="margin-top:8px">🗓️ Today — ${r.topic.prompt}</div>`;
-  if(!r.i_played){
-    h += `<div class="banner wait" style="margin-top:12px">Play today's Daily to unlock the crew's boards, streaks, and who's got the hottest take.</div>`;
-    h += `<button id="crewPlayBtn" style="width:100%;margin-top:12px;font-size:16px;padding:14px;background:linear-gradient(90deg,var(--accent),var(--gold))">🗓️ Play today's Daily</button>`;
+  const takeTitle = (r.take && r.take.title) || (r.topic && r.topic.prompt) || "Daily Court";
+  const chPrompt = r.challenge && r.challenge.prompt ? r.challenge.prompt : "";
+  let h = `<div class="note" style="margin-top:8px">🗓️ Court ${r.date} — ${esc(takeTitle)}</div>`;
+  if(chPrompt) h += `<div class="note">Challenge: ${esc(chPrompt)}</div>`;
+  if(!r.i_take_done && !r.i_played){
+    h += `<div class="banner wait" style="margin-top:12px">Lock today's Take to unlock the crew's Takes and hottest-take board. Challenge-only still counts for streak.</div>`;
+    h += `<button id="crewPlayBtn" style="width:100%;margin-top:12px;font-size:16px;padding:14px;background:linear-gradient(90deg,var(--accent),var(--gold))">Play Now · Daily Court</button>`;
+    h += crewStandingsHtml(r);
+  } else if(!r.reveal_takes){
+    h += `<div class="banner wait" style="margin-top:12px">You played Challenge, but Takes stay hidden until you lock today's Take.</div>`;
+    h += `<button id="crewPlayBtn" style="width:100%;margin-top:12px;font-size:16px;padding:14px;background:linear-gradient(90deg,var(--accent),var(--gold))">Lock today's Take</button>`;
     h += crewStandingsHtml(r);
   } else {
     let sup = "";
-    if(r.hottest_take) sup += `<div style="margin-top:6px">🌶️ Hottest take today: <b>${r.hottest_take.display_name}</b></div>`;
-    if(r.badge) sup += `<div style="margin-top:6px">${r.badge.label}: <b>${r.badge.display_name}</b></div>`;
+    if(r.hottest_take) sup += `<div style="margin-top:6px">🌶️ Hottest take today: <b>${esc(r.hottest_take.display_name)}</b></div>`;
+    if(r.badge) sup += `<div style="margin-top:6px">${esc(r.badge.label)}: <b>${esc(r.badge.display_name)}</b></div>`;
     if(sup) h += `<div class="card" style="margin-top:12px;background:var(--panel2);border-color:var(--accent)"><div style="font-weight:800">🏆 Today in the crew</div>${sup}</div>`;
-    else if(r.players_today<2) h += `<div class="note" style="margin-top:12px">Hottest take unlocks once at least 2 of you have played.</div>`;
-    h += `<button class="ghost" id="crewPlayBtn" style="margin-top:12px">✏️ Edit my board</button>`;
-    h += `<div style="font-weight:700;margin-top:18px">Everyone's boards <span class="note">· ${r.players_today} played</span></div>`;
-    h += r.members.filter(m=>m.played_today).map(m=>crewBoardHtml(m,r)).join("") || `<div class="note">No boards yet.</div>`;
+    else if((r.consensus_gate&&r.consensus_gate.have||0)<2) h += `<div class="note" style="margin-top:12px">Hottest take unlocks once at least 2 of you locked the Take.</div>`;
+    h += `<button class="ghost" id="crewPlayBtn" style="margin-top:12px">Back to Court</button>`;
+    h += `<div style="font-weight:700;margin-top:18px">Crew Takes <span class="note">· ${r.players_today} played</span></div>`;
+    h += r.members.filter(m=>m.played_today).map(m=>crewTakeHtml(m,r)).join("") || `<div class="note">Nobody yet.</div>`;
+    if(r.consensus && r.consensus.length){
+      h += `<div style="font-weight:700;margin-top:18px">Crew Take consensus</div>`;
+      h += r.consensus.map(row=>{
+        if(row.type==="rank") return `<div class="card" style="margin-top:10px;background:var(--panel2)"><div style="font-weight:800">${esc(row.prompt)}</div>${(row.ranking||[]).map((x,i)=>`<div class="slot"><div class="n">${i+1}</div><div class="name">${esc(x.label)}</div></div>`).join("")}</div>`;
+        return `<div class="card" style="margin-top:10px;background:var(--panel2)"><div style="font-weight:800">${esc(row.prompt)}</div>${(row.choices||[]).map(c=>`<div class="slot"><div class="name">${esc(c.label)}</div><div class="ctx">${c.count}</div></div>`).join("")}</div>`;
+      }).join("");
+    }
     h += crewStandingsHtml(r);
   }
   body.innerHTML = h;
   const pb = $("crewPlayBtn"); if(pb) pb.onclick = ()=>crewPlayDaily(r.crew.id);
-  Array.from(body.querySelectorAll(".rxn")).forEach(b=>b.onclick=async()=>{
-    b.disabled = true;
-    await api("crew_react", { crew_id: r.crew.id, tier_list_id: b.dataset.b, emoji: b.dataset.e });
-    openCrew(r.crew.id);
-  });
 }
 
 // ------------------------------------------------------------------ boot
 renderStreak();
+refreshLobbyCourt();
 loadSheets();
 const urlToken = new URLSearchParams(location.search).get("ch");
 const urlList = new URLSearchParams(location.search).get("list");
 const urlTier = new URLSearchParams(location.search).get("tier");
 const urlParty = new URLSearchParams(location.search).get("p");
-window.FROM_SHARE = !!(urlTier || urlList);
+const urlTake = new URLSearchParams(location.search).get("take");
+window.FROM_SHARE = !!(urlTier || urlList || urlTake);
 track("landing", { from: urlParty ? "party" : (window.FROM_SHARE ? "share" : "direct") });
 if(urlParty){ $("playerName").value = store.get("mp_name",""); partyJoinByCode(urlParty); }
-else if(urlTier){ $("playerName").value = store.get("mp_name",""); openTierTopic(urlTier,"board"); }
+else if(urlTake){ $("playerName").value = store.get("mp_name",""); openPlayerTake(urlTake); }
+else if(urlTier){
+  $("playerName").value = store.get("mp_name","");
+  // Legacy tier daily links: still open read/play path; Daily Court is Play Now.
+  if(String(urlTier).startsWith("daily_")){
+    $("lobbyErr").style.color="var(--muted)";
+    $("lobbyErr").textContent="Old tier Daily links are freeplay now. Use Play Now for Daily Court.";
+  }
+  openTierTopic(urlTier,"board");
+}
 else if(urlList){ $("playerName").value = store.get("mp_name",""); openListTopic(urlList,"build"); }
 else if(urlToken){ $("playerName").value = store.get("mp_name",""); openChallenge(urlToken); }
 $("playerName").addEventListener("change",e=>store.set("mp_name",e.target.value));
@@ -3640,7 +3912,7 @@ $("playerName").value = store.get("mp_name","");
 (function(){
   // A party joiner is standing in a room waiting on their friends — never put
   // an onboarding overlay in front of them.
-  const hasShare = urlToken || urlList || urlTier || urlParty;
+  const hasShare = urlToken || urlList || urlTier || urlParty || urlTake;
   if(hasShare || store.get("tc_seen","")) return;
   const w = $("welcome"); w.classList.add("show");
   const done = go => { w.classList.remove("show"); store.set("tc_seen","1"); if(go) $("dailyBtn").click(); };

@@ -1,8 +1,14 @@
-import { db, ok, err, authedUserId, consensusFor, computeStreak } from "./shared.ts";
-import { getOrCreateDailyTopic } from "./tiers.ts";
+import { db, ok, err, authedUserId, computeStreak } from "./shared.ts";
+import { getOrCreateCourtDay } from "./court.ts";
+import {
+  crewCanRevealTakes,
+  crewMemberCourtFlags,
+  takeConsensus,
+  takeHotScore,
+} from "./court_contract.js";
 
 // -----------------------------------------------------------------------------
-// Crews: account-gated private group rooms that play the Daily together.
+// Crews: account-gated private group rooms that play Daily Court together.
 // All crew actions require a logged-in Supabase user (authedUserId). Play for
 // everyone else stays fully no-account.
 // -----------------------------------------------------------------------------
@@ -67,8 +73,48 @@ export async function actionCrewMine(req: Request, body: any) {
   return ok({ crews: (crews ?? []).map((c) => ({ id: c.id, code: c.code, name: c.name, role: roleBy.get(c.id), member_count: counts.get(c.id) ?? 1 })) });
 }
 
-// The crew room for today's Daily: standings (streak + played-today), and — once
-// the caller has played — everyone's boards, crew consensus, Hottest Take + badge.
+async function courtDatesForUsers(userIds: string[]): Promise<Map<string, Set<string>>> {
+  const out = new Map<string, Set<string>>();
+  for (const id of userIds) out.set(id, new Set());
+  if (!userIds.length) return out;
+  const NONE = ["00000000-0000-0000-0000-000000000000"];
+
+  const { data: locks } = await db.from("mp_court_take_locks")
+    .select("author_user_id, day_id")
+    .in("author_user_id", userIds);
+  const dayIds = [...new Set((locks ?? []).map((l: any) => l.day_id).filter(Boolean))];
+  const dayById = new Map<string, string>();
+  if (dayIds.length) {
+    const { data: days } = await db.from("mp_court_days").select("id, day").in("id", dayIds);
+    for (const d of days ?? []) dayById.set(d.id, String(d.day));
+  }
+  for (const lock of locks ?? []) {
+    const day = dayById.get(lock.day_id);
+    if (day && lock.author_user_id) out.get(lock.author_user_id)?.add(day);
+  }
+
+  const { data: courtDays } = await db.from("mp_court_days").select("day, challenge_definition");
+  const byChallenge = new Map<string, string>();
+  for (const day of courtDays ?? []) {
+    const id = (day.challenge_definition as any)?.challenge_id;
+    if (id) byChallenge.set(id, String(day.day));
+  }
+  if (byChallenge.size) {
+    const { data: attempts } = await db.from("mp_attempts")
+      .select("challenge_id, player_user_id, status")
+      .in("challenge_id", [...byChallenge.keys()])
+      .in("player_user_id", userIds.length ? userIds : NONE)
+      .eq("status", "completed");
+    for (const attempt of attempts ?? []) {
+      const day = byChallenge.get(attempt.challenge_id);
+      if (day && attempt.player_user_id) out.get(attempt.player_user_id)?.add(day);
+    }
+  }
+  return out;
+}
+
+// Crew room for today's Daily Court: same day identity as solo, beat flags,
+// Court streaks, Take lock-to-reveal, hottest take among locked Takes.
 export async function actionCrewDaily(req: Request, body: any) {
   const userId = authedUserId(req);
   if (!userId) return err("sign_in_required", 401);
@@ -83,113 +129,126 @@ export async function actionCrewDaily(req: Request, body: any) {
   const nameBy = new Map((members ?? []).map((m) => [m.user_id, m.display_name]));
   const NONE = ["00000000-0000-0000-0000-000000000000"];
 
-  const { topic, date } = await getOrCreateDailyTopic();
-  if (!topic) return err("daily_unavailable", 500);
-  const tiers = topic.tiers as string[];
-  const tierIndex = new Map(tiers.map((t, i) => [t, i]));
-  const items = topic.item_set as any[];
+  const courtDay = await getOrCreateCourtDay();
+  if (!courtDay) return err("court_day_unavailable", 500);
+  const date = courtDay.day;
+  const items = (courtDay.house_take?.items ?? []) as any[];
+  const challengeId = courtDay.challenge_definition?.challenge_id as string | undefined;
 
-  const { data: boards } = await db.from("mp_tier_lists")
-    .select("id, author_user_id, assignments, created_at")
-    .eq("topic_id", topic.id).in("author_user_id", memberIds.length ? memberIds : NONE);
-  const played = boards ?? [];
-  const boardByUser = new Map(played.map((b) => [b.author_user_id, b]));
-  const iPlayed = boardByUser.has(userId);
-  const reveal = iPlayed;
+  const { data: locks } = await db.from("mp_court_take_locks")
+    .select("id, author_user_id, author_label, answers, created_at")
+    .eq("day_id", courtDay.id)
+    .in("author_user_id", memberIds.length ? memberIds : NONE);
+  const lockByUser = new Map((locks ?? []).filter((l: any) => l.author_user_id).map((l: any) => [l.author_user_id, l]));
 
-  // reactions on these boards (crew-scoped), aggregated per board+emoji
-  const boardIds = played.map((b) => b.id);
-  const { data: reactions } = await db.from("mp_reactions").select("tier_list_id, emoji, user_id").eq("crew_id", crewId).in("tier_list_id", boardIds.length ? boardIds : NONE);
-  const agg = new Map<string, Map<string, { count: number; mine: boolean }>>();
-  for (const r of reactions ?? []) {
-    if (!agg.has(r.tier_list_id)) agg.set(r.tier_list_id, new Map());
-    const m = agg.get(r.tier_list_id)!;
-    const e = m.get(r.emoji) ?? { count: 0, mine: false };
-    e.count++; if (r.user_id === userId) e.mine = true; m.set(r.emoji, e);
+  let challengeDoneUsers = new Set<string>();
+  let challengeAttemptByUser = new Map<string, any>();
+  if (challengeId) {
+    const { data: attempts } = await db.from("mp_attempts")
+      .select("id, player_user_id, status, correct_count, strikes")
+      .eq("challenge_id", challengeId)
+      .in("player_user_id", memberIds.length ? memberIds : NONE);
+    for (const a of attempts ?? []) {
+      if (!a.player_user_id) continue;
+      challengeAttemptByUser.set(a.player_user_id, a);
+      if (a.status === "completed") challengeDoneUsers.add(a.player_user_id);
+    }
   }
 
-  // Crew consensus among those who played — note the population is crew members
-  // only, which is why consensusFor takes boards rather than querying. Left
-  // unsorted: tiers.ts sorts for its consensus column, this one keeps item_set
-  // order.
-  const consensus = consensusFor(items, played, tiers);
-  const modalBy = new Map(consensus.map((c) => [c.key, c.modal_tier]));
+  const viewerLock = lockByUser.get(userId);
+  const iTakeDone = !!viewerLock;
+  const revealTakes = crewCanRevealTakes(iTakeDone);
+  const crewLocks = [...lockByUser.values()];
+  const consensus = takeConsensus(items, crewLocks as any[]);
+  const consensus_gate = { have: crewLocks.length, honest_empty: crewLocks.length <= 1 };
 
-  // Hottest Take: biggest average divergence from the crew's modal (needs >=2 players).
-  // The divisor is the RATER's item count, not the item-set count — deliberately.
-  // Someone who rates one item four tiers off (4.0) beats someone who rated ten
-  // items one tier off (1.0). "Fixing" that to divide by items.length changes who
-  // wins, so leave it alone.
   let hottest: { user_id: string; score: number } | null = null;
-  if (played.length >= 2) {
-    for (const b of played) {
-      let sum = 0, cnt = 0;
-      for (const it of items) { const t = (b.assignments || {})[it.key]; const mod = modalBy.get(it.key); if (t && mod && tierIndex.has(t)) { sum += Math.abs(tierIndex.get(t)! - tierIndex.get(mod)!); cnt++; } }
-      const score = cnt ? sum / cnt : 0;
-      if (cnt > 0 && (!hottest || score > hottest.score)) hottest = { user_id: b.author_user_id, score };
+  if (revealTakes && crewLocks.length >= 2) {
+    for (const lock of crewLocks) {
+      const score = takeHotScore(items, lock.answers, consensus);
+      if (!hottest || score > hottest.score) hottest = { user_id: lock.author_user_id, score };
     }
     if (hottest && hottest.score <= 0) hottest = null;
   }
 
-  // one rotating badge (alternates day to day)
-  const dIdx = Math.floor(new Date(date + "T00:00:00Z").getTime() / 86400000);
   let badge: { type: string; label: string; user_id: string } | null = null;
-  if (played.length >= 1) {
+  if (crewLocks.length >= 1) {
+    const dIdx = Math.floor(new Date(date + "T00:00:00Z").getTime() / 86400000);
     if (dIdx % 2 === 0) {
-      let first = played[0];
-      for (const b of played) if (b.created_at < first.created_at) first = b;
-      badge = { type: "first", label: "🎯 First on the board", user_id: first.author_user_id };
-    } else {
-      let bestUser: string | null = null, bestUnique = 0;
-      for (const b of played) {
-        let uniq = 0;
-        for (const it of items) { const t = (b.assignments || {})[it.key]; if (!t) continue; const shared = played.some((o) => o !== b && (o.assignments || {})[it.key] === t); if (!shared) uniq++; }
-        if (uniq > bestUnique) { bestUnique = uniq; bestUser = b.author_user_id; }
-      }
-      if (bestUser) badge = { type: "wildcard", label: "🃏 Wildcard", user_id: bestUser };
+      let first = crewLocks[0];
+      for (const b of crewLocks) if (b.created_at < first.created_at) first = b;
+      badge = { type: "first", label: "🎯 First Take locked", user_id: first.author_user_id };
+    } else if (hottest) {
+      badge = { type: "hot", label: "🌶️ Hottest Take", user_id: hottest.user_id };
     }
   }
 
-  // streaks from each member's daily-play history
-  const { data: dailyRows } = await db.from("mp_tier_lists").select("author_user_id, t:mp_tier_topics!inner(share_token)").in("author_user_id", memberIds.length ? memberIds : NONE);
-  const streakDates = new Map<string, Set<string>>();
-  for (const row of (dailyRows ?? []) as any[]) {
-    const st = row.t?.share_token as string | undefined;
-    if (st && st.startsWith("daily_")) {
-      if (!streakDates.has(row.author_user_id)) streakDates.set(row.author_user_id, new Set());
-      streakDates.get(row.author_user_id)!.add(st.slice(6));
-    }
-  }
+  const streakDates = await courtDatesForUsers(memberIds);
 
   const memberOut = (members ?? []).map((m) => {
-    const board = boardByUser.get(m.user_id);
+    const lock = lockByUser.get(m.user_id);
+    const flags = crewMemberCourtFlags({
+      takeDone: !!lock,
+      challengeDone: challengeDoneUsers.has(m.user_id),
+    });
+    const attempt = challengeAttemptByUser.get(m.user_id);
     return {
       user_id: m.user_id,
       display_name: m.display_name,
       role: m.role,
       is_you: m.user_id === userId,
-      played_today: !!board,
+      ...flags,
       streak: computeStreak(streakDates.get(m.user_id) ?? new Set(), date),
-      board_id: board?.id ?? null,
-      assignments: (reveal && board) ? board.assignments : null,
-      reactions: board ? Array.from((agg.get(board.id) ?? new Map()).entries()).map(([emoji, v]) => ({ emoji, count: v.count, mine: v.mine })) : [],
+      take_lock_id: lock?.id ?? null,
+      answers: (revealTakes && lock) ? lock.answers : null,
+      challenge_attempt: attempt ? {
+        status: attempt.status,
+        correct_count: attempt.correct_count ?? 0,
+        strikes: attempt.strikes ?? 0,
+      } : null,
+      // Tier reactions do not apply to Court Takes; keep empty for client compat.
+      reactions: [],
+      board_id: null,
+      assignments: null,
     };
   }).sort((a, b) => b.streak - a.streak || a.display_name.localeCompare(b.display_name));
+
+  const playersToday = memberOut.filter((m) => m.played_today).length;
+  const iPlayed = !!memberOut.find((m) => m.is_you)?.played_today;
 
   return ok({
     crew: { id: crew.id, code: crew.code, name: crew.name, member_count: (members ?? []).length },
     date,
-    topic: { id: topic.id, share_token: topic.share_token, prompt: topic.prompt, item_type: topic.item_type, tiers, item_set: items, is_daily: true },
+    day: { id: courtDay.id, share_token: courtDay.share_token },
+    take: courtDay.house_take,
+    challenge: {
+      prompt: courtDay.challenge_definition?.prompt ?? null,
+      axis: courtDay.challenge_definition?.axis ?? null,
+      target: courtDay.challenge_definition?.target ?? null,
+    },
+    // Back-compat shape: older clients read topic.prompt
+    topic: {
+      id: courtDay.id,
+      share_token: courtDay.share_token,
+      prompt: courtDay.house_take?.title ?? "Daily Court",
+      is_daily: true,
+      is_court: true,
+    },
     i_played: iPlayed,
-    your_assignments: boardByUser.get(userId)?.assignments ?? {},
-    players_today: played.length,
-    consensus: reveal ? consensus : null,
-    hottest_take: reveal && hottest ? { user_id: hottest.user_id, display_name: nameBy.get(hottest.user_id) } : null,
-    badge: reveal && badge ? { type: badge.type, label: badge.label, user_id: badge.user_id, display_name: nameBy.get(badge.user_id) } : null,
+    i_take_done: iTakeDone,
+    reveal_takes: revealTakes,
+    your_answers: viewerLock?.answers ?? {},
+    players_today: playersToday,
+    consensus: revealTakes ? consensus : null,
+    consensus_gate,
+    hottest_take: revealTakes && hottest ? { user_id: hottest.user_id, display_name: nameBy.get(hottest.user_id) } : null,
+    badge: revealTakes && badge ? { type: badge.type, label: badge.label, user_id: badge.user_id, display_name: nameBy.get(badge.user_id) } : null,
     members: memberOut,
   });
 }
 
+// Legacy tier-board reactions still accepted if a tier_list_id is sent.
+// Court Take reactions are not in this slice (no take_lock reaction column).
 export async function actionCrewReact(req: Request, body: any) {
   const userId = authedUserId(req);
   if (!userId) return err("sign_in_required", 401);
@@ -203,4 +262,3 @@ export async function actionCrewReact(req: Request, body: any) {
   if (iErr) return err(iErr.message, 500);
   return ok({ toggled: "on" });
 }
-

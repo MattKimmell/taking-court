@@ -93,7 +93,7 @@ async function ensureCourtChallenge(courtDay: CourtDay): Promise<CourtDay> {
   return (updated.data as CourtDay | null) ?? { ...courtDay, challenge_definition: challenge };
 }
 
-async function getOrCreateCourtDay(day = courtDate()): Promise<CourtDay | null> {
+export async function getOrCreateCourtDay(day = courtDate()): Promise<CourtDay | null> {
   const token = courtToken(day);
   const existing = await db.from("mp_court_days").select("*").eq("day", day).maybeSingle();
   if (existing.data) return await ensureCourtChallenge(existing.data as CourtDay);

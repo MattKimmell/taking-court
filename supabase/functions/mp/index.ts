@@ -9,6 +9,7 @@ import { actionTrack } from "./events.ts";
 import { actionPartyPrompts, actionPartyCreate, actionPartyJoin, actionPartyStart, actionPartyGuess, actionPartyState, actionPartyEnd, actionPartyRoundNext, actionPartyTierSave, actionPartyTurn } from "./party.ts";
 import { actionQr } from "./qr.ts";
 import { actionCourtChallengeGuess, actionCourtChallengeStart, actionCourtDaily, actionCourtTakeLock } from "./court.ts";
+import { actionTakeCompare, actionTakeCreate, actionTakeLock, actionTakeOpen } from "./takes.ts";
 
 // -----------------------------------------------------------------------------
 // Router
@@ -94,6 +95,14 @@ Deno.serve(async (req: Request) => {
         return await actionCourtChallengeStart(req, body);
       case "court_challenge_guess":
         return await actionCourtChallengeGuess(req, body);
+      case "take_create":
+        return await actionTakeCreate(req, body);
+      case "take_open":
+        return await actionTakeOpen(req, body);
+      case "take_lock":
+        return await actionTakeLock(req, body);
+      case "take_compare":
+        return await actionTakeCompare(req, body);
       case "crew_create":
         return await actionCrewCreate(req, body);
       case "crew_join":
