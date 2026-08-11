@@ -1,6 +1,6 @@
 import { actionGuess, actionStart } from "./games.ts";
 import { db, ok, err, json, authedUserId, ownerFilter, safeClientId, computeStreak, loadRosterPool } from "./shared.ts";
-import { courtDate, courtShareSummary, courtToken, dailyChallengeForDate, houseTakeForDate, normalizeTakeAnswers, takeConsensus, takeCourtBeats, validateDailyChallenge, validateTakeItems } from "./court_contract.js";
+import { courtDate, courtShareSummary, courtToken, dailyChallengeForDate, houseTakeForDate, normalizeTakeAnswers, takeConsensus, takeCourtBeats, takeItemLockPlan, takeProgress, validateDailyChallenge, validateTakeItems } from "./court_contract.js";
 
 type CourtDay = {
   id: string;
@@ -125,6 +125,7 @@ async function courtStreak(userId: string | null, clientId: string | null, today
 
   const { data: locks } = await db.from("mp_court_take_locks")
     .select("day_id")
+    .not("completed_at", "is", null)
     .or(filter);
   const dayIds = [...new Set((locks ?? []).map((row: any) => row.day_id).filter(Boolean))];
   const dates = new Set<string>();
@@ -169,7 +170,7 @@ async function completedChallengeDates(userId: string | null, clientId: string |
 
 async function takeLocks(dayId: string) {
   const { data } = await db.from("mp_court_take_locks")
-    .select("id, author_client_id, author_user_id, author_label, answers, created_at")
+    .select("id, author_client_id, author_user_id, author_label, answers, completed_at, created_at, updated_at")
     .eq("day_id", dayId)
     .order("created_at", { ascending: true });
   return data ?? [];
@@ -189,14 +190,17 @@ async function courtState(req: Request, body: any, courtDay: CourtDay) {
   const clientId = safeClientId(body.client_id);
   const locks = await takeLocks(courtDay.id);
   const mine = locks.find((l: any) => (userId && l.author_user_id === userId) || (clientId && l.author_client_id === clientId));
+  const completedLocks = locks.filter((l: any) => !!l.completed_at);
+  const takeDone = !!mine?.completed_at;
   const challengeAttempt = await courtChallengeAttempt(courtDay, userId, clientId);
   const challengeDone = challengeAttempt?.status === "completed";
-  const beats = takeCourtBeats({ takeDone: !!mine, challengeDone });
+  const beats = takeCourtBeats({ takeDone, challengeDone });
   const streak = await courtStreak(userId, clientId, courtDay.day);
-  const gate = { have: locks.length, honest_empty: locks.length <= 1 };
+  const gate = { have: completedLocks.length, honest_empty: completedLocks.length <= 1 };
   return {
     locks,
     mine,
+    takeDone,
     challengeAttempt,
     challengeDone,
     beats,
@@ -223,13 +227,16 @@ export async function actionCourtDaily(req: Request, body: any) {
 
   const state = await courtState(req, body, courtDay);
   const items = courtDay.house_take.items;
+  const progress = takeProgress(items, state.mine?.answers ?? {}, state.mine?.completed_at ?? null);
+  const answered = new Set(progress.answered_item_ids);
   return ok({
     date: courtDay.day,
     day: { id: courtDay.id, share_token: courtDay.share_token },
     challenge: courtDay.challenge_definition,
     take: courtDay.house_take,
     your_answers: state.mine?.answers ?? {},
-    take_done: !!state.mine,
+    take_done: state.takeDone,
+    take_progress: progress,
     challenge_done: state.challengeDone,
     done: state.beats.take || state.beats.challenge,
     beats: state.beats,
@@ -242,7 +249,7 @@ export async function actionCourtDaily(req: Request, body: any) {
       strikes: state.challengeAttempt.strikes ?? 0,
       filled_slots: state.challengeAttempt.filled_slots ?? {},
     } : null,
-    consensus: state.mine ? takeConsensus(items, state.locks as any[]) : null,
+    consensus: state.mine ? takeConsensus(items.filter((item: any) => answered.has(item.id)), state.locks as any[]) : null,
     consensus_gate: state.consensus_gate,
     streak: state.streak,
   });
@@ -262,10 +269,19 @@ export async function actionCourtTakeLock(req: Request, body: any) {
 
   const locks = await takeLocks(courtDay.id);
   const mine = locks.find((l: any) => (userId && l.author_user_id === userId) || (clientId && l.author_client_id === clientId));
+  if (mine) {
+    for (const [itemId, answer] of Object.entries(mine.answers ?? {})) {
+      if (JSON.stringify((normalized.answers as any)[itemId]) !== JSON.stringify(answer)) {
+        return err("take_answer_locked", 409);
+      }
+    }
+  }
+  const now = new Date().toISOString();
   const patch = {
     answers: normalized.answers,
     author_label: String(body.label ?? "Anonymous").slice(0, 40),
-    updated_at: new Date().toISOString(),
+    completed_at: mine?.completed_at ?? now,
+    updated_at: now,
     ...(userId ? { author_user_id: userId } : {}),
   };
 
@@ -278,6 +294,7 @@ export async function actionCourtTakeLock(req: Request, body: any) {
       author_user_id: userId,
       author_label: String(body.label ?? "Anonymous").slice(0, 40),
       answers: normalized.answers,
+      completed_at: now,
     });
     if (insertErr) {
       const raced = await takeLocks(courtDay.id);
@@ -302,6 +319,91 @@ export async function actionCourtTakeLock(req: Request, body: any) {
     consensus: takeConsensus(items, after as any[]),
     consensus_gate: { have: after.length, honest_empty: after.length <= 1 },
     streak: state.streak,
+  });
+}
+
+export async function actionCourtTakeItemLock(req: Request, body: any) {
+  const userId = authedUserId(req);
+  const clientId = safeClientId(body.client_id);
+  if (!userId && !clientId) return err("identity_required", 400);
+
+  const day = dayFromBody(body);
+  const courtDay = await getOrCreateCourtDay(day);
+  if (!courtDay) return err("court_day_unavailable", 500);
+  const items = courtDay.house_take.items as any[];
+  const itemId = String(body.item_id ?? "");
+  const locks = await takeLocks(courtDay.id);
+  let mine = locks.find((l: any) => (userId && l.author_user_id === userId) || (clientId && l.author_client_id === clientId));
+  let plan = takeItemLockPlan(items, mine?.answers ?? {}, itemId, body.answer);
+  if (plan.error) {
+    const status = plan.error === "take_item_not_found" ? 404
+      : (plan.error === "take_item_out_of_order" || plan.error === "take_answer_locked") ? 409
+      : 400;
+    return err(plan.error, status);
+  }
+
+  const now = new Date().toISOString();
+  const willComplete = items.every((item) => Object.prototype.hasOwnProperty.call(plan.answers, item.id));
+  if (!plan.idempotent) {
+    if (mine) {
+      const updated = await db.from("mp_court_take_locks")
+        .update({
+          answers: plan.answers,
+          author_label: String(body.label ?? mine.author_label ?? "Anonymous").slice(0, 40),
+          updated_at: now,
+          ...(willComplete && !mine.completed_at ? { completed_at: now } : {}),
+          ...(userId ? { author_user_id: userId } : {}),
+        })
+        .eq("id", mine.id)
+        .eq("updated_at", mine.updated_at)
+        .select("id")
+        .maybeSingle();
+      if (updated.error) return err(updated.error.message, 500);
+      if (!updated.data) return err("take_progress_conflict", 409);
+    } else {
+      const inserted = await db.from("mp_court_take_locks").insert({
+        day_id: courtDay.id,
+        author_client_id: clientId,
+        author_user_id: userId,
+        author_label: String(body.label ?? "Anonymous").slice(0, 40),
+        answers: plan.answers,
+        completed_at: willComplete ? now : null,
+      });
+      if (inserted.error) {
+        // A concurrent first item can win the unique owner constraint. Treat an
+        // identical lock as idempotent; never overwrite its answer.
+        const raced = await takeLocks(courtDay.id);
+        mine = raced.find((l: any) => (userId && l.author_user_id === userId) || (clientId && l.author_client_id === clientId));
+        plan = takeItemLockPlan(items, mine?.answers ?? {}, itemId, body.answer);
+        if (plan.error) return err(plan.error, 409);
+        if (!plan.idempotent) return err("take_progress_conflict", 409);
+      }
+    }
+  }
+
+  const after = await takeLocks(courtDay.id);
+  const saved = after.find((l: any) => (userId && l.author_user_id === userId) || (clientId && l.author_client_id === clientId));
+  if (!saved) return err("take_lock_unavailable", 500);
+  const progress = takeProgress(items, saved.answers, saved.completed_at);
+  const state = await courtState(req, body, courtDay);
+  const item = items[plan.item_index];
+  const consensus = takeConsensus([item], after as any[])[0];
+  return ok({
+    locked: true,
+    idempotent: !!plan.idempotent,
+    date: courtDay.day,
+    day: { id: courtDay.id, share_token: courtDay.share_token },
+    item_id: item.id,
+    item_index: plan.item_index,
+    take_complete: progress.completed,
+    next_item_id: progress.next_item_id,
+    take_progress: progress,
+    your_answers: saved.answers,
+    consensus,
+    consensus_gate: { have: consensus.total, honest_empty: consensus.total <= 1 },
+    beats: state.beats,
+    streak: state.streak,
+    share: state.share,
   });
 }
 
@@ -348,9 +450,10 @@ export async function actionCourtChallengeGuess(req: Request, body: any) {
   const res = await actionGuess(req, body);
   const data = await res.json();
   if (!data.ok) return json(data, res.status);
+  const { matched_player_key: _privatePlayerKey, ...publicData } = data;
   const state = await courtState(req, body, courtDay);
   return ok({
-    ...data,
+    ...publicData,
     date: courtDay.day,
     court_day: { id: courtDay.id, share_token: courtDay.share_token },
     court_challenge: courtDay.challenge_definition,

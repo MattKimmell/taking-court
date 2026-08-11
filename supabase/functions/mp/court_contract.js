@@ -475,6 +475,63 @@ export function normalizeTakeAnswers(items, answers) {
   return { error: null, answers: out };
 }
 
+/** Validate one Daily Take answer without requiring the other two items. */
+export function normalizeTakeItemAnswer(item, answer) {
+  if (!item || typeof item !== "object") return { error: "take_item_not_found", answer: null };
+  const optionKeys = (item.options ?? []).map((option) => option.key);
+  const valid = new Set(optionKeys);
+  if (item.type === "multiple_choice") {
+    if (typeof answer !== "string" || !valid.has(answer)) return { error: "invalid_answer", answer: null };
+    return { error: null, answer };
+  }
+  if (item.type !== "rank" || !Array.isArray(answer) || answer.length !== optionKeys.length) {
+    return { error: "invalid_rank_answer", answer: null };
+  }
+  const seen = new Set(answer);
+  if (seen.size !== answer.length || answer.some((key) => !valid.has(key))) {
+    return { error: "invalid_rank_answer", answer: null };
+  }
+  return { error: null, answer: answer.slice() };
+}
+
+/** Canonical resume/completion state for an immutable set of per-item locks. */
+export function takeProgress(items, answers, completedAt = null) {
+  const saved = answers && typeof answers === "object" && !Array.isArray(answers) ? answers : {};
+  const answered_item_ids = items
+    .filter((item) => Object.prototype.hasOwnProperty.call(saved, item.id))
+    .map((item) => item.id);
+  const next = items.find((item) => !Object.prototype.hasOwnProperty.call(saved, item.id));
+  return {
+    answered_item_ids,
+    next_item_id: next?.id ?? null,
+    completed: !!completedAt && !next,
+  };
+}
+
+/** Server decision for sequencing, immutable locks, and idempotent retries. */
+export function takeItemLockPlan(items, savedAnswers, itemId, answer) {
+  const saved = savedAnswers && typeof savedAnswers === "object" && !Array.isArray(savedAnswers) ? savedAnswers : {};
+  const itemIndex = items.findIndex((item) => item.id === itemId);
+  if (itemIndex < 0) return { error: "take_item_not_found" };
+  const normalized = normalizeTakeItemAnswer(items[itemIndex], answer);
+  if (normalized.error) return { error: normalized.error };
+  if (Object.prototype.hasOwnProperty.call(saved, itemId)) {
+    const same = JSON.stringify(saved[itemId]) === JSON.stringify(normalized.answer);
+    return same
+      ? { error: null, item_index: itemIndex, answer: normalized.answer, answers: { ...saved }, idempotent: true }
+      : { error: "take_answer_locked" };
+  }
+  const firstUnanswered = items.findIndex((item) => !Object.prototype.hasOwnProperty.call(saved, item.id));
+  if (firstUnanswered !== itemIndex) return { error: "take_item_out_of_order" };
+  return {
+    error: null,
+    item_index: itemIndex,
+    answer: normalized.answer,
+    answers: { ...saved, [itemId]: normalized.answer },
+    idempotent: false,
+  };
+}
+
 export function takeConsensus(items, answerRows) {
   const rows = Array.isArray(answerRows) ? answerRows : [];
   return items.map((item) => {
@@ -486,25 +543,31 @@ export function takeConsensus(items, answerRows) {
         const key = row?.answers?.[item.id];
         if (Object.prototype.hasOwnProperty.call(counts, key)) counts[key]++;
       }
+      const total = Object.values(counts).reduce((sum, count) => sum + count, 0);
       const ordered = Object.entries(counts)
-        .map(([key, count]) => ({ key, label: optionLabels.get(key), count }))
+        .map(([key, count]) => ({ key, label: optionLabels.get(key), count, pct: total ? Math.round((count * 100) / total) : 0 }))
         .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
-      return { item_id: item.id, type: item.type, prompt: item.prompt, total: rows.length, choices: ordered };
+      return { item_id: item.id, type: item.type, prompt: item.prompt, total, choices: ordered };
     }
 
     const totals = {};
     const counts = {};
+    const topCounts = {};
     for (const option of item.options) {
       totals[option.key] = 0;
       counts[option.key] = 0;
+      topCounts[option.key] = 0;
     }
+    let total = 0;
     for (const row of rows) {
       const ranked = row?.answers?.[item.id];
       if (!Array.isArray(ranked)) continue;
+      total++;
       ranked.forEach((key, index) => {
         if (Object.prototype.hasOwnProperty.call(totals, key)) {
           totals[key] += index + 1;
           counts[key]++;
+          if (index === 0) topCounts[key]++;
         }
       });
     }
@@ -514,8 +577,10 @@ export function takeConsensus(items, answerRows) {
         label: option.label,
         avg_rank: counts[option.key] ? Math.round((totals[option.key] / counts[option.key]) * 100) / 100 : null,
         count: counts[option.key],
+        top_count: topCounts[option.key],
+        top_pct: total ? Math.round((topCounts[option.key] * 100) / total) : 0,
       }))
       .sort((a, b) => (a.avg_rank ?? 99) - (b.avg_rank ?? 99) || a.label.localeCompare(b.label));
-    return { item_id: item.id, type: item.type, prompt: item.prompt, total: rows.length, ranking };
+    return { item_id: item.id, type: item.type, prompt: item.prompt, total, ranking };
   });
 }

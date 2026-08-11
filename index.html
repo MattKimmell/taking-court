@@ -207,6 +207,31 @@
   .linkbox{display:flex;gap:8px;margin-top:8px}
   .linkbox input{font-size:13px}
   .note{font-size:12px;color:var(--muted);margin-top:8px;line-height:1.5}
+  .daily-progress{margin-top:14px}
+  .daily-progress-labels{display:flex;justify-content:space-between;gap:12px;color:var(--muted);font-size:12px;font-weight:700}
+  .daily-progress-labels .active{color:var(--ink)}
+  .daily-rail{display:grid;grid-template-columns:3fr 5fr;gap:8px;margin-top:7px}
+  .daily-rail-part{display:flex;gap:4px}
+  .daily-rail-seg{height:5px;flex:1;border-radius:99px;background:var(--line)}
+  .daily-rail-seg.done{background:var(--accent)}
+  .daily-rail-seg.now{background:var(--accent2)}
+  .question-panel{margin-top:16px;padding:18px;border-radius:14px;background:var(--panel2);border:1px solid var(--line)}
+  .question-type{color:var(--accent);font-size:11px;font-weight:900;letter-spacing:.9px;text-transform:uppercase}
+  .question-prompt{font-size:20px;font-weight:850;line-height:1.3;margin-top:7px}
+  .feedback-hero{margin-top:16px;padding:18px;border-radius:14px;border:1px solid var(--line);background:var(--panel2)}
+  .feedback-hero.good{border-color:var(--good);background:rgba(34,197,94,.08)}
+  .feedback-hero.bad{border-color:var(--bad);background:rgba(239,68,68,.08)}
+  .feedback-kicker{font-size:12px;font-weight:900;letter-spacing:.8px;text-transform:uppercase;color:var(--muted)}
+  .feedback-title{font-size:23px;font-weight:900;line-height:1.2;margin-top:6px}
+  .feedback-copy{font-size:15px;line-height:1.5;margin-top:8px;color:#dbe4ff}
+  .distribution{display:grid;gap:8px;margin-top:14px}
+  .distribution-row{padding:10px 12px;border-radius:10px;background:#0e1730;border:1px solid var(--line)}
+  .distribution-head{display:flex;justify-content:space-between;gap:10px;font-size:13px}
+  .distribution-bar{height:5px;border-radius:99px;background:var(--line);overflow:hidden;margin-top:7px}
+  .distribution-bar span{display:block;height:100%;background:var(--accent2);border-radius:inherit}
+  .distribution-row.mine{border-color:var(--accent)}
+  .distribution-row.mine .distribution-bar span{background:var(--accent)}
+  .daily-primary{width:100%;min-height:48px;margin-top:16px}
   .idbar{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:14px;
     font-size:12px;color:var(--muted)}
   .err{color:#fca5a5;font-size:13px;margin-top:8px;min-height:18px}
@@ -347,12 +372,24 @@
       </div>
       <button class="ghost" id="courtTakeBack" style="flex:0 0 auto;padding:6px 12px">Home</button>
     </div>
-    <div class="note">Lock all three items to complete today's Take beat and keep your streak alive.</div>
+    <div id="courtTakeProgress"></div>
     <div id="courtTakeItems" style="margin-top:12px"></div>
-    <div class="row" style="margin-top:14px">
-      <button id="courtTakeLock">Lock Take</button>
-    </div>
+    <button id="courtTakeLock" class="daily-primary">Lock Answer</button>
     <div class="err" id="courtTakeErr"></div>
+  </div>
+
+  <div id="courtTakeFeedback" class="card hidden">
+    <div class="head">
+      <div>
+        <div class="pill" style="display:inline-block;margin-bottom:6px">Daily Court</div>
+        <div style="font-weight:800;font-size:18px">Take feedback</div>
+      </div>
+      <button class="ghost" id="courtTakeFeedbackExit" style="flex:0 0 auto;padding:6px 12px">Home</button>
+    </div>
+    <div id="courtTakeFeedbackProgress"></div>
+    <div id="courtTakeFeedbackBody"></div>
+    <button id="courtTakeContinue" class="daily-primary">Continue</button>
+    <div class="err" id="courtTakeFeedbackErr"></div>
   </div>
 
   <div id="courtConsensus" class="card hidden">
@@ -597,7 +634,7 @@
       </div>
       <button id="guessBtn" style="flex:0 0 auto">Guess</button>
     </div>
-    <div class="feed" id="feed"></div>
+    <div class="feed" id="feed" role="status" aria-live="polite"></div>
     <div class="row" style="margin-top:12px">
       <button class="ghost" id="playExitCourt" style="width:100%">Exit Challenge · keep streak</button>
     </div>
@@ -1153,7 +1190,7 @@ let timerInt=null;
 
 const MODE_PILL_SCREENS = new Set(["nameHome","catPage","share","preview","play","results","partyHost","partyPlay","partyRecap"]);
 function show(id){
-  ["lobby","gameModesHome","multiplayerHome","courtTake","courtConsensus","takeBuild","playerTake","nameHome","catPage","share","preview","play","results","leaderboard","listsHome","listBuild","listCompare","tierHome","tierBoard","tierCompare","tierBrowse","partyHost","partyPlay","partyRecap","mine","crewHome","crewRoom"]
+  ["lobby","gameModesHome","multiplayerHome","courtTake","courtTakeFeedback","courtConsensus","takeBuild","playerTake","nameHome","catPage","share","preview","play","results","leaderboard","listsHome","listBuild","listCompare","tierHome","tierBoard","tierCompare","tierBrowse","partyHost","partyPlay","partyRecap","mine","crewHome","crewRoom"]
     .forEach(s=>$(s).classList.toggle("hidden", s!==id));
   $("modePill").classList.toggle("hidden", !MODE_PILL_SCREENS.has(id));
 }
@@ -1581,7 +1618,7 @@ async function startPlay(){
 }
 function startTimer(){ clearInterval(timerInt); timerInt=setInterval(()=>{
   if(ST.finished){clearInterval(timerInt);return;}
-  $("timer").textContent = fmt(Date.now()-ST.startedMs);
+  $("timer").textContent=fmt(Date.now()-ST.startedMs);
 },100); }
 
 const RARITY_LABELS={common:"Common",uncommon:"Uncommon",rare:"Rare",deep_cut:"Deep cut"};
@@ -1611,51 +1648,70 @@ function renderPlay(){
   if(exit) exit.classList.toggle("hidden", !ST.isCourtDaily);
 }
 
+function applyGuessToBoard(r){
+  ST.filled=r.filled_slots||ST.filled; ST.strikes=r.strikes; ST.correct=r.correct_count;
+  if(r.result==="correct"){
+    const el=$("slot"+r.slot); if(el){
+      el.classList.add("filled");
+      if(r.rarity){ el.querySelector(".name").innerHTML=r.display_name+rarBadge(r.rarity); el.querySelector(".ctx").textContent=""; }
+      else { el.querySelector(".name").textContent=r.display_name; el.querySelector(".ctx").textContent=r.context_label||""; }
+    }
+  }
+  for(let i=0;i<ST.strike_limit;i++) $("strk"+i)?.classList.toggle("on",i<ST.strikes);
+}
+function renderRosterChallengeInline(r){
+  const f=r.feedback||{};
+  const good=r.result==="correct";
+  const fallback=good?`${r.display_name||"That player"} is in today’s pool.`:"That name does not qualify for today’s pool.";
+  const context=esc(f.explanation||fallback);
+  feed(good
+    ? `<span class="c">✔ ${context}</span> ${r.rarity?rarBadge(r.rarity):""}`
+    : `<span class="x">✕ ${context} · strike ${r.strikes}/${ST.strike_limit}</span>`);
+  track("challenge_feedback_view",{surface:ST.isCourtDaily?"daily":"freeplay",presentation:"inline",result:f.result||r.result,context_type:f.context_type||"unknown",finished:!!r.finished});
+}
 async function submitGuess(){
   const g=$("guessInput").value.trim(); if(!g||ST.finished) return;
-  $("guessInput").value=""; acHide();
+  $("guessInput").value=""; acHide(); $("guessBtn").disabled=true;
   const r = await api(ST.isCourtDaily ? "court_challenge_guess" : "guess",{
     day: ST.courtDate || COURT.date || undefined,
-    client_id: clientId(),
-    attempt_id:ST.attempt_id,
-    attempt_token:ST.attempt_token,
-    guess:g
+    client_id: clientId(), attempt_id:ST.attempt_id, attempt_token:ST.attempt_token, guess:g
   });
-  if(!r.ok){ feed(`<span class="x">${g} → ${r.error}</span>`); return; }
+  $("guessBtn").disabled=false;
+  if(!r.ok){ feed(`<span class="x">${esc(g)} → ${esc(r.error)}</span>`); $("guessInput").focus(); return; }
   if(r.streak) setStreak(r.streak);
   if(r.beats) COURT.beats=r.beats;
   if(r.share) COURT.share=r.share;
-  ST.filled=r.filled_slots||ST.filled; ST.strikes=r.strikes; ST.correct=r.correct_count;
+  if(COURT.challenge_attempt){ COURT.challenge_attempt.status=r.status; COURT.challenge_attempt.correct_count=r.correct_count; COURT.challenge_attempt.strikes=r.strikes; COURT.challenge_attempt.filled_slots=r.filled_slots; }
+  applyGuessToBoard(r);
+
+  if(r.result==="duplicate"){
+    feed(`<span class="d">• ${esc(g)} → already named</span>`);
+    $("guessInput").focus();
+    return;
+  }
+
+  if(ST.isRoster && r.feedback && (r.result==="correct"||r.result==="strike")){
+    renderRosterChallengeInline(r);
+    if(r.finished){
+      ST.finished=true; clearInterval(timerInt); $("timer").textContent=fmt(r.elapsed_ms);
+      clearTimeout(courtAutoTimer); courtAutoTimer=setTimeout(showResults,ST.isCourtDaily?1800:900);
+    } else $("guessInput").focus();
+    return;
+  }
+
   if(r.result==="correct"){
-    const el=$("slot"+r.slot); el.classList.add("filled");
-    if(r.rarity){                                   // roster: show rarity (+ pick-rate)
-      el.querySelector(".name").innerHTML = r.display_name + rarBadge(r.rarity);
-      el.querySelector(".ctx").textContent = "";
-      feed(`<span class="c">✔ ${g} → ${r.display_name}</span> ${rarBadge(r.rarity)}`);
-    } else {                                         // top8: show the stat
-      el.querySelector(".name").textContent=r.display_name;
-      el.querySelector(".ctx").textContent=r.context_label||"";
-      feed(`<span class="c">✔ ${g} → #${r.slot} ${r.display_name} (${r.context_label||""})</span>`);
-    }
-  }
-  else if(r.result==="duplicate"){ feed(`<span class="d">• ${g} → already on the board</span>`); }
-  else {
+    feed(r.rarity?`<span class="c">✔ ${esc(g)} → ${esc(r.display_name)}</span> ${rarBadge(r.rarity)}`
+      :`<span class="c">✔ ${esc(g)} → #${r.slot} ${esc(r.display_name)} (${esc(r.context_label||"")})</span>`);
+  } else {
     let ctx="";
-    if(r.guess_info){
-      const gi=r.guess_info;
-      const val = gi.unit==="PPG" ? Number(gi.value).toFixed(1) : Number(gi.value).toLocaleString();
-      ctx = ` — ${val} ${gi.unit}, #${gi.rank} all-time`;
-    }
-    feed(`<span class="x">✕ ${g}${ctx} · strike ${r.strikes}/${ST.strike_limit}</span>`);
+    if(r.guess_info){ const gi=r.guess_info; const val=gi.unit==="PPG"?Number(gi.value).toFixed(1):Number(gi.value).toLocaleString(); ctx=` — ${val} ${gi.unit}, #${gi.rank} all-time`; }
+    feed(`<span class="x">✕ ${esc(g)}${ctx} · strike ${r.strikes}/${ST.strike_limit}</span>`);
   }
-  for(let i=0;i<ST.strike_limit;i++) $("strk"+i).classList.toggle("on", i<ST.strikes);
-  if(r.finished){ ST.finished=true; clearInterval(timerInt);
-    $("timer").textContent=fmt(r.elapsed_ms);
-    const win = ST.isRoster ? `🏆 Named all ${ST.answer_target} in ${fmt(r.elapsed_ms)}!` : `🏆 Perfect sheet in ${fmt(r.elapsed_ms)}!`;
-    feed(r.status==="completed"? `<span class="c">${win}</span>`
-        :`<span class="x">Eliminated — ${r.correct_count}/${ST.answer_target} in ${fmt(r.ranking_time_ms)}</span>`);
-    setTimeout(showResults, 900);
-  }
+  if(r.finished){ ST.finished=true; clearInterval(timerInt); $("timer").textContent=fmt(r.elapsed_ms);
+    const win=ST.isRoster?`🏆 Named all ${ST.answer_target} in ${fmt(r.elapsed_ms)}!`:`🏆 Perfect sheet in ${fmt(r.elapsed_ms)}!`;
+    feed(r.status==="completed"?`<span class="c">${win}</span>`:`<span class="x">Eliminated — ${r.correct_count}/${ST.answer_target} in ${fmt(r.ranking_time_ms)}</span>`);
+    setTimeout(showResults,900);
+  } else $("guessInput").focus();
 }
 function rarBadge(rar){
   if(!rar) return "";
@@ -2498,7 +2554,7 @@ async function refreshLobbyCourt(){
 $("dailyBtn").onclick=()=>openDaily();
 $("pickupBtn") && ($("pickupBtn").onclick = ()=>openPartyHome());
 $("freeplayBtn") && ($("freeplayBtn").onclick = ()=>{ const p=$("freeplayPanel"); if(p) p.open = true; p?.scrollIntoView({behavior:"smooth",block:"nearest"}); });
-let COURT = { date:null, day:null, take:null, challenge:null, answers:{}, consensus:null, gate:null, beats:{}, share:null, challenge_attempt:null };
+let COURT = { date:null, day:null, take:null, challenge:null, answers:{}, take_progress:null, takeFeedback:null, consensus:null, gate:null, beats:{}, share:null, challenge_attempt:null };
 let LOBBY_SHARE = null;
 let courtAutoTimer=null;
 let CREW_RETURN = null;   // set when Court is launched from a crew room
@@ -2523,49 +2579,93 @@ function initCourtAnswers(take, saved){
   });
   return out;
 }
+function dailyProgressHtml({takeAnswered=0,takeCurrent=null,challengeCorrect=0,challengeTarget=3,phase="take"}={}){
+  const takeSeg=Array.from({length:3},(_,i)=>`<span class="daily-rail-seg ${i<takeAnswered?"done":(phase==="take"&&i===takeCurrent?"now":"")}"></span>`).join("");
+  const target=Math.max(1,Number(challengeTarget)||3);
+  const challengeSeg=Array.from({length:target},(_,i)=>`<span class="daily-rail-seg ${i<challengeCorrect?"done":(phase==="challenge"&&i===challengeCorrect?"now":"")}"></span>`).join("");
+  return `<div class="daily-progress" aria-label="Daily Court progress">
+    <div class="daily-progress-labels"><span class="${phase==="take"?"active":""}">Take ${Math.min(takeAnswered+(phase==="take"?1:0),3)} of 3</span><span class="${phase==="challenge"?"active":""}">Challenge ${challengeCorrect} of ${target}</span></div>
+    <div class="daily-rail"><div class="daily-rail-part">${takeSeg}</div><div class="daily-rail-part">${challengeSeg}</div></div>
+  </div>`;
+}
 function renderCourtTake(){
   const take=COURT.take; if(!take) return;
+  const answered=COURT.take_progress?.answered_item_ids||[];
+  const nextId=COURT.take_progress?.next_item_id || (take.items||[]).find(i=>!answered.includes(i.id))?.id;
+  const idx=(take.items||[]).findIndex(item=>item.id===nextId);
+  const item=(take.items||[])[idx];
+  if(!item){ renderCourtConsensus(); show("courtConsensus"); return; }
   $("courtTakeTitle").textContent=take.title||"Today's Take";
   $("courtTakeErr").textContent="";
-  $("courtTakeItems").innerHTML=(take.items||[]).map((item,idx)=>{
-    const answer=COURT.answers[item.id];
-    if(item.type==="rank"){
-      const byKey={}; (item.options||[]).forEach(o=>byKey[o.key]=o);
-      const keys=Array.isArray(answer)?answer:(item.options||[]).map(o=>o.key);
-      return `<div class="card" style="background:var(--panel2);margin-top:10px">
-        <div class="note">Take ${idx+1} · Rank</div>
-        <div style="font-weight:800;margin-top:4px">${esc(item.prompt)}</div>
-        <div style="margin-top:10px">${keys.map((key,pos)=>`<div class="slot" style="align-items:center">
-          <div class="n">${pos+1}</div>
-          <div class="name">${esc((byKey[key]||{}).label||key)}</div>
-          <div class="row" style="flex:0 0 auto;gap:6px">
-            <button class="ghost court-rank" data-id="${esc(item.id)}" data-dir="-1" data-pos="${pos}" ${pos===0?"disabled":""} style="padding:5px 9px;min-height:34px">↑</button>
-            <button class="ghost court-rank" data-id="${esc(item.id)}" data-dir="1" data-pos="${pos}" ${pos===keys.length-1?"disabled":""} style="padding:5px 9px;min-height:34px">↓</button>
-          </div>
-        </div>`).join("")}</div>
-      </div>`;
-    }
-    return `<div class="card" style="background:var(--panel2);margin-top:10px">
-      <div class="note">Take ${idx+1} · Pick one</div>
-      <div style="font-weight:800;margin-top:4px">${esc(item.prompt)}</div>
-      <div class="slots" style="margin-top:10px">${(item.options||[]).map(o=>`<label class="slot" style="cursor:pointer">
+  $("courtTakeProgress").innerHTML=dailyProgressHtml({takeAnswered:answered.length,takeCurrent:idx,challengeCorrect:COURT.challenge_attempt?.correct_count||0,challengeTarget:COURT.challenge?.target||3,phase:"take"});
+  const answer=COURT.answers[item.id];
+  if(item.type==="rank"){
+    const byKey={}; (item.options||[]).forEach(o=>byKey[o.key]=o);
+    const keys=Array.isArray(answer)?answer:(item.options||[]).map(o=>o.key);
+    COURT.answers[item.id]=keys;
+    $("courtTakeItems").innerHTML=`<div class="question-panel">
+      <div class="question-type">Rank in your order</div>
+      <div class="question-prompt">${esc(item.prompt)}</div>
+      <div style="margin-top:14px">${keys.map((key,pos)=>`<div class="slot" style="align-items:center">
+        <div class="n">${pos+1}</div><div class="name">${esc((byKey[key]||{}).label||key)}</div>
+        <div class="row" style="flex:0 0 auto;gap:6px">
+          <button class="ghost court-rank" data-id="${esc(item.id)}" data-dir="-1" data-pos="${pos}" ${pos===0?"disabled":""} style="padding:5px 9px;min-height:44px" aria-label="Move ${esc((byKey[key]||{}).label||key)} up">↑</button>
+          <button class="ghost court-rank" data-id="${esc(item.id)}" data-dir="1" data-pos="${pos}" ${pos===keys.length-1?"disabled":""} style="padding:5px 9px;min-height:44px" aria-label="Move ${esc((byKey[key]||{}).label||key)} down">↓</button>
+        </div>
+      </div>`).join("")}</div>
+    </div>`;
+    $("courtTakeLock").disabled=false;
+  } else {
+    $("courtTakeItems").innerHTML=`<div class="question-panel">
+      <div class="question-type">Pick one</div>
+      <div class="question-prompt">${esc(item.prompt)}</div>
+      <div class="slots" style="margin-top:14px">${(item.options||[]).map(o=>`<label class="slot" style="cursor:pointer;min-height:52px">
         <input type="radio" name="court_${esc(item.id)}" value="${esc(o.key)}" ${answer===o.key?"checked":""} style="flex:0 0 auto;width:auto;min-height:0" />
         <div class="name">${esc(o.label)}</div>
       </label>`).join("")}</div>
     </div>`;
-  }).join("");
+    $("courtTakeLock").disabled=!answer;
+  }
   Array.from(document.querySelectorAll(".court-rank")).forEach(btn=>btn.onclick=()=>{
     const id=btn.dataset.id, pos=parseInt(btn.dataset.pos), dir=parseInt(btn.dataset.dir);
-    const arr=(COURT.answers[id]||[]).slice(); const next=pos+dir;
+    const arr=(COURT.answers[id]||[]).slice(), next=pos+dir;
     if(next<0 || next>=arr.length) return;
-    [arr[pos],arr[next]]=[arr[next],arr[pos]];
-    COURT.answers[id]=arr; renderCourtTake();
+    [arr[pos],arr[next]]=[arr[next],arr[pos]]; COURT.answers[id]=arr; renderCourtTake();
   });
-  (take.items||[]).filter(i=>i.type==="multiple_choice").forEach(item=>{
-    Array.from(document.querySelectorAll(`input[name="court_${CSS.escape(item.id)}"]`)).forEach(el=>el.onchange=()=>{
-      COURT.answers[item.id]=el.value;
-    });
+  if(item.type==="multiple_choice") Array.from(document.querySelectorAll(`input[name="court_${CSS.escape(item.id)}"]`)).forEach(el=>el.onchange=()=>{
+    COURT.answers[item.id]=el.value; $("courtTakeLock").disabled=false;
   });
+}
+function responseN(n){ return `${n} response${n===1?"":"s"}`; }
+function renderCourtTakeFeedback(){
+  const f=COURT.takeFeedback; if(!f) return;
+  const item=f.item, row=f.consensus||{}, total=Number(row.total)||0;
+  $("courtTakeFeedbackProgress").innerHTML=dailyProgressHtml({takeAnswered:f.item_index+1,challengeCorrect:COURT.challenge_attempt?.correct_count||0,challengeTarget:COURT.challenge?.target||3,phase:"take-feedback"});
+  let title="Answer locked"; let distribution="";
+  if(item.type==="multiple_choice"){
+    const mine=(row.choices||[]).find(c=>c.key===f.answer) || {label:(item.options||[]).find(o=>o.key===f.answer)?.label||f.answer,count:0,pct:0};
+    title=`${mine.pct||0}% picked ${mine.label} too · ${mine.count||0} of ${responseN(total)}`;
+    distribution=(row.choices||[]).map(c=>`<div class="distribution-row ${c.key===f.answer?"mine":""}">
+      <div class="distribution-head"><span>${esc(c.label)}</span><strong>${c.pct||0}% · ${c.count} of ${total}</strong></div>
+      <div class="distribution-bar"><span style="width:${Math.max(0,Math.min(100,c.pct||0))}%"></span></div>
+    </div>`).join("");
+  } else {
+    const top=Array.isArray(f.answer)?f.answer[0]:null;
+    const mine=(row.ranking||[]).find(r=>r.key===top) || {label:(item.options||[]).find(o=>o.key===top)?.label||top,top_count:0,top_pct:0};
+    title=`${mine.top_pct||0}% also put ${mine.label} first · ${mine.top_count||0} of ${responseN(total)}`;
+    distribution=(row.ranking||[]).map((r,i)=>`<div class="distribution-row ${r.key===top?"mine":""}">
+      <div class="distribution-head"><span>${i+1}. ${esc(r.label)}</span><strong>${r.avg_rank==null?"—":`avg ${r.avg_rank}`}</strong></div>
+      <div class="note" style="margin-top:4px">${r.top_pct||0}% ranked first · ${r.top_count||0} of ${total}</div>
+    </div>`).join("");
+  }
+  $("courtTakeFeedbackBody").innerHTML=`<div class="feedback-hero">
+    <div class="feedback-kicker">Your answer is locked</div>
+    <div class="feedback-title" tabindex="-1">${esc(title)}</div>
+    <div class="feedback-copy">${total?`${responseN(total)} in the room so far.`:"No room responses yet."} ${total===1?"You’re the first data point — the percentage is still real.":""}</div>
+  </div><div class="distribution">${distribution}</div>`;
+  $("courtTakeContinue").textContent=f.take_complete ? (COURT.beats?.challenge?"See Daily recap":"Continue to Challenge") : "Continue";
+  track("court_feedback_view",{phase:"take",item_index:f.item_index,item_type:item.type,sample_size:total});
+  requestAnimationFrame(()=>$("courtTakeFeedbackBody").querySelector(".feedback-title")?.focus());
 }
 function courtShareLink(summary){
   const base=location.origin+location.pathname;
@@ -2632,7 +2732,9 @@ async function openDaily(dayOpt){
   const r=await api("court_daily", payload);
   if(!r.ok){ $("lobbyErr").style.color="var(--bad)"; $("lobbyErr").textContent="Daily unavailable: "+r.error; return; }
   setStreak(r.streak);   // reconcile the cached number against the server's
-  COURT={ date:r.date, day:r.day, take:r.take, challenge:r.challenge, answers:initCourtAnswers(r.take,r.your_answers), consensus:r.consensus, gate:r.consensus_gate, beats:r.beats||{}, share:r.share||null, challenge_attempt:r.challenge_attempt||null };
+  const rawAnswers=r.your_answers||{};
+  const fallbackProgress={ answered_item_ids:(r.take.items||[]).filter(i=>Object.prototype.hasOwnProperty.call(rawAnswers,i.id)).map(i=>i.id), next_item_id:(r.take.items||[]).find(i=>!Object.prototype.hasOwnProperty.call(rawAnswers,i.id))?.id||null, completed:!!r.take_done };
+  COURT={ date:r.date, day:r.day, take:r.take, challenge:r.challenge, answers:initCourtAnswers(r.take,rawAnswers), take_progress:r.take_progress||fallbackProgress, takeFeedback:null, consensus:r.consensus, gate:r.consensus_gate, beats:r.beats||{}, share:r.share||null, challenge_attempt:r.challenge_attempt||null };
   // Keep in lockstep with courtContinueRoute in court_contract.js (#3 resume / stack order).
   const route = courtContinueRoute({
     takeDone: r.take_done,
@@ -2648,7 +2750,12 @@ async function openDaily(dayOpt){
   if(route==="take"){ renderCourtTake(); show("courtTake"); return; }
   renderCourtConsensus(); show("courtConsensus");
 }
-$("courtTakeBack").onclick=()=>goHome();
+function abandonCourtTake(surface){
+  track("court_take_abandon",{surface,answered_count:COURT.take_progress?.answered_item_ids?.length||0,next_item_index:(COURT.take?.items||[]).findIndex(i=>i.id===COURT.take_progress?.next_item_id)});
+  goHome();
+}
+$("courtTakeBack").onclick=()=>abandonCourtTake("question");
+$("courtTakeFeedbackExit").onclick=()=>abandonCourtTake("feedback");
 $("courtConsensusHome").onclick=()=>goHome();
 $("courtConsensusRefresh").onclick=()=>openDaily();
 $("courtChallengeStart").onclick=()=>startCourtChallenge();
@@ -2661,23 +2768,39 @@ $("playExitCourt") && ($("playExitCourt").onclick=()=>{
 });
 $("courtTakeLock").onclick=async()=>{
   $("courtTakeErr").textContent="";
-  const missing=(COURT.take.items||[]).find(item=>item.type==="multiple_choice" && !COURT.answers[item.id]);
-  if(missing){ $("courtTakeErr").textContent="Pick an answer for all three items."; return; }
-  const r=await api("court_take_lock",{ day:COURT.date, answers:COURT.answers, client_id:clientId(), label:ensureName() });
-  if(!r.ok){ $("courtTakeErr").textContent="Error: "+r.error; return; }
+  const itemId=COURT.take_progress?.next_item_id;
+  const item=(COURT.take.items||[]).find(i=>i.id===itemId);
+  if(!item) return;
+  const answer=COURT.answers[item.id];
+  if(item.type==="multiple_choice"&&!answer){ $("courtTakeErr").textContent="Pick an answer before locking it."; return; }
+  $("courtTakeLock").disabled=true; $("courtTakeLock").textContent="Locking…";
+  const r=await api("court_take_item_lock",{ day:COURT.date, item_id:item.id, answer, client_id:clientId(), label:ensureName() });
+  $("courtTakeLock").textContent="Lock Answer";
+  if(!r.ok){ $("courtTakeLock").disabled=false; $("courtTakeErr").textContent="Error: "+r.error; return; }
   setStreak(r.streak);
-  track("court_take_complete", { daily:true });
-  COURT={ date:r.date, day:r.day, take:r.take, challenge:r.challenge, answers:initCourtAnswers(r.take,r.your_answers), consensus:r.consensus, gate:r.consensus_gate, beats:r.beats||{}, share:r.share||null };
-  renderCourtConsensus(); show("courtConsensus");
-  clearTimeout(courtAutoTimer);
-  courtAutoTimer=setTimeout(()=>{ if(!$("courtConsensus").classList.contains("hidden")) startCourtChallenge(); }, 2200);
+  COURT.answers={...COURT.answers,...(r.your_answers||{})};
+  COURT.take_progress=r.take_progress;
+  COURT.beats=r.beats||COURT.beats; COURT.share=r.share||COURT.share; COURT.gate=r.consensus_gate;
+  COURT.takeFeedback={item,item_index:r.item_index,answer:(r.your_answers||{})[item.id],consensus:r.consensus,take_complete:r.take_complete,next_item_id:r.next_item_id};
+  track("court_take_item_locked",{daily:true,item_index:r.item_index,item_type:item.type,sample_size:r.consensus?.total||0,completed:!!r.take_complete});
+  if(r.take_complete) track("court_take_complete",{daily:true});
+  renderCourtTakeFeedback(); show("courtTakeFeedback");
+};
+$("courtTakeContinue").onclick=async()=>{
+  const f=COURT.takeFeedback; if(!f) return;
+  track("court_feedback_continue",{phase:"take",item_index:f.item_index,complete:!!f.take_complete});
+  if(f.take_complete){
+    if(COURT.beats?.challenge){ await openDaily(COURT.date); return; }
+    await startCourtChallenge(); return;
+  }
+  COURT.takeFeedback=null; renderCourtTake(); show("courtTake");
 };
 
 async function startCourtChallenge(){
   clearTimeout(courtAutoTimer); courtAutoTimer=null;
-  $("courtConsensusErr").textContent="";
+  $("courtConsensusErr").textContent=""; $("courtTakeFeedbackErr").textContent="";
   const r=await api("court_challenge_start",{ day:COURT.date, client_id:clientId(), label:ensureName() });
-  if(!r.ok){ $("courtConsensusErr").textContent="Error: "+r.error; return; }
+  if(!r.ok){ const box=$("courtTakeFeedback").classList.contains("hidden")?$("courtConsensusErr"):$("courtTakeFeedbackErr"); box.textContent="Error: "+r.error; return; }
   setStreak(r.streak);
   COURT.beats=r.beats||COURT.beats||{};
   COURT.share=r.share||COURT.share||null;

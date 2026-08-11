@@ -16,10 +16,13 @@ import {
   homeHasPeerModePicker,
   houseTakeForDate,
   normalizeTakeAnswers,
+  normalizeTakeItemAnswer,
   playerTakeCreateDefaults,
   playerTakeLockOut,
   takeCourtBeats,
   takeConsensus,
+  takeItemLockPlan,
+  takeProgress,
   takeHotScore,
   takeIsPubliclyListed,
   validateDailyChallenge,
@@ -37,6 +40,33 @@ test("lock payload must complete all three items", () => {
   const take = houseTakeForDate("2026-08-10");
   const partial = { [take.items[0].id]: take.items[0].options.map((option) => option.key) };
   assert.equal(normalizeTakeAnswers(take.items, partial).error, "invalid_answer");
+});
+
+test("per-item Take locks are sequential, immutable, and idempotent", () => {
+  const take = houseTakeForDate("2026-08-10");
+  const first = take.items[0];
+  const second = take.items[1];
+  const answerFor = (item) => item.type === "rank" ? item.options.map((o) => o.key) : item.options[0].key;
+  assert.equal(normalizeTakeItemAnswer(first, answerFor(first)).error, null);
+  assert.equal(takeItemLockPlan(take.items, {}, second.id, answerFor(second)).error, "take_item_out_of_order");
+  const lock = takeItemLockPlan(take.items, {}, first.id, answerFor(first));
+  assert.equal(lock.error, null);
+  assert.equal(lock.idempotent, false);
+  assert.equal(takeItemLockPlan(take.items, lock.answers, first.id, answerFor(first)).idempotent, true);
+  const changed = first.type === "rank" ? answerFor(first).slice().reverse() : first.options[1].key;
+  assert.equal(takeItemLockPlan(take.items, lock.answers, first.id, changed).error, "take_answer_locked");
+});
+
+test("partial Take progress never reports completion without completed_at", () => {
+  const take = houseTakeForDate("2026-08-10");
+  const answers = { [take.items[0].id]: take.items[0].type === "rank" ? take.items[0].options.map((o) => o.key) : take.items[0].options[0].key };
+  const partial = takeProgress(take.items, answers, null);
+  assert.deepEqual(partial.answered_item_ids, [take.items[0].id]);
+  assert.equal(partial.next_item_id, take.items[1].id);
+  assert.equal(partial.completed, false);
+  const all = Object.fromEntries(take.items.map((item) => [item.id, item.type === "rank" ? item.options.map((o) => o.key) : item.options[0].key]));
+  assert.equal(takeProgress(take.items, all, null).completed, false);
+  assert.equal(takeProgress(take.items, all, "2026-08-10T12:00:00Z").completed, true);
 });
 
 test("rank answers must contain every option exactly once", () => {
@@ -62,7 +92,22 @@ test("consensus reports honest totals for multiple-choice and rank items", () =>
   assert.equal(consensus.length, 3);
   assert.ok(consensus.every((row) => row.total === 1));
   assert.ok(consensus.some((row) => row.type === "rank" && row.ranking[0].avg_rank === 1));
-  assert.ok(consensus.some((row) => row.type === "multiple_choice" && row.choices[0].count === 1));
+  assert.ok(consensus.some((row) => row.type === "rank" && row.ranking[0].top_pct === 100));
+  assert.ok(consensus.some((row) => row.type === "multiple_choice" && row.choices[0].count === 1 && row.choices[0].pct === 100));
+});
+
+test("consensus totals count only players who answered that item", () => {
+  const take = houseTakeForDate("2026-08-10");
+  const item = take.items.find((i) => i.type === "multiple_choice");
+  const rows = [
+    { answers: { [item.id]: item.options[0].key } },
+    { answers: {} },
+    { answers: { [item.id]: item.options[1].key } },
+  ];
+  const row = takeConsensus([item], rows)[0];
+  assert.equal(row.total, 2);
+  assert.equal(row.choices.reduce((n, choice) => n + choice.count, 0), 2);
+  assert.equal(row.choices.reduce((n, choice) => n + choice.pct, 0), 100);
 });
 
 test("daily challenge is a safe team or college roster definition", () => {

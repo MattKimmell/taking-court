@@ -5,6 +5,7 @@ import {
   matchPoolGuess,
 } from "./shared.ts";
 import type { SnapshotSlot, PoolEntry } from "./shared.ts";
+import { rosterGuessFeedback } from "./roster_feedback.js";
 
 // Fetch every row past PostgREST's 1000-row cap by paging. Used only for the
 // autocomplete player pools (the full guessable universe); the client fetches
@@ -479,6 +480,7 @@ export async function actionGuess(_req: Request, body: any) {
   let result: "correct" | "strike" | "duplicate" = "strike";
   let matchedSlot: number | null = null;
   let matchedName: string | null = null;
+  let matchedPlayerKey: string | null = null;
   let matchedContext: string | null = null;
   let rarityInfo: any = null;
 
@@ -487,6 +489,7 @@ export async function actionGuess(_req: Request, body: any) {
     const usedKeys = new Set(Object.values(filled).map((f: any) => f.player_key));
     const hit = matchPoolGuess(snapshot as PoolEntry[], norm);
     if (hit) {
+      matchedPlayerKey = hit.player_key;
       if (usedKeys.has(hit.player_key)) {
         result = "duplicate"; matchedName = hit.display_name;
       } else {
@@ -553,14 +556,35 @@ export async function actionGuess(_req: Request, body: any) {
   // near-miss context (top8 metric categories only)
   const guessInfo = (!isRoster && result === "strike") ? await strikeContext(challenge, rawGuess) : null;
   const reveal = finished ? (isRoster ? rosterReveal(snapshot as PoolEntry[]) : revealedAnswers(snapshot as SnapshotSlot[])) : undefined;
+  let feedback;
+  if (isRoster && (result === "correct" || result === "strike") && challenge.roster_sheet_id) {
+    // One player-only lookup supplies every supported roster facet. It never
+    // returns another valid answer or the frozen answer pool, and feedback is
+    // best-effort so a context lookup can never block gameplay.
+    const { data: sheet } = await db.from("mp_roster_sheets")
+      .select("source_params")
+      .eq("id", challenge.roster_sheet_id)
+      .maybeSingle();
+    const filters = (sheet?.source_params as Record<string, unknown> | null) ?? {};
+    const contextResult = await db.rpc("mp_roster_guess_context", {
+      p_query: rawGuess,
+      p_player_key: matchedPlayerKey,
+      p_filters: filters,
+    });
+    if (!contextResult.error) {
+      feedback = rosterGuessFeedback({ result, display_name: matchedName }, contextResult.data, filters);
+    }
+  }
 
   return ok({
     result,
     slot: matchedSlot,
     display_name: result === "correct" ? matchedName : undefined,
+    matched_player_key: result === "correct" ? matchedPlayerKey : undefined,
     context_label: result === "correct" ? matchedContext : undefined,
     guess_info: guessInfo ?? undefined,
     rarity: rarityInfo ?? undefined,
+    feedback,
     correct_count: correctCount,
     strikes,
     strikes_remaining: challenge.strike_limit - strikes,

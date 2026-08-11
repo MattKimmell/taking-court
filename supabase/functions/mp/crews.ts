@@ -84,6 +84,7 @@ async function courtDatesForUsers(userIds: string[]): Promise<Map<string, Set<st
 
   const { data: locks } = await db.from("mp_court_take_locks")
     .select("author_user_id, day_id")
+    .not("completed_at", "is", null)
     .in("author_user_id", userIds);
   const dayIds = [...new Set((locks ?? []).map((l: any) => l.day_id).filter(Boolean))];
   const dayById = new Map<string, string>();
@@ -141,6 +142,7 @@ export async function actionCrewDaily(req: Request, body: any) {
   const { data: locks } = await db.from("mp_court_take_locks")
     .select("id, author_user_id, author_label, answers, created_at")
     .eq("day_id", courtDay.id)
+    .not("completed_at", "is", null)
     .in("author_user_id", memberIds.length ? memberIds : NONE);
   const lockByUser = new Map((locks ?? []).filter((l: any) => l.author_user_id).map((l: any) => [l.author_user_id, l]));
 

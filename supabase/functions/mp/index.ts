@@ -8,7 +8,7 @@ import { actionCrewCreate, actionCrewJoin, actionCrewMine, actionCrewDaily, acti
 import { actionTrack } from "./events.ts";
 import { actionPartyPrompts, actionPartyCreate, actionPartyJoin, actionPartyStart, actionPartyGuess, actionPartyState, actionPartyEnd, actionPartyRoundNext, actionPartyTierSave, actionPartyTurn } from "./party.ts";
 import { actionQr } from "./qr.ts";
-import { actionCourtChallengeGuess, actionCourtChallengeStart, actionCourtDaily, actionCourtTakeLock } from "./court.ts";
+import { actionCourtChallengeGuess, actionCourtChallengeStart, actionCourtDaily, actionCourtTakeItemLock, actionCourtTakeLock } from "./court.ts";
 import { actionTakeCompare, actionTakeCreate, actionTakeLock, actionTakeOpen } from "./takes.ts";
 
 // -----------------------------------------------------------------------------
@@ -91,6 +91,8 @@ Deno.serve(async (req: Request) => {
         return await actionCourtDaily(req, body);
       case "court_take_lock":
         return await actionCourtTakeLock(req, body);
+      case "court_take_item_lock":
+        return await actionCourtTakeItemLock(req, body);
       case "court_challenge_start":
         return await actionCourtChallengeStart(req, body);
       case "court_challenge_guess":
