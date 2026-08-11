@@ -12,7 +12,7 @@ export const TEAM_NAMES = {
 
 const POSITION_CODES = { G: "G", Guard: "G", F: "F", Forward: "F", C: "C", Center: "C" };
 const POSITION_NAMES = { G: "Guard", F: "Forward", C: "Center" };
-const FACET_PRIORITY = ["award", "draft", "college", "conference", "team", "position", "decade"];
+const FACET_PRIORITY = ["min_points", "min_rings", "award", "draft", "college", "conference", "team", "position", "decade"];
 
 const AWARDS = {
   mvp: { field: "mvp_n", singular: "MVP", plural: "MVPs", article: "an" },
@@ -73,6 +73,8 @@ function awardCount(context, key) {
 }
 
 function matchesFacet(context, key, rawValue) {
+  if (key === "min_points") return (number(context.career_points) ?? 0) >= Number(rawValue);
+  if (key === "min_rings") return (number(context.rings) ?? 0) >= Number(rawValue);
   if (key === "team") return list(context.team_ranges).length > 0 || list(context.teams).includes(rawValue);
   if (key === "position") return list(context.positions).includes(positionCode(rawValue));
   if (key === "decade") return list(context.decades).map(Number).includes(Number(rawValue));
@@ -103,6 +105,11 @@ function primaryFacet(filters) {
 
 function correctExplanation(name, context, filters, facet) {
   const value = filters[facet];
+  if (facet === "min_points") return `Yes, ${name} scored ${(number(context.career_points) ?? 0).toLocaleString("en-US")} career points.`;
+  if (facet === "min_rings") {
+    const rings = number(context.rings) ?? 0;
+    return `Yes, ${name} won ${rings} NBA ${rings === 1 ? "title" : "titles"}.`;
+  }
   if (facet === "team") return `Yes, ${teamFirstPlayedContext({ name, team: teamName(value), ranges: context.team_ranges })}`;
   if (facet === "college") return `Yes, ${name} ${draftClause(context)}.`;
   if (facet === "conference") {
@@ -130,6 +137,11 @@ function correctExplanation(name, context, filters, facet) {
 
 function incorrectExplanation(name, context, filters, facet) {
   const value = filters[facet];
+  if (facet === "min_points") return `${name} scored ${(number(context.career_points) ?? 0).toLocaleString("en-US")} career points—not ${Number(value).toLocaleString("en-US")} or more.`;
+  if (facet === "min_rings") {
+    const rings = number(context.rings) ?? 0;
+    return `${name} won ${rings} NBA ${rings === 1 ? "title" : "titles"}—not ${value} or more.`;
+  }
   if (facet === "team") return `${name} did not complete a full season with the ${teamName(value)}.`;
   if (facet === "college") {
     const colleges = list(context.colleges);

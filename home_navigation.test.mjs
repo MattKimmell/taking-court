@@ -29,6 +29,8 @@ test("Game Modes and Multiplayer contain the requested destinations", () => {
 
 test("navigation origins preserve the hub and legacy Tier contracts", () => {
   assert.match(html, /\$\("nameHomeBack"\)\.onclick = \(\)=>show\("gameModesHome"\)/);
+  assert.match(html, /\$\("challengeBrowseBack"\)\.onclick = \(\)=>show\("nameHome"\)/);
+  assert.match(html, /\$\("challengeCustomBack"\)\.onclick = \(\)=>show\("nameHome"\)/);
   assert.match(html, /\$\("listsHomeBack"\)\.onclick = \(\)=>show\("gameModesHome"\)/);
   assert.match(html, /show\("multiplayerHome"\)/);
   assert.match(html, /TIER_RETURN_SCREEN="mine"/);
@@ -37,5 +39,5 @@ test("navigation origins preserve the hub and legacy Tier contracts", () => {
 });
 
 test("UI release bumps the PWA cache", () => {
-  assert.match(worker, /const CACHE = "tc-v30"/);
+  assert.match(worker, /const CACHE = "tc-v31"/);
 });

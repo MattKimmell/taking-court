@@ -20,6 +20,7 @@ import {
 } from "./shared.ts";
 import type { PoolEntry, TierItem } from "./shared.ts";
 import { makeCrewCode } from "./crews.ts";
+import { rosterGuessFeedback } from "./roster_feedback.js";
 // Pickup builds its own challenges from the same filter vocabulary Name It uses.
 // games.ts does not import party.ts, so this direction is safe.
 import { buildChallengeFilters, composeFilterSubject } from "./games.ts";
@@ -670,6 +671,37 @@ async function requireMember(sessionId: string, memberId: string, token: string)
   return data;
 }
 
+// Round 1 is the same roster-recall question shape as a solo Challenge, so it
+// should explain the submitted player with the same facts. This lookup resolves
+// only that guess; it never returns the frozen pool or another valid answer.
+async function partyGuessFeedback(
+  result: "correct" | "strike",
+  rawGuess: string,
+  playerKey: string | null,
+  displayName: string | null,
+  filters: Record<string, unknown>,
+) {
+  if (!filters || Object.keys(filters).length === 0) return undefined;
+  const contextResult = await db.rpc("mp_roster_guess_context", {
+    p_query: rawGuess,
+    p_player_key: playerKey,
+    p_filters: filters,
+  });
+  if (contextResult.error || !contextResult.data) return undefined;
+
+  const context = { ...(contextResult.data as Record<string, unknown>) };
+  // The shared context function already carries rings, draft, awards, teams,
+  // schools, position, and career years. Only the older 20k-points Pickup
+  // preset needs one extra scalar from the existing facet row.
+  if (filters.min_points != null && context.known_player && context.player_key) {
+    const { data: points, error } = await db.from("mp_player_facets")
+      .select("career_points").eq("player_key", context.player_key).maybeSingle();
+    if (error || !points) return undefined;
+    context.career_points = points.career_points;
+  }
+  return rosterGuessFeedback({ result, display_name: displayName }, context, filters);
+}
+
 // -----------------------------------------------------------------------------
 // The Pickup browse screen. Same shape as challenge_catalog and the same
 // categories table, because these are the same kind of content asked a different
@@ -724,6 +756,7 @@ export async function actionPartyCreate(req: Request, body: any) {
   let promptText: string;
   let target: number;
   let pool: unknown;
+  let sourceFilters: Record<string, unknown> = {};
 
   if (body.filters || body.college || body.conference || body.team ||
       body.position || body.decade || body.award || body.draft) {
@@ -744,6 +777,7 @@ export async function actionPartyCreate(req: Request, body: any) {
     promptText = composeFilterSubject(f as any);
     target = b.target;
     pool = b.pool;
+    sourceFilters = f;
   } else {
     const slug = String(body.slug ?? "");
     const { data: prompt } = await db.from("mp_party_prompts").select("*")
@@ -751,6 +785,7 @@ export async function actionPartyCreate(req: Request, body: any) {
     if (!prompt) return err("unknown_prompt", 404);
     promptId = prompt.id; promptText = prompt.prompt;
     target = prompt.target; pool = prompt.pool;
+    sourceFilters = (prompt.source_filters as Record<string, unknown> | null) ?? {};
   }
 
   // 3 / 5 / 10 minutes, or untimed. Anything else is rejected rather than clamped
@@ -771,6 +806,7 @@ export async function actionPartyCreate(req: Request, body: any) {
   const { data: session, error: sErr } = await db.from("mp_party_sessions").insert({
     code, share_token: "party_" + randomToken(8),
     prompt_id: promptId, prompt: promptText, target,
+    source_filters: sourceFilters,
     answers_snapshot: pool,              // freeze: editing the prompt can't change a live game
     status: "lobby", time_limit_s: sessionClock, format,
     host_client_id: clientId, host_token: hostToken,
@@ -939,9 +975,14 @@ export async function actionPartyGuess(_req: Request, body: any) {
 
   if (!hit) {
     // A miss is a stat, never a penalty. Atomic bump — no read-modify-write.
-    await db.rpc("mp_party_bump_miss", { p_session: live.id });
+    const [, feedback] = await Promise.all([
+      db.rpc("mp_party_bump_miss", { p_session: live.id }),
+      partyGuessFeedback("strike", String(body.guess ?? ""), null, null,
+        (live.source_filters as Record<string, unknown> | null) ?? {}),
+    ]);
     return ok({
       result: "miss", count: await answerCount(live.id), target: live.target,
+      feedback,
       answers: await boardSince(live.id, sinceId),
       seconds_left: secondsLeft(live), round_seconds_left: roundSecondsLeft(rapid),
     });
@@ -970,6 +1011,10 @@ export async function actionPartyGuess(_req: Request, body: any) {
   }
 
   const count = await answerCount(live.id);
+  const feedback = await partyGuessFeedback(
+    "correct", String(body.guess ?? ""), hit.player_key, hit.display_name,
+    (live.source_filters as Record<string, unknown> | null) ?? {},
+  );
   const finished = count >= live.target;
   if (finished) {
     // Filling the board ends the ROUND. A classic session has only that one, so
@@ -993,6 +1038,7 @@ export async function actionPartyGuess(_req: Request, body: any) {
   return ok({
     result: "correct", display_name: hit.display_name,
     rarity_tier: hit.rarity_tier, rarity_label: RARITY_LABEL[hit.rarity_tier] ?? hit.rarity_tier,
+    feedback,
     count, target: live.target, finished,
     answers: await boardSince(live.id, sinceId),   // piggybacked delta: the typer never waits
     seconds_left: secondsLeft(live),

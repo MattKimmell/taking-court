@@ -235,6 +235,8 @@
   .challenge-toolbar{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}
   .challenge-toolbar button{min-height:44px}
   .challenge-restart{width:44px;padding:0;font-size:24px;line-height:1}
+  .challenge-choice-pills{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}
+  .challenge-choice-pills button{flex:1 1 145px;min-height:48px;border-radius:999px;padding:11px 16px}
   .idbar{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:14px;
     font-size:12px;color:var(--muted)}
   .err{color:#fca5a5;font-size:13px;margin-top:8px;min-height:18px}
@@ -458,21 +460,46 @@
   <!-- ===================== NAME IT (recall challenges) ===================== -->
   <div id="nameHome" class="card hidden">
     <div class="head">
-      <div style="font-weight:700;font-size:18px">🎯 Think you know ball?</div>
+      <div style="font-weight:700;font-size:18px">Challenges</div>
       <button class="ghost" id="nameHomeBack" style="flex:0 0 auto;padding:6px 12px">Game Modes</button>
     </div>
-    <div class="note">There <em>is</em> a right answer here. Three strikes, clock running.</div>
-    <div id="nameHero"></div>
-    <div class="row" style="margin-top:10px">
-      <button id="playNowRandom">⚡ Play Now — surprise me</button>
+    <div class="note">Choose a ready-made Challenge or build one around the NBA knowledge you want to test.</div>
+    <div class="challenge-choice-pills" aria-label="Challenge choices">
+      <button id="challengeSurprise">Surprise Me ⚡</button>
+      <button class="ghost" id="challengeBrowseBtn">Browse</button>
+      <button class="ghost" id="challengeCustomBtn">Custom Games</button>
     </div>
-    <div id="nameCats" style="margin-top:6px"></div>
+    <div class="err" id="challengeHubErr"></div>
+  </div>
 
-    <!-- The old lobby form, moved wholesale. Element ids are unchanged so every
-         existing handler (createChallenge, opponent onchange, loadSheets) keeps
-         working untouched. -->
-    <details style="margin-top:14px">
-      <summary>Set it up myself — opponent, mode, exact category</summary>
+  <!-- ===================== CHALLENGE BROWSE ===================== -->
+  <div id="challengeBrowse" class="card hidden">
+    <div class="head">
+      <div>
+        <div class="section-kicker">Challenges</div>
+        <div style="font-weight:800;font-size:20px;margin-top:3px">Browse</div>
+      </div>
+      <button class="ghost" id="challengeBrowseBack" style="flex:0 0 auto;padding:6px 12px">Back</button>
+    </div>
+    <div class="note">Every public preset Challenge, ready to play.</div>
+    <div id="challengeBrowseList" style="margin-top:12px"></div>
+    <div class="err" id="challengeBrowseErr"></div>
+  </div>
+
+  <!-- ===================== CUSTOM CHALLENGES ===================== -->
+  <div id="challengeCustom" class="card hidden">
+    <div class="head">
+      <div>
+        <div class="section-kicker">Challenges</div>
+        <div style="font-weight:800;font-size:20px;margin-top:3px">Custom Games</div>
+      </div>
+      <button class="ghost" id="challengeCustomBack" style="flex:0 0 auto;padding:6px 12px">Back</button>
+    </div>
+    <div class="note">Choose the matchup and combine filters to build your own recall Challenge.</div>
+
+    <!-- The existing custom builder keeps its element ids so validation,
+         opponent selection, and challenge creation share the established path. -->
+    <div style="margin-top:14px">
       <div class="row" style="margin-top:8px">
         <div>
           <label>Your name</label>
@@ -503,9 +530,8 @@
           </select>
         </div>
       </div>
-      <!-- Build your own by filtering, instead of picking from a preset list.
-           The preset dropdown is kept (collapsed, below) because it is the only
-           way to reach the ordered top-N sheets, which cannot be generated. -->
+      <!-- Build your own by filtering. Public preset categories now live on the
+           dedicated Browse screen instead of competing with these controls. -->
       <div style="font-weight:700;margin-top:14px">Build one</div>
       <div class="note">Pick any combination. We check it can actually be played before you start.</div>
       <div class="row" style="margin-top:8px">
@@ -578,15 +604,7 @@
       </div>
       <div id="fVerdict" style="margin-top:10px"></div>
 
-      <details style="margin-top:14px">
-        <summary>Or pick a preset category</summary>
-        <select id="sheet" style="margin-top:8px"><option>Loading categories…</option></select>
-        <div class="row" style="margin-top:10px">
-          <button id="createBtn">Create challenge</button>
-          <button class="ghost" id="randomBtn" style="flex:0 0 auto">🎲 Random</button>
-        </div>
-      </details>
-    </details>
+    </div>
     <div class="err" id="nameErr"></div>
   </div>
 
@@ -1192,16 +1210,21 @@ let ST = { challenge_id:null, share_token:null, attempt_id:null, attempt_token:n
            isCourtDaily:false, courtDate:null };
 let timerInt=null;
 
-const MODE_PILL_SCREENS = new Set(["nameHome","catPage","share","preview","play","results","partyHost","partyPlay","partyRecap"]);
+const MODE_PILL_SCREENS = new Set(["share","preview","play","results","partyHost","partyPlay","partyRecap"]);
 function show(id){
-  ["lobby","gameModesHome","multiplayerHome","courtTake","courtTakeFeedback","courtConsensus","takeBuild","playerTake","nameHome","catPage","share","preview","play","results","leaderboard","listsHome","listBuild","listCompare","tierHome","tierBoard","tierCompare","tierBrowse","partyHost","partyPlay","partyRecap","mine","crewHome","crewRoom"]
+  ["lobby","gameModesHome","multiplayerHome","courtTake","courtTakeFeedback","courtConsensus","takeBuild","playerTake","nameHome","challengeBrowse","challengeCustom","catPage","share","preview","play","results","leaderboard","listsHome","listBuild","listCompare","tierHome","tierBoard","tierCompare","tierBrowse","partyHost","partyPlay","partyRecap","mine","crewHome","crewRoom"]
     .forEach(s=>$(s).classList.toggle("hidden", s!==id));
   $("modePill").classList.toggle("hidden", !MODE_PILL_SCREENS.has(id));
 }
 // Challenge setup moved off the lobby onto #nameHome, so lobbyErr is hidden
 // whenever Name It is open — a failed create would have reported into a screen
 // nobody is looking at. Always write to the error box on the visible screen.
-function homeErr(){ return $("nameHome").classList.contains("hidden") ? $("lobbyErr") : $("nameErr"); }
+function homeErr(){
+  if(!$("challengeCustom").classList.contains("hidden")) return $("nameErr");
+  if(!$("challengeBrowse").classList.contains("hidden")) return $("challengeBrowseErr");
+  if(!$("nameHome").classList.contains("hidden")) return $("challengeHubErr");
+  return $("lobbyErr");
+}
 function toast(msg){ const b=homeErr(); b.style.color="var(--muted)"; b.textContent=msg; }
 function fmt(ms){ if(ms==null) return "—"; const s=ms/1000; const m=Math.floor(s/60);
   const r=(s-m*60); return m+":"+r.toFixed(1).padStart(4,"0"); }
@@ -1226,21 +1249,9 @@ $("multiplayerBack").onclick = ()=>show("lobby");
 
 async function loadSheets(){
   const r = await api("sheets");
-  const sel = $("sheet"); sel.innerHTML="";
   const lb = $("lbCat");
-  if(!r.ok){ sel.innerHTML="<option>Could not load</option>"; return; }
+  if(!r.ok) return;
   SHEETS = r.sheets;
-  const groups={top8:[],roster:[]};
-  r.sheets.forEach(s=>groups[s.kind==="roster"?"roster":"top8"].push(s));
-  const addGroup=(label,arr)=>{
-    if(!arr.length) return;
-    const og=document.createElement("optgroup"); og.label=label;
-    arr.forEach(s=>{ const o=document.createElement("option"); o.value=s.id; o.dataset.kind=s.kind||"top8";
-      o.textContent=`${s.prompt} (${s.difficulty})`; og.appendChild(o); });
-    sel.appendChild(og);
-  };
-  addGroup("Top 8 lists", groups.top8);
-  addGroup("Roster — name as many", groups.roster);
   r.sheets.forEach(s=>{ const o2=document.createElement("option"); o2.value=s.id; o2.textContent=`${s.prompt} (${s.difficulty})`; lb.appendChild(o2); });
 }
 $("mode").onchange = e => $("modePill").textContent = e.target.value;
@@ -1248,7 +1259,6 @@ $("opponent").onchange = e => {
   const vsComp = e.target.value==="computer";
   $("diffWrap").classList.toggle("hidden", !vsComp);
   $("modeWrap").classList.toggle("hidden", vsComp);   // computer = 1v1 vs bot
-  $("createBtn").textContent = vsComp ? "Play vs computer" : "Create challenge";
   $("modePill").textContent = vsComp ? "vs computer" : $("mode").value;
 };
 // Restores the pill to whatever the lobby form is set to, after a mode that
@@ -1257,9 +1267,6 @@ function syncModePill(){
   const vsComp = $("opponent").value === "computer";
   $("modePill").textContent = vsComp ? "vs computer" : $("mode").value;
 }
-
-$("createBtn").onclick = ()=>{ const o=$("sheet").selectedOptions[0]; createChallenge(o?o.value:null, o?o.dataset.kind:null); };
-$("randomBtn").onclick = ()=>{ const s=SHEETS[Math.floor(Math.random()*SHEETS.length)]; createChallenge(s?s.id:null, s?s.kind:null); };
 
 // ---------- Name It: browse recall challenges by category ----------
 // The catalogue is a curated layer over the sheets, so `title` can read
@@ -1273,42 +1280,41 @@ const diffPill = d => d ? `<span class="pill" style="padding:1px 7px;font-size:1
 
 $("modeNameIt").onclick = openNameHome;
 $("nameHomeBack").onclick = ()=>show("gameModesHome");
+$("challengeBrowseBack").onclick = ()=>show("nameHome");
+$("challengeCustomBack").onclick = ()=>show("nameHome");
 
 async function openNameHome(){
-  CHALLENGE_RETURN_SCREEN="gameModesHome";
-  show("nameHome"); $("nameErr").textContent=""; fillFilterTeams(); fillFilterOptions();
-  if(!NAME_CATALOG) await loadChallengeCatalog(); else renderNameHome();
+  CHALLENGE_RETURN_SCREEN="nameHome";
+  show("nameHome"); $("challengeHubErr").textContent="";
+  if(!NAME_CATALOG) await loadChallengeCatalog();
 }
 async function loadChallengeCatalog(){
-  const hero=$("nameHero"); hero.innerHTML=`<div class="note">Loading…</div>`;
   const r=await api("challenge_catalog",{});
-  if(!r.ok){ hero.innerHTML=""; $("nameErr").textContent="Could not load challenges."; return; }
-  NAME_CATALOG=r; renderNameHome();
+  if(!r.ok){ $("challengeHubErr").textContent="Could not load challenges."; return false; }
+  NAME_CATALOG=r; return true;
 }
-function renderNameHome(){
-  const r=NAME_CATALOG, hero=$("nameHero"), box=$("nameCats");
-  // `featured` became an array; fall back to the old single field so a shell
-  // cached before that change still renders a hero instead of nothing.
-  const feat = Array.isArray(r.featured) ? r.featured : (r.featured ? [r.featured] : []);
-  heroRow(hero, feat, {
-    // "Guards" is meaningless out of its group — inside browse the group label
-    // supplies the team, but a hero card carries no such context.
-    title: it => it.group_label ? `${it.group_label} · ${it.title}` : it.title,
-    blurb: it => it.blurb,
-    foot:  it => (it.answer_count?`Name ${it.answer_count}`:"Play it") + (it.difficulty?` · ${it.difficulty}`:""),
-    pick:  it => createChallenge(it.sheet_id, catKind(it.kind), true),
-  });
-
-  // Category CARDS, not expanders. Tapping one navigates to the shared category
-  // page rather than growing this screen — an expander that unfurls 96 rows
-  // under a summary buries the hero and loses your place on scroll.
-  box.innerHTML = `<div style="font-weight:700;margin-top:16px">Browse by</div>
-    <div class="catgrid">${(r.categories||[]).map((c,ci)=>catCard(c.icon,c.label,
-        `${c.items.length} challenge${c.items.length===1?"":"s"}`, `data-ci="${ci}"`)).join("")}</div>`;
-  box.querySelectorAll("[data-ci]").forEach(el=>{
-    el.onclick=()=>openChallengeCategory(NAME_CATALOG.categories[+el.dataset.ci]);
-  });
+async function openChallengeBrowse(){
+  $("challengeBrowseErr").textContent="";
+  if(!NAME_CATALOG && !await loadChallengeCatalog()) return;
+  CHALLENGE_RETURN_SCREEN="challengeBrowse";
+  show("challengeBrowse"); renderChallengeBrowse(); window.scrollTo(0,0);
 }
+function renderChallengeBrowse(){
+  const box=$("challengeBrowseList"), cats=NAME_CATALOG?.categories||[];
+  box.innerHTML = cats.map(c=>`<section style="margin-top:18px">
+    <div style="font-weight:800;font-size:16px">${c.icon||"🎯"} ${esc(c.label)}</div>
+    ${c.blurb?`<div class="note" style="margin-top:3px">${esc(c.blurb)}</div>`:""}
+    ${c.items.map(it=>itemRow(c.icon||"🎯", {...it,title:it.group_label?`${it.group_label} · ${it.title}`:it.title})).join("")}
+  </section>`).join("") || `<div class="banner wait">No public preset Challenges yet.</div>`;
+  bindItemRows(box);
+}
+function openChallengeCustom(){
+  CHALLENGE_RETURN_SCREEN="challengeCustom";
+  show("challengeCustom"); $("nameErr").textContent=""; fillFilterTeams(); fillFilterOptions();
+  window.scrollTo(0,0);
+}
+$("challengeBrowseBtn").onclick=openChallengeBrowse;
+$("challengeCustomBtn").onclick=openChallengeCustom;
 
 // A category's page. Grouped categories (team rosters) keep their team picker
 // here, so the drilldown lives inside the page instead of inside a summary.
@@ -1513,9 +1519,12 @@ $("fSurprise").onclick = ()=>{
 // Play Now: one tap into a random challenge, no configuration at all. Draws
 // from the curated catalogue rather than every sheet, so it can never serve
 // something unlisted or half-finished.
-$("playNowRandom").onclick = ()=>{
+$("challengeSurprise").onclick = async ()=>{
+  $("challengeHubErr").textContent="";
+  if(!NAME_CATALOG && !await loadChallengeCatalog()) return;
   const all=(NAME_CATALOG?.categories||[]).flatMap(c=>c.items);
-  if(!all.length){ $("nameErr").textContent="Nothing to play yet."; return; }
+  if(!all.length){ $("challengeHubErr").textContent="Nothing to play yet."; return; }
+  CHALLENGE_RETURN_SCREEN="nameHome";
   const p=all[Math.floor(Math.random()*all.length)];
   createChallenge(p.sheet_id, catKind(p.kind), true);
 };
@@ -1818,7 +1827,10 @@ $("guessInput").addEventListener("blur",()=>setTimeout(acHide,120));
 // ------------------------------------------------------------------ results
 async function showResults(){
   show("results");
-  $("homeBtn").textContent = ST.isCourtDaily ? "Home" : ({gameModesHome:"Game Modes",multiplayerHome:"Multiplayer"}[CHALLENGE_RETURN_SCREEN] || "Home");
+  $("homeBtn").textContent = ST.isCourtDaily ? "Home" : ({
+    gameModesHome:"Game Modes", multiplayerHome:"Multiplayer", nameHome:"Challenges",
+    challengeBrowse:"Browse", challengeCustom:"Custom Games",
+  }[CHALLENGE_RETURN_SCREEN] || "Home");
   renderCourtShare("resultsCourtShare", ST.isCourtDaily ? COURT.share : null);
   const r = await api("results",{ challenge_id:ST.challenge_id, attempt_id:ST.attempt_id, attempt_token:ST.attempt_token });
   const errB=$("resultsErr"); errB.textContent="";
@@ -3564,9 +3576,9 @@ function partyConsensusHtml(rev){
   return h;
 }
 
-function partyFlash(html, good){
+function partyFlash(html, good, duration=2200){
   const el=$("partyFlash"); el.style.color = good?"var(--good)":"var(--muted)";
-  el.innerHTML=html; setTimeout(()=>{ if(el.innerHTML===html) el.innerHTML=""; }, 2200);
+  el.innerHTML=html; setTimeout(()=>{ if(el.innerHTML===html) el.innerHTML=""; }, duration);
 }
 
 $("modeParty") && ($("modeParty").onclick = openPartyHome);
@@ -3852,11 +3864,11 @@ async function partySubmit(){
   }
   if(r.result==="correct"){
     const e = r.rarity_tier==="deep_cut"?"🔥 ":r.rarity_tier==="rare"?"💎 ":"✅ ";
-    partyFlash(`${e}${esc(r.display_name)}`, true);
+    partyFlash(r.feedback?.explanation ? `${e}${esc(r.feedback.explanation)}` : `${e}${esc(r.display_name)}`, true, 5000);
   } else if(r.result==="duplicate"){
     partyFlash(`${esc(r.claimed_by||"Someone")} already got ${esc(r.display_name)}`, false);
   } else {
-    partyFlash(`Not in this one`, false);
+    partyFlash(r.feedback?.explanation ? `✕ ${esc(r.feedback.explanation)}` : `Not in this one`, false, 5000);
   }
   // Server sends the delta with the response, so this renders before the next poll.
   partyApply(r);

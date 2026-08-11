@@ -23,6 +23,7 @@ const grantHill = {
   smoy_n: 0,
   mip_n: 0,
   rings: 0,
+  career_points: 17137,
   hof: true,
   draft: { year: 1994, pick: 3, round: 1, team: "DET" },
 };
@@ -82,4 +83,16 @@ test("approved undrafted and no-college special cases stay factual", () => {
   assert.equal(feedback("correct", { college: "Virginia Union" }, ben).explanation, "Yes, Ben Wallace went undrafted.");
   const lebron = { ...grantHill, player_key: "jamesle01", player_name: "LeBron James", colleges: [], conferences: [] };
   assert.equal(feedback("strike", { college: "Duke" }, lebron).explanation, "LeBron James did not attend college.");
+});
+
+test("Pickup legacy point and title thresholds use factual totals", () => {
+  assert.equal(
+    feedback("strike", { min_points: 20000 }).explanation,
+    "Grant Hill scored 17,137 career points—not 20,000 or more.",
+  );
+  const winner = { ...grantHill, player_name: "Stephen Curry", rings: 4 };
+  assert.equal(
+    feedback("correct", { min_rings: 3 }, winner).explanation,
+    "Yes, Stephen Curry won 4 NBA titles.",
+  );
 });
