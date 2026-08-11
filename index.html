@@ -232,6 +232,9 @@
   .distribution-row.mine{border-color:var(--accent)}
   .distribution-row.mine .distribution-bar span{background:var(--accent)}
   .daily-primary{width:100%;min-height:48px;margin-top:16px}
+  .challenge-toolbar{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}
+  .challenge-toolbar button{min-height:44px}
+  .challenge-restart{width:44px;padding:0;font-size:24px;line-height:1}
   .idbar{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:14px;
     font-size:12px;color:var(--muted)}
   .err{color:#fca5a5;font-size:13px;margin-top:8px;min-height:18px}
@@ -616,6 +619,10 @@
 
   <!-- ===================== PLAY ===================== -->
   <div id="play" class="card hidden">
+    <div class="challenge-toolbar">
+      <button class="ghost" id="playBack">← Back</button>
+      <button class="ghost challenge-restart" id="playRestart" aria-label="Restart Challenge" title="Restart Challenge">↻</button>
+    </div>
     <div class="head">
       <div>
         <div class="pill" id="playCat">…</div>
@@ -632,12 +639,9 @@
         <input id="guessInput" placeholder="Start typing a name…" autocomplete="off" />
         <div id="acDrop" class="acdrop hidden"></div>
       </div>
-      <button id="guessBtn" style="flex:0 0 auto">Guess</button>
+      <button id="guessBtn" style="flex:0 0 auto">Enter</button>
     </div>
     <div class="feed" id="feed" role="status" aria-live="polite"></div>
-    <div class="row" style="margin-top:12px">
-      <button class="ghost" id="playExitCourt" style="width:100%">Exit Challenge · keep streak</button>
-    </div>
   </div>
 
   <!-- ===================== RESULTS ===================== -->
@@ -1644,8 +1648,6 @@ function renderPlay(){
     }
   });
   for(let i=0;i<ST.strike_limit;i++) $("strk"+i).classList.toggle("on", i<ST.strikes);
-  const exit=$("playExitCourt");
-  if(exit) exit.classList.toggle("hidden", !ST.isCourtDaily);
 }
 
 function applyGuessToBoard(r){
@@ -1773,6 +1775,36 @@ function acMove(d){
 function acPick(i){ const it=acItems[i]; if(!it) return; $("guessInput").value=it.v; acHide(); submitGuess(); }
 
 $("guessBtn").onclick=submitGuess;
+function leaveChallenge(){
+  clearInterval(timerInt); timerInt=null;
+  clearTimeout(courtAutoTimer); courtAutoTimer=null;
+  acHide();
+  if(ST.isCourtDaily){ goHome(); return; }
+  show(CHALLENGE_RETURN_SCREEN);
+}
+async function restartChallenge(){
+  if(ST.finished || !ST.attempt_id || !ST.attempt_token) return;
+  if(!window.confirm("Restart this Challenge? Your current progress and timer will be cleared.")) return;
+  const btn=$("playRestart"); btn.disabled=true;
+  const r=await api("restart",{ attempt_id:ST.attempt_id, attempt_token:ST.attempt_token });
+  btn.disabled=false;
+  if(!r.ok){ feed(`<span class="x">Could not restart: ${esc(r.error)}</span>`); return; }
+  ST.filled={}; ST.strikes=0; ST.correct=0; ST.finished=false;
+  ST.startedMs=new Date(r.started_at).getTime();
+  if(COURT.challenge_attempt && ST.isCourtDaily){
+    COURT.challenge_attempt.status="in_progress";
+    COURT.challenge_attempt.correct_count=0;
+    COURT.challenge_attempt.strikes=0;
+    COURT.challenge_attempt.filled_slots={};
+  }
+  buildBoard(); renderPlay();
+  $("guessInput").value=""; acHide();
+  feed(`<span class="d">↻ Challenge restarted.</span>`);
+  track("challenge_restart",{surface:ST.isCourtDaily?"daily":"freeplay",kind:ST.isRoster?"roster":"top8"});
+  $("guessInput").focus(); startTimer();
+}
+$("playBack").onclick=leaveChallenge;
+$("playRestart").onclick=restartChallenge;
 $("guessInput").addEventListener("input",e=>acRender(acFilter(e.target.value), e.target.value));
 $("guessInput").addEventListener("keydown",e=>{
   const open=!$("acDrop").classList.contains("hidden");
@@ -2762,10 +2794,6 @@ $("courtChallengeStart").onclick=()=>startCourtChallenge();
 $("courtSkipChallenge").onclick=()=>goHome();
 $("courtShareBtn").onclick=()=>shareCourt(COURT.share, $("courtShareBtn"));
 $("lobbyShareBtn") && ($("lobbyShareBtn").onclick=()=>shareCourt(LOBBY_SHARE || COURT.share, $("lobbyShareBtn")));
-$("playExitCourt") && ($("playExitCourt").onclick=()=>{
-  if(timerInt) clearInterval(timerInt);
-  goHome();
-});
 $("courtTakeLock").onclick=async()=>{
   $("courtTakeErr").textContent="";
   const itemId=COURT.take_progress?.next_item_id;

@@ -403,6 +403,62 @@ export async function actionStart(req: Request, body: any) {
   });
 }
 
+export async function actionRestart(_req: Request, body: any) {
+  const attemptId = body.attempt_id;
+  const attemptToken = body.attempt_token;
+  if (!attemptId || !attemptToken) return err("missing_attempt_credentials", 400);
+
+  const { data: attempt, error: atErr } = await db.from("mp_attempts")
+    .select("id, attempt_token, status, challenge_id")
+    .eq("id", attemptId)
+    .maybeSingle();
+  if (atErr || !attempt) return err("attempt_not_found", 404);
+  if (attempt.attempt_token !== attemptToken) return err("bad_attempt_token", 403);
+  if (attempt.status !== "in_progress") return err("attempt_already_finished", 409);
+
+  const { data: challenge } = await db.from("mp_challenges")
+    .select("status, expires_at")
+    .eq("id", attempt.challenge_id)
+    .maybeSingle();
+  if (!challenge) return err("challenge_not_found", 404);
+  if (challenge.status !== "open") return err("challenge_closed", 409);
+  if (new Date(challenge.expires_at).getTime() < Date.now()) return err("challenge_expired", 409);
+
+  const now = new Date().toISOString();
+  const { data: restarted, error: resetErr } = await db.from("mp_attempts")
+    .update({
+      status: "in_progress",
+      correct_count: 0,
+      strikes: 0,
+      filled_slots: {},
+      guesses: [],
+      started_at: now,
+      finished_at: null,
+      last_correct_at: null,
+      elapsed_ms: null,
+      ranking_time_ms: null,
+      rank: null,
+      updated_at: now,
+    })
+    .eq("id", attempt.id)
+    .eq("attempt_token", attemptToken)
+    .eq("status", "in_progress")
+    .select("id, status, started_at, correct_count, strikes, filled_slots")
+    .maybeSingle();
+  if (resetErr) return err(resetErr.message, 500);
+  if (!restarted) return err("attempt_restart_conflict", 409);
+
+  return ok({
+    attempt_id: restarted.id,
+    status: restarted.status,
+    started_at: restarted.started_at,
+    correct_count: restarted.correct_count,
+    strikes: restarted.strikes,
+    filled_slots: restarted.filled_slots,
+    restarted: true,
+  });
+}
+
 export async function actionGuess(_req: Request, body: any) {
   const attemptId = body.attempt_id;
   const attemptToken = body.attempt_token;
