@@ -292,11 +292,6 @@
       <div class="note" id="lobbyCourtNote">Lock today's three-item Take, then the Challenge. One streak.</div>
       <div id="lobbyDoneLine" class="banner win hidden" style="margin-top:12px"></div>
       <button id="dailyBtn" style="width:100%;font-size:16px;padding:14px;margin-top:14px;background:linear-gradient(90deg,var(--accent),var(--gold))">Play Now <span id="dailyStreak"></span></button>
-      <div id="lobbyShareCard" class="hidden" style="margin-top:12px;padding:12px;border-radius:8px;background:var(--panel2);border:1px solid var(--line)">
-        <div style="font-weight:800" id="lobbyShareTitle"></div>
-        <div class="note" id="lobbyShareText" style="white-space:pre-line;margin-top:4px"></div>
-        <button class="sky" id="lobbyShareBtn" style="margin-top:10px;width:100%">Share Court</button>
-      </div>
     </div>
     <nav class="home-nav" aria-label="Taking Court sections">
       <button class="nav-card" id="gameModesBtn">
@@ -2655,12 +2650,11 @@ async function refreshLobbyCourt(){
   if(!done || !btn) return;
   try{
     const r=await api("court_daily",{client_id:clientId()});
-    if(!r.ok){ done.classList.add("hidden"); LOBBY_SHARE=null; renderCourtShare("lobbyShare", null); return; }
+    if(!r.ok){ done.classList.add("hidden"); return; }
     setStreak(r.streak);
     const beats=r.beats||{};
     if(beats.full_stack){
-      done.classList.remove("hidden"); done.className="banner win";
-      done.textContent="Full stack done today · streak safe";
+      done.classList.add("hidden");
       if(note) note.textContent="You finished Take and Challenge. Come back tomorrow.";
     } else if(beats.take || beats.challenge){
       done.classList.remove("hidden"); done.className="banner win";
@@ -2670,19 +2664,15 @@ async function refreshLobbyCourt(){
       done.classList.add("hidden");
       if(note) note.textContent="Lock today's three-item Take, then the Challenge. One streak.";
     }
-    const label = beats.full_stack ? "Review Court" : ((beats.take || beats.challenge) ? "Continue Court" : "Play Now");
+    const label = beats.full_stack ? "Review Your Daily" : ((beats.take || beats.challenge) ? "Continue Court" : "Play Now");
     btn.innerHTML = label + ' <span id="dailyStreak"></span>';
     renderStreak();
-    // #4: offer the server share card whenever any beat is done (Take-only / Challenge-only / full-stack).
-    LOBBY_SHARE = r.share||null;
-    renderCourtShare("lobbyShare", LOBBY_SHARE);
-  }catch(e){ done.classList.add("hidden"); LOBBY_SHARE=null; renderCourtShare("lobbyShare", null); }
+  }catch(e){ done.classList.add("hidden"); }
 }
 $("dailyBtn").onclick=()=>openDaily();
 $("pickupBtn") && ($("pickupBtn").onclick = ()=>openPartyHome());
 $("freeplayBtn") && ($("freeplayBtn").onclick = ()=>{ const p=$("freeplayPanel"); if(p) p.open = true; p?.scrollIntoView({behavior:"smooth",block:"nearest"}); });
 let COURT = { date:null, day:null, take:null, challenge:null, answers:{}, take_progress:null, takeFeedback:null, consensus:null, gate:null, beats:{}, share:null, challenge_attempt:null };
-let LOBBY_SHARE = null;
 let courtAutoTimer=null;
 let CREW_RETURN = null;   // set when Court is launched from a crew room
 let CURRENT_CREW = null;
@@ -2888,7 +2878,6 @@ $("courtConsensusRefresh").onclick=()=>openDaily();
 $("courtChallengeStart").onclick=()=>startCourtChallenge();
 $("courtSkipChallenge").onclick=()=>goHome();
 $("courtShareBtn").onclick=()=>shareCourt(COURT.share, $("courtShareBtn"));
-$("lobbyShareBtn") && ($("lobbyShareBtn").onclick=()=>shareCourt(LOBBY_SHARE || COURT.share, $("lobbyShareBtn")));
 $("courtTakeLock").onclick=async()=>{
   $("courtTakeErr").textContent="";
   const itemId=COURT.take_progress?.next_item_id;

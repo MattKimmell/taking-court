@@ -13,6 +13,11 @@ test("Home exposes the five-entry navigation shell without onboarding", () => {
     assert.doesNotMatch(html, new RegExp(`id=["']${removed}["']`));
 
   assert.doesNotMatch(html, /tc_seen/);
+  assert.doesNotMatch(html, /id=["']lobbyShareCard["']/);
+  assert.doesNotMatch(html, /Full stack done today · streak safe/);
+  assert.match(html, /beats\.full_stack \? "Review Your Daily"/);
+  assert.match(html, /id="courtShareCard"/);
+  assert.match(html, /renderCourtShare\("courtShare", COURT\.share\)/);
   assert.match(html, /class="pill hidden" id="modePill"/);
 });
 
@@ -39,5 +44,5 @@ test("navigation origins preserve the hub and legacy Tier contracts", () => {
 });
 
 test("UI release bumps the PWA cache", () => {
-  assert.match(worker, /const CACHE = "tc-v32"/);
+  assert.match(worker, /const CACHE = "tc-v33"/);
 });
