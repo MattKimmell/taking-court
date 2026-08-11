@@ -13,11 +13,20 @@ test("Challenges opens a three-choice entry screen", () => {
   assert.match(html, /const MODE_PILL_SCREENS = new Set\(\["share","preview","play","results","partyHost","partyPlay","partyRecap"\]\)/);
 });
 
-test("Browse is a dedicated screen containing every approved catalog item", () => {
+test("Browse is a dedicated screen containing approved catalog items", () => {
   assert.match(html, /id="challengeBrowse" class="card hidden"/);
-  assert.match(html, /function renderChallengeBrowse\(\)[\s\S]*NAME_CATALOG\?\.categories[\s\S]*c\.items\.map/);
+  assert.match(html, /function renderChallengeBrowse\(\)[\s\S]*NAME_CATALOG\?\.categories/);
   assert.match(html, /\$\("challengeBrowseBtn"\)\.onclick=openChallengeBrowse/);
   assert.match(games, /db\.from\("mp_challenge_catalog"\)[\s\S]*\.eq\("status", "approved"\)/);
+});
+
+test("Team Rosters browse team first, then All Players or a position group", () => {
+  assert.match(html, /class="teamgrid" aria-label="Team rosters"/);
+  assert.match(html, /function renderRosterTeamOptions\(section, category, team\)/);
+  for (const label of ["All Players", "Guards", "Forwards", "Centers"])
+    assert.match(html, new RegExp(`>${label}`));
+  assert.match(html, /api\("challenge_build",\{mode:"roster",team,target:8\}\)/);
+  assert.match(html, /data-id="\$\{it\.sheet_id\}" data-k="\$\{it\.kind\}"/);
 });
 
 test("Custom Games owns the existing filter builder and return path", () => {

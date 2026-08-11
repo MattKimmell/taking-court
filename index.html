@@ -192,6 +192,9 @@
   .teamgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:6px;margin-top:10px}
   .teampick{padding:8px 5px;font-size:12.5px;line-height:1.15;min-height:40px}
   .teampick.on{background:rgba(249,115,22,.18);border-color:var(--accent);color:var(--ink);font-weight:700}
+  .roster-position-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:10px}
+  .roster-position-grid button{min-height:48px}
+  .roster-position-grid button:disabled{opacity:.45;cursor:not-allowed}
   .rxn.add{opacity:.6}
   .tbtn.on{background:var(--accent);color:#0b1020}
   .banner{border-radius:12px;padding:16px;text-align:center;font-weight:700;font-size:20px}
@@ -704,21 +707,47 @@
     <div class="err" id="lbErr"></div>
   </div>
 
-  <!-- ===================== LISTS HOME ===================== -->
+  <!-- ===================== WHAT'S YOUR TAKE HUB ===================== -->
   <div id="listsHome" class="card hidden">
     <div class="head">
       <div style="font-weight:700;font-size:18px">📝 What's your take</div>
       <button class="ghost" id="listsHomeBack" style="flex:0 0 auto;padding:6px 12px">Game Modes</button>
     </div>
-    <div class="note">No right answer here. You pick who makes the cut — then see who else named them.</div>
-    <div id="listHero"></div>
-    <div class="row" style="margin-top:10px">
-      <button id="listSurprise">🎲 Surprise me — random list</button>
+    <div class="note">No right answer here. Pick a ready-made Take or build your own list.</div>
+    <div class="challenge-choice-pills" aria-label="What's Your Take choices">
+      <button id="listSurprise">Surprise Me ⚡</button>
+      <button class="ghost" id="listBrowseBtn">Browse</button>
+      <button class="ghost" id="listCustomBtn">Custom Games</button>
     </div>
-    <div style="font-weight:700;margin-top:16px">Browse by</div>
-    <div id="listCats" class="catgrid"></div>
-    <details style="margin-top:14px">
-      <summary>Start my own list</summary>
+    <div class="err" id="listsHubErr"></div>
+  </div>
+
+  <!-- ===================== WHAT'S YOUR TAKE BROWSE ===================== -->
+  <div id="listBrowseHome" class="card hidden">
+    <div class="head">
+      <div>
+        <div class="section-kicker">What's Your Take?</div>
+        <div style="font-weight:800;font-size:20px;margin-top:3px">Browse</div>
+      </div>
+      <button class="ghost" id="listBrowseBack" style="flex:0 0 auto;padding:6px 12px">Back</button>
+    </div>
+    <div class="note">Every approved public list, grouped by what you're picking.</div>
+    <div id="listBrowseList" style="margin-top:12px"></div>
+    <div class="err" id="listBrowseErr"></div>
+  </div>
+
+  <!-- ===================== WHAT'S YOUR TAKE CUSTOM ===================== -->
+  <div id="listCustom" class="card hidden">
+    <div class="head">
+      <div>
+        <div class="section-kicker">What's Your Take?</div>
+        <div style="font-weight:800;font-size:20px;margin-top:3px">Custom Games</div>
+      </div>
+      <button class="ghost" id="listCustomBack" style="flex:0 0 auto;padding:6px 12px">Back</button>
+    </div>
+    <div class="note">Create a list for your group, or reopen one from a shared link.</div>
+    <div style="margin-top:14px">
+      <div style="font-weight:700">Start my own list</div>
       <div class="row" style="margin-top:8px">
         <div><label>New list title</label>
           <input id="listTitle" placeholder="e.g. Favorite Spurs players · Greatest Finals moments" /></div>
@@ -737,10 +766,9 @@
         <label class="pill" style="flex:0 0 auto;cursor:pointer"><input type="checkbox" id="listDiscoverable" style="width:auto;margin-right:6px" /> Submit to Browse</label>
       </div>
       <div class="note" style="margin-top:6px">Your list is private to its share link. Submitting sends it for review — it shows up in Browse only once approved.</div>
-    </details>
-    <details style="margin-top:8px"><summary>Open a shared list link</summary>
+    </div>
+    <div style="font-weight:700;margin-top:18px">Open a shared list link</div>
       <div class="linkbox"><input id="listJoin" placeholder="Paste list link or token" /><button class="sky" id="listJoinBtn" style="flex:0 0 auto">Open</button></div>
-    </details>
     <div style="font-weight:700;margin-top:16px">My lists</div>
     <div id="myLists" class="note">Loading…</div>
     <div class="err" id="listsErr"></div>
@@ -789,7 +817,7 @@
   <div id="listCompare" class="card hidden">
     <div class="head">
       <div style="font-weight:700;font-size:17px" id="listComparePrompt"></div>
-      <button class="ghost" id="listCompareBack" style="flex:0 0 auto;padding:6px 12px">Game Modes</button>
+      <button class="ghost" id="listCompareBack" style="flex:0 0 auto;padding:6px 12px">Back</button>
     </div>
     <div id="listReveal"></div>
     <div style="font-weight:700;margin-top:8px">Consensus <span class="note" id="listCompareCount"></span></div>
@@ -1212,7 +1240,7 @@ let timerInt=null;
 
 const MODE_PILL_SCREENS = new Set(["share","preview","play","results","partyHost","partyPlay","partyRecap"]);
 function show(id){
-  ["lobby","gameModesHome","multiplayerHome","courtTake","courtTakeFeedback","courtConsensus","takeBuild","playerTake","nameHome","challengeBrowse","challengeCustom","catPage","share","preview","play","results","leaderboard","listsHome","listBuild","listCompare","tierHome","tierBoard","tierCompare","tierBrowse","partyHost","partyPlay","partyRecap","mine","crewHome","crewRoom"]
+  ["lobby","gameModesHome","multiplayerHome","courtTake","courtTakeFeedback","courtConsensus","takeBuild","playerTake","nameHome","challengeBrowse","challengeCustom","catPage","share","preview","play","results","leaderboard","listsHome","listBrowseHome","listCustom","listBuild","listCompare","tierHome","tierBoard","tierCompare","tierBrowse","partyHost","partyPlay","partyRecap","mine","crewHome","crewRoom"]
     .forEach(s=>$(s).classList.toggle("hidden", s!==id));
   $("modePill").classList.toggle("hidden", !MODE_PILL_SCREENS.has(id));
 }
@@ -1233,7 +1261,7 @@ function fmt(ms){ if(ms==null) return "—"; const s=ms/1000; const m=Math.floor
 let SHEETS = [];
 let CHALLENGE_RETURN_SCREEN = "gameModesHome";
 let LINK_RETURN_SCREEN = "lobby";
-const LINK_ERROR_IDS = { lobby:"lobbyErr", multiplayerHome:"multiplayerErr", listsHome:"listsErr", tierHome:"tierErr", mine:"mineErr" };
+const LINK_ERROR_IDS = { lobby:"lobbyErr", multiplayerHome:"multiplayerErr", listsHome:"listsHubErr", listBrowseHome:"listBrowseErr", listCustom:"listsErr", tierHome:"tierErr", mine:"mineErr" };
 function showLinkError(message, fallback="lobby"){
   const screen = LINK_ERROR_IDS[LINK_RETURN_SCREEN] ? LINK_RETURN_SCREEN : fallback;
   show(screen);
@@ -1301,12 +1329,58 @@ async function openChallengeBrowse(){
 }
 function renderChallengeBrowse(){
   const box=$("challengeBrowseList"), cats=NAME_CATALOG?.categories||[];
-  box.innerHTML = cats.map(c=>`<section style="margin-top:18px">
-    <div style="font-weight:800;font-size:16px">${c.icon||"🎯"} ${esc(c.label)}</div>
-    ${c.blurb?`<div class="note" style="margin-top:3px">${esc(c.blurb)}</div>`:""}
-    ${c.items.map(it=>itemRow(c.icon||"🎯", {...it,title:it.group_label?`${it.group_label} · ${it.title}`:it.title})).join("")}
-  </section>`).join("") || `<div class="banner wait">No public preset Challenges yet.</div>`;
+  box.innerHTML = cats.map(c=>c.slug==="team-rosters"
+    ? `<section class="team-roster-browser" style="margin-top:18px">
+        <div style="font-weight:800;font-size:16px">${c.icon||"🏟️"} ${esc(c.label)}</div>
+        ${c.blurb?`<div class="note" style="margin-top:3px">${esc(c.blurb)}</div>`:""}
+        <div class="teamgrid" aria-label="Team rosters">${(c.groups||[]).map(g=>
+          `<button class="ghost teampick" data-roster-team="${esc(g.key)}">${esc(g.label)}</button>`).join("")}</div>
+        <div class="roster-team-options" style="margin-top:12px"></div>
+      </section>`
+    : `<section style="margin-top:18px">
+        <div style="font-weight:800;font-size:16px">${c.icon||"🎯"} ${esc(c.label)}</div>
+        ${c.blurb?`<div class="note" style="margin-top:3px">${esc(c.blurb)}</div>`:""}
+        ${c.items.map(it=>itemRow(c.icon||"🎯", it)).join("")}
+      </section>`).join("") || `<div class="banner wait">No public preset Challenges yet.</div>`;
+  box.querySelectorAll(".team-roster-browser").forEach(section=>{
+    const c=cats.find(x=>x.slug==="team-rosters");
+    section.querySelectorAll("[data-roster-team]").forEach(btn=>btn.onclick=()=>{
+      section.querySelectorAll("[data-roster-team]").forEach(b=>b.classList.toggle("on", b===btn));
+      renderRosterTeamOptions(section, c, btn.dataset.rosterTeam);
+    });
+  });
   bindItemRows(box);
+}
+function rosterPosition(item){
+  const t=String(item?.title||"").toLowerCase();
+  if(t.includes("guard")) return "G";
+  if(t.includes("forward")) return "F";
+  if(t.includes("center")) return "C";
+  return "";
+}
+function renderRosterTeamOptions(section, category, team){
+  const target=section.querySelector(".roster-team-options");
+  const group=(category.groups||[]).find(g=>g.key===team);
+  const items=(category.items||[]).filter(it=>it.group_key===team);
+  const byPosition=Object.fromEntries(items.map(it=>[rosterPosition(it),it]));
+  target.innerHTML=`<div style="font-weight:800">${esc(group?.label||team)}</div>
+    <div class="note">Choose the full roster pool or one position group.</div>
+    <div class="roster-position-grid">
+      <button data-roster-all="${esc(team)}">All Players</button>
+      ${[["G","Guards"],["F","Forwards"],["C","Centers"]].map(([pos,label])=>{
+        const it=byPosition[pos];
+        return `<button class="ghost" ${it?`data-id="${it.sheet_id}" data-k="${it.kind}"`:`disabled title="Not enough answers for this preset"`}>${label}${it?"":" · unavailable"}</button>`;
+      }).join("")}
+    </div>`;
+  target.querySelector("[data-roster-all]").onclick=()=>playAllTeamRoster(team);
+  bindItemRows(target);
+  target.scrollIntoView({behavior:"smooth",block:"nearest"});
+}
+async function playAllTeamRoster(team){
+  const box=$("challengeBrowseErr"); box.textContent="";
+  const r=await api("challenge_build",{mode:"roster",team,target:8});
+  if(!r.ok || !r.built){ box.textContent=r.error||"This team does not have enough roster data for a Challenge."; return; }
+  createChallenge(r.sheet_id,"roster",true);
 }
 function openChallengeCustom(){
   CHALLENGE_RETURN_SCREEN="challengeCustom";
@@ -1572,7 +1646,7 @@ $("joinBtn").onclick = ()=>{
   const tm=v.match(/[?&]take=([^&\s]+)/);
   if(tm){ openPlayerTake(decodeURIComponent(tm[1])); return; }
   const lm=v.match(/[?&]list=([^&\s]+)/);
-  if(lm){ openListTopic(decodeURIComponent(lm[1]),"build"); return; }
+  if(lm){ LIST_RETURN_SCREEN="multiplayerHome"; openListTopic(decodeURIComponent(lm[1]),"build"); return; }
   const tr=v.match(/[?&]tier=([^&\s]+)/);
   if(tr){ TIER_RETURN_SCREEN="multiplayerHome"; openTierTopic(decodeURIComponent(tr[1]),"board"); return; }
   const m=v.match(/[?&]ch=([^&\s]+)/); const token=m?decodeURIComponent(m[1]):v;
@@ -1944,6 +2018,7 @@ $("lbBots").onchange = showLeaderboard;
 // ------------------------------------------------------------------ lists (subjective)
 let LIST = { topic_id:null, share_token:null, prompt:"", ranked:true, max_items:10, entry_type:"player", items:[] };
 let LIST_POOL = []; let LIST_POOL_TYPE = null;
+let LIST_RETURN_SCREEN = "listsHome";
 const ENTRY_ICON = { player:"🏀", team:"🏟️", team_season:"📅", coach:"📋", moment:"✨" };
 // team_season's placeholder carries an example because the YEAR is the whole
 // point of the type — "Bulls" answers a different, duller question than
@@ -1973,10 +2048,26 @@ function wireSubmit(box, action, errId, reload){
 
 $("modeLists").onclick = openListsHome;
 $("listsHomeBack").onclick = ()=>show("gameModesHome");
+$("listBrowseBack").onclick = ()=>show("listsHome");
+$("listCustomBack").onclick = ()=>show("listsHome");
 async function openListsHome(){
   LINK_RETURN_SCREEN="listsHome";
-  show("listsHome"); $("listsErr").textContent="";
-  await Promise.all([loadListBrowse(), loadMyLists()]);
+  LIST_RETURN_SCREEN="listsHome";
+  show("listsHome"); $("listsHubErr").textContent="";
+  if(!LIST_BROWSE) await loadListBrowse();
+}
+async function openListBrowseHome(){
+  LINK_RETURN_SCREEN="listBrowseHome";
+  LIST_RETURN_SCREEN="listBrowseHome";
+  show("listBrowseHome"); $("listBrowseErr").textContent="";
+  if(!LIST_BROWSE && !await loadListBrowse()) return;
+  renderListBrowse(); window.scrollTo(0,0);
+}
+async function openListCustom(){
+  LINK_RETURN_SCREEN="listCustom";
+  LIST_RETURN_SCREEN="listCustom";
+  show("listCustom"); $("listsErr").textContent="";
+  await loadMyLists(); window.scrollTo(0,0);
 }
 async function loadMyLists(){
   const box=$("myLists"); box.innerHTML="Loading…";
@@ -1987,7 +2078,7 @@ async function loadMyLists(){
      <div class="n">${ENTRY_ICON[l.entry_type]||"🏀"}</div>
      <div class="name">${l.prompt}</div><div class="ctx">${l.item_count} pick${l.item_count===1?"":"s"}${reviewTag(l.review_status)?" · "+reviewTag(l.review_status):""}</div>
      ${submitBtn(l)}</div>`).join("");
-  Array.from(box.children).forEach(el=>el.onclick=()=>openListTopic(el.dataset.t,"build"));
+  Array.from(box.children).forEach(el=>el.onclick=()=>{ LIST_RETURN_SCREEN="listCustom"; openListTopic(el.dataset.t,"build"); });
   wireSubmit(box, "list_submit", "listsErr", loadMyLists);
 }
 $("listCreateBtn").onclick = async ()=>{
@@ -1996,10 +2087,11 @@ $("listCreateBtn").onclick = async ()=>{
   const r=await api("list_create",{ prompt, ranked:$("listRanked").checked, entry_type:$("listEntryType").value,
     submit_public:$("listDiscoverable").checked, client_id:clientId(), label:$("playerName").value.trim()||"You" });
   if(!r.ok){ $("listsErr").textContent="Error: "+r.error; return; }
+  LIST_RETURN_SCREEN="listCustom";
   LIST={ topic_id:r.topic_id, share_token:r.share_token, prompt:r.prompt, ranked:r.ranked, max_items:r.max_items, entry_type:r.entry_type||"player", review_status:r.review_status, items:[] };
   $("listTitle").value=""; openBuilder();
 };
-$("listJoinBtn").onclick = ()=>{ let v=$("listJoin").value.trim(); if(!v) return; LINK_RETURN_SCREEN="listsHome"; const m=v.match(/[?&]list=([^&\s]+)/); openListTopic(m?m[1]:v,"build"); };
+$("listJoinBtn").onclick = ()=>{ let v=$("listJoin").value.trim(); if(!v) return; LINK_RETURN_SCREEN="listCustom"; LIST_RETURN_SCREEN="listCustom"; const m=v.match(/[?&]list=([^&\s]+)/); openListTopic(m?m[1]:v,"build"); };
 async function openListTopic(token, dest){
   const r=await api("list_open",{ share_token:token, client_id:clientId() });
   if(!r.ok){ showLinkError("Error: "+r.error, "listsHome"); return; }
@@ -2074,7 +2166,12 @@ function renderListItems(){
   Array.from(box.querySelectorAll("button")).forEach(b=>b.onclick=()=>{ const i=+b.dataset.i,a=b.dataset.a; if(a==="up")moveItem(i,-1); else if(a==="down")moveItem(i,1); else removeItem(i); });
 }
 async function saveList(){ return api("list_save",{ topic_id:LIST.topic_id, items:LIST.items, client_id:clientId(), label:ensureName() }); }
-$("listBuildBack").onclick=async()=>{ await autosaveFlush("listSaveState"); openListsHome(); };
+function returnFromList(){
+  if(LIST_RETURN_SCREEN==="listCustom"){ openListCustom(); return; }
+  if(LIST_RETURN_SCREEN==="listBrowseHome"){ show("listBrowseHome"); return; }
+  show(LIST_RETURN_SCREEN||"listsHome");
+}
+$("listBuildBack").onclick=async()=>{ await autosaveFlush("listSaveState"); returnFromList(); };
 $("listCompareBtn").onclick=async()=>{ await autosaveFlush("listSaveState"); showListCompare(); };
 async function showListCompare(){
   show("listCompare"); $("listCompareErr").textContent="";
@@ -2149,7 +2246,7 @@ function renderListReveal(r){
       : `${overlap} of your ${mine.size} picks showed up on someone else's list.`}</div></div>`;
   box.innerHTML=h;
 }
-$("listCompareBack").onclick=()=>show("gameModesHome");
+$("listCompareBack").onclick=returnFromList;
 $("listCompareRefresh").onclick=showListCompare;
 $("listMyEntry").onclick=openBuilder;
 $("listShareBtn2").onclick=()=>{
@@ -2162,11 +2259,9 @@ $("listCompareCopyBtn").onclick=()=>{
   $("listCompareCopyBtn").textContent="Copied!"; setTimeout(()=>$("listCompareCopyBtn").textContent="Copy",1200);
 };
 
-// browse public topics
-// Public lists, browsed the same way as Name It: a hero, a random pick, then
-// category cards into the shared category page. Categories are entry_type,
-// which is the axis the data already carries — no new schema, and it is the
-// distinction that actually matters when choosing a list to fill in.
+// Browse public topics on one screen, grouped by entry_type. That is the axis
+// the data already carries, so the matching Challenge/Take navigation pattern
+// needs no new schema or publication state.
 const ENTRY_CATS = [
   { key:"player", icon:"🏀",  label:"Players",  blurb:"Who makes your cut." },
   { key:"team_season", icon:"📅", label:"Teams by year", blurb:"96 Bulls, not just Bulls." },
@@ -2179,60 +2274,48 @@ let LIST_BROWSE = null;
 // ("player"), which reads like a bug in a hero.
 const catLabel = k => (ENTRY_CATS.find(c=>c.key===k)||{}).label || k;
 async function loadListBrowse(){
-  const hero=$("listHero"), cats=$("listCats");
-  hero.innerHTML=`<div class="note">Loading…</div>`; cats.innerHTML="";
   const r=await api("list_browse",{});
-  if(!r.ok){ hero.innerHTML=""; $("listsErr").textContent="Could not load public lists."; return; }
-  LIST_BROWSE=r.topics||[];
-  // No editorial `featured` flag on list topics, so the hero is the most-played
-  // public list — list_browse already sorts by author_count. Add a featured
-  // column if this ever needs to be a curator's choice rather than a popularity
-  // read.
-  const top=LIST_BROWSE[0];
-  if(top){
-    hero.innerHTML=`<div class="hero">
-      <div class="t">${esc(top.prompt)}</div>
-      <div class="b">${ENTRY_ICON[top.entry_type]||"🏀"} ${esc(catLabel(top.entry_type))}${top.ranked?" · ranked":""}</div>
-      <div class="g">${top.author_count} list${top.author_count===1?"":"s"} so far — add yours</div></div>`;
-    hero.firstElementChild.onclick=()=>openPublicList(top.share_token);
-  } else {
-    hero.innerHTML=`<div class="banner wait" style="margin-top:10px">No public lists yet — start one below and submit it to Browse.</div>`;
+  if(!r.ok){
+    const err=$("listBrowseHome").classList.contains("hidden") ? $("listsHubErr") : $("listBrowseErr");
+    err.textContent="Could not load public lists."; return false;
   }
-  // Every category is shown even when empty, so the shape of the catalogue is
-  // visible and obviously fillable. Empty ones are muted and their page says so
-  // rather than being a silent dead end.
-  cats.innerHTML=ENTRY_CATS.map(c=>{
-    const n=LIST_BROWSE.filter(t=>(t.entry_type||"player")===c.key).length;
-    return catCard(c.icon, c.label, n?`${n} list${n===1?"":"s"}`:"none yet",
-                   `data-ek="${c.key}"${n?"":' class-empty="1"'}`);
-  }).join("");
-  cats.querySelectorAll("[data-ek]").forEach(el=>{
-    if(el.getAttribute("class-empty")) el.classList.add("empty");
-    el.onclick=()=>openListCategory(el.dataset.ek);
-  });
+  LIST_BROWSE=r.topics||[];
+  return true;
 }
-function openListCategory(key){
-  const c=ENTRY_CATS.find(x=>x.key===key);
-  const items=LIST_BROWSE.filter(t=>(t.entry_type||"player")===key);
-  const body = items.length
-    ? items.map(t=>`<div class="slot" style="cursor:pointer;margin-top:8px" data-t="${t.share_token}">
+function renderListBrowse(){
+  const box=$("listBrowseList");
+  if(!LIST_BROWSE?.length){
+    box.innerHTML=`<div class="banner wait">No public lists yet. Create one in Custom Games and submit it to Browse.</div>`;
+    return;
+  }
+  box.innerHTML=ENTRY_CATS.map(c=>{
+    const items=LIST_BROWSE.filter(t=>(t.entry_type||"player")===c.key);
+    if(!items.length) return "";
+    return `<section style="margin-top:18px">
+      <div style="font-weight:800;font-size:16px">${c.icon} ${esc(c.label)}</div>
+      <div class="note" style="margin-top:3px">${esc(c.blurb)}</div>
+      ${items.map(t=>`<div class="slot" style="cursor:pointer;margin-top:8px" data-list-token="${esc(t.share_token)}">
         <div class="n">${c.icon}</div>
         <div class="name">${esc(t.prompt)}<div class="note" style="font-weight:400">${t.ranked?"Ranked":"Unordered"} · ${t.author_count} list${t.author_count===1?"":"s"}</div></div>
-        <div class="ctx">→</div></div>`).join("")
-    : `<div class="banner wait" style="margin-top:10px">Nothing public here yet. Start one from What's your take and tick “Submit to Browse”.</div>`;
-  openCatPage(`${c.icon} ${c.label}`, c.blurb, body, "listsHome", root=>{
-    root.querySelectorAll(".slot[data-t]").forEach(el=>el.onclick=()=>openPublicList(el.dataset.t));
-  });
+        <div class="ctx">→</div></div>`).join("")}
+    </section>`;
+  }).join("");
+  box.querySelectorAll("[data-list-token]").forEach(el=>el.onclick=()=>openPublicList(el.dataset.listToken,"listBrowseHome"));
 }
 // Rank first: landing on the consensus spoils the set and leaves you no stake in
 // it. openListTopic jumps straight to compare if you already have an entry.
-function openPublicList(token){
-  window.FROM_BROWSE = true;
+function openPublicList(token, returnScreen="listBrowseHome"){
+  LIST_RETURN_SCREEN = returnScreen;
+  LINK_RETURN_SCREEN = returnScreen;
   openListTopic(token, "build");
 }
-$("listSurprise").onclick=()=>{
-  if(!LIST_BROWSE || !LIST_BROWSE.length){ $("listsErr").textContent="No public lists yet."; return; }
-  openPublicList(LIST_BROWSE[Math.floor(Math.random()*LIST_BROWSE.length)].share_token);
+$("listBrowseBtn").onclick=openListBrowseHome;
+$("listCustomBtn").onclick=openListCustom;
+$("listSurprise").onclick=async()=>{
+  $("listsHubErr").textContent="";
+  if(!LIST_BROWSE && !await loadListBrowse()) return;
+  if(!LIST_BROWSE.length){ $("listsHubErr").textContent="No public lists yet."; return; }
+  openPublicList(LIST_BROWSE[Math.floor(Math.random()*LIST_BROWSE.length)].share_token,"listsHome");
 };
 
 // ------------------------------------------------------------------ tier lists
@@ -3174,7 +3257,7 @@ function renderMine(){
     if(r.kind==="tier"){
       TIER_RETURN_SCREEN="mine";
       openTierTopic(r.share_token, r.started ? "compare" : "board");
-    } else openListTopic(r.share_token, r.started ? "compare" : "build");
+    } else { LIST_RETURN_SCREEN="mine"; openListTopic(r.share_token, r.started ? "compare" : "build"); }
   });
 }
 
@@ -4201,7 +4284,7 @@ else if(urlTier){
   }
   openTierTopic(urlTier,"board");
 }
-else if(urlList){ LINK_RETURN_SCREEN="lobby"; $("playerName").value = store.get("mp_name",""); openListTopic(urlList,"build"); }
+else if(urlList){ LINK_RETURN_SCREEN="lobby"; LIST_RETURN_SCREEN="lobby"; $("playerName").value = store.get("mp_name",""); openListTopic(urlList,"build"); }
 else if(urlToken){ LINK_RETURN_SCREEN="lobby"; CHALLENGE_RETURN_SCREEN="lobby"; $("playerName").value = store.get("mp_name",""); openChallenge(urlToken); }
 $("playerName").addEventListener("change",e=>store.set("mp_name",e.target.value));
 $("playerName").value = store.get("mp_name","");

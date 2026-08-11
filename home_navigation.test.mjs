@@ -39,5 +39,5 @@ test("navigation origins preserve the hub and legacy Tier contracts", () => {
 });
 
 test("UI release bumps the PWA cache", () => {
-  assert.match(worker, /const CACHE = "tc-v31"/);
+  assert.match(worker, /const CACHE = "tc-v32"/);
 });
