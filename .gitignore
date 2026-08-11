@@ -9,6 +9,7 @@ node_modules/
 
 # local-only project notes and research (never published)
 CLAUDE.local.md
+CONTEXT.md
 82_0_research/
 
 # Agent skills setup (Matt Pocock flow) — local only; repo root is the public site

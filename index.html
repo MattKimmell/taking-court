@@ -212,6 +212,21 @@
   .err{color:#fca5a5;font-size:13px;margin-top:8px;min-height:18px}
   details{margin-top:12px} summary{cursor:pointer;color:var(--muted);font-size:12px}
   .cfg input{font-size:12px}
+  button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible,.slot:focus-visible{
+    outline:3px solid var(--accent2);outline-offset:3px}
+  .home-hero{padding:18px;border-radius:14px;background:linear-gradient(135deg,rgba(249,115,22,.14),rgba(251,191,36,.06));
+    border:1px solid rgba(249,115,22,.72)}
+  .home-hero-title{font-size:22px;font-weight:900;line-height:1.15;margin-top:7px}
+  .home-nav,.nav-stack{display:grid;grid-template-columns:1fr;gap:10px;margin-top:12px}
+  .nav-card{width:100%;min-height:68px;padding:13px 15px;text-align:left;color:var(--ink);
+    background:var(--panel2);border:1px solid var(--line);display:flex;flex-direction:column;
+    align-items:flex-start;justify-content:center;gap:3px}
+  .nav-card:hover,.nav-card:active{border-color:var(--accent);background:rgba(249,115,22,.09)}
+  .nav-card-title{font-size:16px;font-weight:800;line-height:1.2}
+  .nav-card-copy{font-size:12px;font-weight:500;line-height:1.35;color:var(--muted)}
+  .section-kicker{font-size:11px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;color:var(--accent)}
+  .join-panel{margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
+  .home-hero button,.home-nav button,.nav-stack button,.head button,.linkbox button{min-height:44px}
   /* --- mobile-first / PWA polish --- */
   .wrap{padding-left:max(18px,env(safe-area-inset-left));padding-right:max(18px,env(safe-area-inset-right));
     padding-bottom:max(60px,calc(40px + env(safe-area-inset-bottom)))}
@@ -224,101 +239,103 @@
     .chip{width:100%;justify-content:space-between}
     .tbtn{min-height:40px;min-width:40px;font-size:15px}
   }
-  /* --- first-run welcome --- */
-  #welcome{position:fixed;inset:0;z-index:100;display:none;flex-direction:column;justify-content:center;
-    align-items:center;text-align:center;background:radial-gradient(1200px 600px at 50% -10%,#182140,var(--bg));
-    padding:32px max(20px,env(safe-area-inset-left)) calc(32px + env(safe-area-inset-bottom))}
-  #welcome.show{display:flex}
-  #welcome .logo{width:92px;height:92px;border-radius:22px;margin-bottom:8px;box-shadow:0 12px 34px rgba(0,0,0,.4)}
-  #welcome h2{font-size:30px;margin:0;letter-spacing:.3px}
-  #welcome h2 .b{color:var(--accent)}
-  #welcome p{color:var(--muted);max-width:340px;font-size:15px;line-height:1.5;margin:8px 0 2px}
-  #welcome .steps{display:flex;gap:12px;margin:16px 0 22px;flex-wrap:wrap;justify-content:center;max-width:380px}
-  #welcome .step{flex:1 1 100px;min-width:96px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 8px}
-  #welcome .step .e{font-size:22px}
-  #welcome .step .t{font-size:12px;color:var(--muted);margin-top:5px}
-  #welcome .cta{width:100%;max-width:340px;font-size:17px;padding:15px;background:linear-gradient(90deg,var(--accent),var(--gold))}
-  #welcome .skip{margin-top:12px;background:transparent;color:var(--muted);border:none;font-size:13px}
 </style>
 </head>
 <body>
-<div id="welcome">
-  <img class="logo" src="icons/icon-192.png" alt="Taking Court" />
-  <h2>Taking <span class="b">Court</span></h2>
-  <p>Lock three hoops takes, see the room, and keep one Daily Court streak.</p>
-  <div class="steps">
-    <div class="step"><div class="e">🎲</div><div class="t">Get today's Take</div></div>
-    <div class="step"><div class="e">🪜</div><div class="t">Rank and pick</div></div>
-    <div class="step"><div class="e">🔥</div><div class="t">See the room</div></div>
-  </div>
-  <button class="cta" id="welcomePlay">Play Now</button>
-  <button class="skip" id="welcomeSkip">Just looking around →</button>
-</div>
 <div class="wrap">
   <div class="head">
     <div>
       <h1>Taking <span class="b">Court</span></h1>
       <div class="sub">Rank it. Defend it. Settle it with the group.</div>
     </div>
-    <div class="pill" id="modePill">duel</div>
+    <div class="pill hidden" id="modePill">duel</div>
   </div>
 
   <!-- ===================== LOBBY ===================== -->
   <div id="lobby" class="card">
-    <div class="pill" style="display:inline-block;margin-bottom:8px">Daily Court</div>
-    <div style="font-weight:800;font-size:18px;margin-bottom:4px">Today's ritual</div>
-    <div class="note" id="lobbyCourtNote" style="margin-bottom:12px">Lock today's three-item Take, then the Challenge. One streak.</div>
-    <button id="dailyBtn" style="width:100%;font-size:16px;padding:14px;margin-bottom:10px;background:linear-gradient(90deg,var(--accent),var(--gold))">Play Now <span id="dailyStreak"></span></button>
-    <div id="lobbyDoneLine" class="banner win hidden" style="margin-bottom:10px"></div>
-    <div id="lobbyShareCard" class="hidden" style="margin-bottom:10px;padding:12px;border-radius:8px;background:var(--panel2);border:1px solid var(--line)">
-      <div style="font-weight:800" id="lobbyShareTitle"></div>
-      <div class="note" id="lobbyShareText" style="white-space:pre-line;margin-top:4px"></div>
-      <button class="sky" id="lobbyShareBtn" style="margin-top:10px;width:100%">Share Court</button>
+    <div class="home-hero">
+      <div class="section-kicker">Daily Court</div>
+      <div class="home-hero-title">Play Now</div>
+      <div class="note" id="lobbyCourtNote">Lock today's three-item Take, then the Challenge. One streak.</div>
+      <div id="lobbyDoneLine" class="banner win hidden" style="margin-top:12px"></div>
+      <button id="dailyBtn" style="width:100%;font-size:16px;padding:14px;margin-top:14px;background:linear-gradient(90deg,var(--accent),var(--gold))">Play Now <span id="dailyStreak"></span></button>
+      <div id="lobbyShareCard" class="hidden" style="margin-top:12px;padding:12px;border-radius:8px;background:var(--panel2);border:1px solid var(--line)">
+        <div style="font-weight:800" id="lobbyShareTitle"></div>
+        <div class="note" id="lobbyShareText" style="white-space:pre-line;margin-top:4px"></div>
+        <button class="sky" id="lobbyShareBtn" style="margin-top:10px;width:100%">Share Court</button>
+      </div>
     </div>
-    <div class="row" style="margin-top:4px">
-      <button class="ghost" id="pickupBtn" style="flex:1">🏀 Pickup</button>
-      <button class="ghost" id="crewBtn" style="flex:1">👥 Crew</button>
-    </div>
-    <div class="note" style="margin-top:6px;font-size:12px">Pickup is live same-room play — outside Daily Court streak.</div>
-    <div class="row" style="margin-top:8px">
-      <button class="ghost" id="takeCreateBtn" style="flex:1">Create Take</button>
-      <button class="ghost" id="freeplayBtn" style="flex:1">Freeplay</button>
-    </div>
+    <nav class="home-nav" aria-label="Taking Court sections">
+      <button class="nav-card" id="gameModesBtn">
+        <span class="nav-card-title">Game Modes</span>
+        <span class="nav-card-copy">Challenges and custom lists</span>
+      </button>
+      <button class="nav-card" id="multiplayerBtn">
+        <span class="nav-card-title">Multiplayer</span>
+        <span class="nav-card-copy">Pickup, Crew, or join with a link</span>
+      </button>
+      <button class="nav-card" id="lbBtn">
+        <span class="nav-card-title">Leaderboard</span>
+        <span class="nav-card-copy">See the fastest finished Challenges</span>
+      </button>
+      <button class="nav-card" id="mineBtn">
+        <span class="nav-card-title">My Stuff</span>
+        <span class="nav-card-copy">Reopen your lists and saved boards</span>
+      </button>
+    </nav>
     <div class="err" id="lobbyErr"></div>
+  </div>
 
-    <details style="margin-top:12px">
-      <summary>Join with a link or token</summary>
+  <!-- ===================== GAME MODES ===================== -->
+  <div id="gameModesHome" class="card hidden">
+    <div class="head">
+      <div>
+        <div class="section-kicker">Freeplay</div>
+        <div style="font-weight:800;font-size:20px;margin-top:3px">Game Modes</div>
+      </div>
+      <button class="ghost" id="gameModesBack" style="flex:0 0 auto;padding:6px 12px">Home</button>
+    </div>
+    <div class="note">Play outside today's Court. These choices do not affect the Daily streak.</div>
+    <div class="nav-stack">
+      <button class="nav-card" id="modeNameIt">
+        <span class="nav-card-title">Challenges</span>
+        <span class="nav-card-copy">Top 8 and recall freeplay with right answers</span>
+      </button>
+      <button class="nav-card" id="modeLists">
+        <span class="nav-card-title">What's Your Take?</span>
+        <span class="nav-card-copy">Build and compare custom lists</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ===================== MULTIPLAYER ===================== -->
+  <div id="multiplayerHome" class="card hidden">
+    <div class="head">
+      <div>
+        <div class="section-kicker">Play together</div>
+        <div style="font-weight:800;font-size:20px;margin-top:3px">Multiplayer</div>
+      </div>
+      <button class="ghost" id="multiplayerBack" style="flex:0 0 auto;padding:6px 12px">Home</button>
+    </div>
+    <div class="nav-stack">
+      <button class="nav-card" id="pickupBtn">
+        <span class="nav-card-title">Pickup</span>
+        <span class="nav-card-copy">Live, same-room play on everyone's phone</span>
+      </button>
+      <button class="nav-card" id="crewBtn">
+        <span class="nav-card-title">Crew</span>
+        <span class="nav-card-copy">Your private room for today's Daily Court</span>
+      </button>
+    </div>
+    <div class="join-panel">
+      <div style="font-weight:700">Join with a link or token</div>
+      <div class="note">Paste any Taking Court share link or invite token.</div>
       <div class="linkbox">
-        <input id="joinToken" placeholder="Paste share link or token" />
+        <input id="joinToken" placeholder="Paste share link or token" aria-label="Share link or token" />
         <button class="sky" id="joinBtn" style="flex:0 0 auto">Open</button>
       </div>
-    </details>
-
-    <details id="freeplayPanel" style="margin-top:8px">
-      <summary>More freeplay</summary>
-      <div class="note" style="margin:8px 0">Quiet entries — not part of Daily Court.</div>
-      <div class="slots">
-        <div class="slot" id="modeNameIt" style="cursor:pointer">
-          <div class="n">🎯</div>
-          <div class="name">Top 8 / recall<div class="note" style="font-weight:400">Freeplay only · not Daily Court</div></div>
-        </div>
-        <!-- Tier Lists kept available under freeplay (not a home peer). Hidden-from-lobby
-             product intent from main is preserved: not a primary shelf tile. -->
-        <div class="slot" id="modeTiers" style="cursor:pointer">
-          <div class="n">🪜</div>
-          <div class="name">Tier boards<div class="note" style="font-weight:400">Legacy freeplay · not a home mode</div></div>
-        </div>
-        <div class="slot" id="modeLists" style="cursor:pointer">
-          <div class="n">📝</div>
-          <div class="name">Custom lists<div class="note" style="font-weight:400">Legacy freeplay · not a home mode</div></div>
-        </div>
-      </div>
-      <div class="row" style="margin-top:8px">
-        <button class="ghost" id="mineBtn">🗂️ My stuff</button>
-        <button class="ghost" id="lbBtn">🏆 Leaderboard</button>
-      </div>
-    </details>
-
+    </div>
+    <div class="err" id="multiplayerErr"></div>
   </div>
 
   <!-- ===================== DAILY COURT TAKE ===================== -->
@@ -402,7 +419,7 @@
   <div id="nameHome" class="card hidden">
     <div class="head">
       <div style="font-weight:700;font-size:18px">🎯 Think you know ball?</div>
-      <button class="ghost" id="nameHomeBack" style="flex:0 0 auto;padding:6px 12px">Home</button>
+      <button class="ghost" id="nameHomeBack" style="flex:0 0 auto;padding:6px 12px">Game Modes</button>
     </div>
     <div class="note">There <em>is</em> a right answer here. Three strikes, clock running.</div>
     <div id="nameHero"></div>
@@ -632,7 +649,7 @@
   <div id="listsHome" class="card hidden">
     <div class="head">
       <div style="font-weight:700;font-size:18px">📝 What's your take</div>
-      <button class="ghost" id="listsHomeBack" style="flex:0 0 auto;padding:6px 12px">Home</button>
+      <button class="ghost" id="listsHomeBack" style="flex:0 0 auto;padding:6px 12px">Game Modes</button>
     </div>
     <div class="note">No right answer here. You pick who makes the cut — then see who else named them.</div>
     <div id="listHero"></div>
@@ -713,7 +730,7 @@
   <div id="listCompare" class="card hidden">
     <div class="head">
       <div style="font-weight:700;font-size:17px" id="listComparePrompt"></div>
-      <button class="ghost" id="listCompareBack" style="flex:0 0 auto;padding:6px 12px">Home</button>
+      <button class="ghost" id="listCompareBack" style="flex:0 0 auto;padding:6px 12px">Game Modes</button>
     </div>
     <div id="listReveal"></div>
     <div style="font-weight:700;margin-top:8px">Consensus <span class="note" id="listCompareCount"></span></div>
@@ -836,7 +853,7 @@
   <div id="mine" class="card hidden">
     <div class="head">
       <div style="font-weight:700;font-size:18px">🗂️ My takes</div>
-      <button class="ghost" id="mineBack" style="flex:0 0 auto;padding:6px 12px">Back</button>
+      <button class="ghost" id="mineBack" style="flex:0 0 auto;padding:6px 12px">Home</button>
     </div>
     <div class="row" style="margin-top:8px">
       <button class="ghost mine-f on" data-f="all" style="flex:0 0 auto">All</button>
@@ -851,7 +868,7 @@
   <div id="partyHost" class="card hidden">
     <div class="head">
       <div style="font-weight:700;font-size:18px">🏀 Pickup</div>
-      <button class="ghost" id="partyHostBack" style="flex:0 0 auto;padding:6px 12px">Back</button>
+      <button class="ghost" id="partyHostBack" style="flex:0 0 auto;padding:6px 12px">Multiplayer</button>
     </div>
     <div class="note">Everyone in the room plays together on their own phone. Pick a challenge, show the code, and shout names at each other. No accounts.</div>
 
@@ -1006,7 +1023,7 @@
   <div id="partyRecap" class="card hidden">
     <div class="head">
       <div style="font-weight:700;font-size:18px">🏀 Final tally</div>
-      <button class="ghost" id="partyRecapBack" style="flex:0 0 auto;padding:6px 12px">Home</button>
+      <button class="ghost" id="partyRecapBack" style="flex:0 0 auto;padding:6px 12px">Multiplayer</button>
     </div>
     <div id="partyRecapBody"></div>
     <div class="row" style="margin-top:14px">
@@ -1018,7 +1035,7 @@
   <div id="crewHome" class="card hidden">
     <div class="head">
       <div style="font-weight:700;font-size:18px">👥 Crews</div>
-      <button class="ghost" id="crewHomeBack" style="flex:0 0 auto;padding:6px 12px">Back</button>
+      <button class="ghost" id="crewHomeBack" style="flex:0 0 auto;padding:6px 12px">Multiplayer</button>
     </div>
     <div class="note">A crew is a private room that plays today's Daily together — you see each other's boards, streaks, and who's got the hottest take. Playing never needs an account; crews do.</div>
     <div id="crewAuth">
@@ -1134,7 +1151,12 @@ let ST = { challenge_id:null, share_token:null, attempt_id:null, attempt_token:n
            isCourtDaily:false, courtDate:null };
 let timerInt=null;
 
-function show(id){ ["lobby","courtTake","courtConsensus","takeBuild","playerTake","nameHome","catPage","share","preview","play","results","leaderboard","listsHome","listBuild","listCompare","tierHome","tierBoard","tierCompare","tierBrowse","partyHost","partyPlay","partyRecap","mine","crewHome","crewRoom"].forEach(s=>$(s).classList.toggle("hidden", s!==id)); }
+const MODE_PILL_SCREENS = new Set(["nameHome","catPage","share","preview","play","results","partyHost","partyPlay","partyRecap"]);
+function show(id){
+  ["lobby","gameModesHome","multiplayerHome","courtTake","courtConsensus","takeBuild","playerTake","nameHome","catPage","share","preview","play","results","leaderboard","listsHome","listBuild","listCompare","tierHome","tierBoard","tierCompare","tierBrowse","partyHost","partyPlay","partyRecap","mine","crewHome","crewRoom"]
+    .forEach(s=>$(s).classList.toggle("hidden", s!==id));
+  $("modePill").classList.toggle("hidden", !MODE_PILL_SCREENS.has(id));
+}
 // Challenge setup moved off the lobby onto #nameHome, so lobbyErr is hidden
 // whenever Name It is open — a failed create would have reported into a screen
 // nobody is looking at. Always write to the error box on the visible screen.
@@ -1145,6 +1167,22 @@ function fmt(ms){ if(ms==null) return "—"; const s=ms/1000; const m=Math.floor
 
 // ------------------------------------------------------------------ lobby
 let SHEETS = [];
+let CHALLENGE_RETURN_SCREEN = "gameModesHome";
+let LINK_RETURN_SCREEN = "lobby";
+const LINK_ERROR_IDS = { lobby:"lobbyErr", multiplayerHome:"multiplayerErr", listsHome:"listsErr", tierHome:"tierErr", mine:"mineErr" };
+function showLinkError(message, fallback="lobby"){
+  const screen = LINK_ERROR_IDS[LINK_RETURN_SCREEN] ? LINK_RETURN_SCREEN : fallback;
+  show(screen);
+  const box = $(LINK_ERROR_IDS[screen] || "lobbyErr");
+  box.style.color="var(--bad)";
+  box.textContent=message;
+}
+
+$("gameModesBtn").onclick = ()=>show("gameModesHome");
+$("gameModesBack").onclick = ()=>show("lobby");
+$("multiplayerBtn").onclick = ()=>show("multiplayerHome");
+$("multiplayerBack").onclick = ()=>show("lobby");
+
 async function loadSheets(){
   const r = await api("sheets");
   const sel = $("sheet"); sel.innerHTML="";
@@ -1193,9 +1231,10 @@ const catKind = k => k === "roster" ? "roster" : "top8";
 const diffPill = d => d ? `<span class="pill" style="padding:1px 7px;font-size:11px">${esc(d)}</span>` : "";
 
 $("modeNameIt").onclick = openNameHome;
-$("nameHomeBack").onclick = ()=>show("lobby");
+$("nameHomeBack").onclick = ()=>show("gameModesHome");
 
 async function openNameHome(){
+  CHALLENGE_RETURN_SCREEN="gameModesHome";
   show("nameHome"); $("nameErr").textContent=""; fillFilterTeams(); fillFilterOptions();
   if(!NAME_CATALOG) await loadChallengeCatalog(); else renderNameHome();
 }
@@ -1471,18 +1510,21 @@ async function createChallenge(sheet_id, kind, andPlay){
 
 $("copyBtn").onclick = ()=>{ $("shareUrl").select(); navigator.clipboard?.writeText($("shareUrl").value);
   $("copyBtn").textContent="Copied!"; setTimeout(()=>$("copyBtn").textContent="Copy",1200); };
-$("backLobby").onclick = ()=>show("lobby");
+$("backLobby").onclick = ()=>show(CHALLENGE_RETURN_SCREEN);
 $("playNowBtn").onclick = ()=>startPlay();
 
 // join by pasted link/token
 $("joinBtn").onclick = ()=>{
   let v=$("joinToken").value.trim(); if(!v) return;
+  LINK_RETURN_SCREEN="multiplayerHome";
+  CHALLENGE_RETURN_SCREEN="multiplayerHome";
+  $("multiplayerErr").textContent="";
   const tm=v.match(/[?&]take=([^&\s]+)/);
   if(tm){ openPlayerTake(decodeURIComponent(tm[1])); return; }
   const lm=v.match(/[?&]list=([^&\s]+)/);
   if(lm){ openListTopic(decodeURIComponent(lm[1]),"build"); return; }
   const tr=v.match(/[?&]tier=([^&\s]+)/);
-  if(tr){ openTierTopic(decodeURIComponent(tr[1]),"board"); return; }
+  if(tr){ TIER_RETURN_SCREEN="multiplayerHome"; openTierTopic(decodeURIComponent(tr[1]),"board"); return; }
   const m=v.match(/[?&]ch=([^&\s]+)/); const token=m?decodeURIComponent(m[1]):v;
   if(String(token).startsWith("court_")){ openDaily(); return; }
   openChallenge(token);
@@ -1491,7 +1533,7 @@ $("joinBtn").onclick = ()=>{
 // ------------------------------------------------------------------ preview / join
 async function openChallenge(token){
   const r = await api("open",{ share_token:token, client_id:clientId() });
-  if(!r.ok){ $("lobbyErr").style.color="var(--bad)"; $("lobbyErr").textContent="Error: "+r.error; show("lobby"); return; }
+  if(!r.ok){ showLinkError("Error: "+r.error); return; }
   const c=r.challenge;
   ST = {...ST, challenge_id:c.id, share_token:c.share_token, answer_target:c.answer_target,
         strike_limit:c.strike_limit, mode:c.mode, kind:c.kind||"top8", isRoster:c.kind==="roster",
@@ -1510,7 +1552,7 @@ async function openChallenge(token){
   }
   show("preview");
 }
-$("previewBack").onclick=()=>show("lobby");
+$("previewBack").onclick=()=>show(CHALLENGE_RETURN_SCREEN);
 $("revealBtn").onclick=()=>startPlay();
 
 // ------------------------------------------------------------------ start + play
@@ -1688,6 +1730,7 @@ $("guessInput").addEventListener("blur",()=>setTimeout(acHide,120));
 // ------------------------------------------------------------------ results
 async function showResults(){
   show("results");
+  $("homeBtn").textContent = ST.isCourtDaily ? "Home" : ({gameModesHome:"Game Modes",multiplayerHome:"Multiplayer"}[CHALLENGE_RETURN_SCREEN] || "Home");
   renderCourtShare("resultsCourtShare", ST.isCourtDaily ? COURT.share : null);
   const r = await api("results",{ challenge_id:ST.challenge_id, attempt_id:ST.attempt_id, attempt_token:ST.attempt_token });
   const errB=$("resultsErr"); errB.textContent="";
@@ -1751,7 +1794,7 @@ async function showResults(){
   });
 }
 $("refreshBtn").onclick=showResults;
-$("homeBtn").onclick=()=>{ goHome(); };
+$("homeBtn").onclick=()=>{ if(ST.isCourtDaily) goHome(); else show(CHALLENGE_RETURN_SCREEN); };
 $("resultsCourtShareBtn").onclick=()=>shareCourt(COURT.share, $("resultsCourtShareBtn"));
 $("rematchBtn").onclick=async()=>{
   // rematch: fresh challenge on the same category, same opponent type
@@ -1829,8 +1872,9 @@ function wireSubmit(box, action, errId, reload){
 }
 
 $("modeLists").onclick = openListsHome;
-$("listsHomeBack").onclick = ()=>show("lobby");
+$("listsHomeBack").onclick = ()=>show("gameModesHome");
 async function openListsHome(){
+  LINK_RETURN_SCREEN="listsHome";
   show("listsHome"); $("listsErr").textContent="";
   await Promise.all([loadListBrowse(), loadMyLists()]);
 }
@@ -1855,10 +1899,10 @@ $("listCreateBtn").onclick = async ()=>{
   LIST={ topic_id:r.topic_id, share_token:r.share_token, prompt:r.prompt, ranked:r.ranked, max_items:r.max_items, entry_type:r.entry_type||"player", review_status:r.review_status, items:[] };
   $("listTitle").value=""; openBuilder();
 };
-$("listJoinBtn").onclick = ()=>{ let v=$("listJoin").value.trim(); if(!v) return; const m=v.match(/[?&]list=([^&\s]+)/); openListTopic(m?m[1]:v,"build"); };
+$("listJoinBtn").onclick = ()=>{ let v=$("listJoin").value.trim(); if(!v) return; LINK_RETURN_SCREEN="listsHome"; const m=v.match(/[?&]list=([^&\s]+)/); openListTopic(m?m[1]:v,"build"); };
 async function openListTopic(token, dest){
   const r=await api("list_open",{ share_token:token, client_id:clientId() });
-  if(!r.ok){ $("listsErr").textContent="Error: "+r.error; show("listsHome"); return; }
+  if(!r.ok){ showLinkError("Error: "+r.error, "listsHome"); return; }
   LIST={ topic_id:r.topic.id, share_token:r.topic.share_token, prompt:r.topic.prompt, ranked:r.topic.ranked, max_items:r.topic.max_items, entry_type:r.topic.entry_type||"player", review_status:r.topic.review_status,
          items:(r.your_list&&r.your_list.items)? r.your_list.items.map(it=>({label:it.label,note:it.note||null,player_key:it.player_key||null})):[] };
   if(dest==="compare" || LIST.items.length) showListCompare(); else openBuilder();
@@ -2005,7 +2049,7 @@ function renderListReveal(r){
       : `${overlap} of your ${mine.size} picks showed up on someone else's list.`}</div></div>`;
   box.innerHTML=h;
 }
-$("listCompareBack").onclick=()=>show("lobby");
+$("listCompareBack").onclick=()=>show("gameModesHome");
 $("listCompareRefresh").onclick=showListCompare;
 $("listMyEntry").onclick=openBuilder;
 $("listShareBtn2").onclick=()=>{
@@ -2095,14 +2139,16 @@ $("listSurprise").onclick=()=>{
 let TIER = { topic_id:null, share_token:null, prompt:"", item_type:"player", tiers:[], item_set:[], assign:{}, is_creator:false };
 let TIER_RESULT = null;   // set by renderHotTakes once there's a room to compare against
 let TIER_GATE = null;     // {have, need, unlocked} from the server
+let TIER_RETURN_SCREEN = "lobby";
 const TIER_COLORS = { S:"#fbbf24", A:"#4ade80", B:"#7dd3fc", C:"#aab6d8", D:"#fb923c", F:"#fca5a5" };
 // 📅 for team_season matches ENTRY_ICON.team_season on the subjective-list side:
 // "96 Bulls" is the same kind of thing in both modes and should look like it.
 const tierIcon = t => t==="team_season"?"📅":t==="team"?"🏟️":t==="coach"?"📋":"🏀";
 
-$("modeTiers").onclick = openTierHome;
 $("tierHomeBack").onclick = ()=>show("lobby");
 async function openTierHome(){
+  TIER_RETURN_SCREEN="tierHome";
+  LINK_RETURN_SCREEN="tierHome";
   show("tierHome"); $("tierErr").textContent=""; syncTierEra();
   await Promise.all([loadTierThemes(), loadMyTiers()]);
 }
@@ -2160,10 +2206,10 @@ $("tierCreateBtn").onclick=async()=>{
   TIER={ topic_id:r.topic_id, share_token:r.share_token, prompt:r.prompt, item_type:r.item_type, tiers:r.tiers, item_set:r.item_set, review_status:r.review_status, assign:{}, is_creator:true };
   $("tierTitle").value=""; openTierBoard();
 };
-$("tierJoinBtn").onclick=()=>{ let v=$("tierJoin").value.trim(); if(!v)return; const m=v.match(/[?&]tier=([^&\s]+)/); openTierTopic(m?m[1]:v,"board"); };
+$("tierJoinBtn").onclick=()=>{ let v=$("tierJoin").value.trim(); if(!v)return; TIER_RETURN_SCREEN="tierHome"; LINK_RETURN_SCREEN="tierHome"; const m=v.match(/[?&]tier=([^&\s]+)/); openTierTopic(m?m[1]:v,"board"); };
 async function openTierTopic(token,dest){
   const r=await api("tier_open",{share_token:token, client_id:clientId()});
-  if(!r.ok){ $("tierErr").textContent="Error: "+r.error; show("tierHome"); return; }
+  if(!r.ok){ showLinkError("Error: "+r.error, TIER_RETURN_SCREEN); return; }
   TIER={ topic_id:r.topic.id, share_token:r.topic.share_token, prompt:r.topic.prompt, item_type:r.topic.item_type,
          tiers:r.topic.tiers, item_set:r.topic.item_set, assign:{...(r.your_assignments||{})}, is_creator:r.topic.is_creator,
          kind:r.topic.kind||"user", invite:r.topic.invite||null };
@@ -2240,12 +2286,10 @@ async function autosaveFlush(stateEl){
 document.addEventListener("visibilitychange", ()=>{ if(document.hidden) autosaveFlush(); });
 $("tierBoardBack").onclick=async()=>{
   await autosaveFlush();
-  // With the Tier Lists tile hidden, backing out of the Daily onto the tier
-  // home would strand you on a screen the lobby has no way to reach. Go where
-  // the player came from: the crew room, or the lobby.
+  // Tier is deliberately absent from Home and Game Modes. Preserve its legacy
+  // routes while returning to the origin that was actually visible.
   if(CREW_RETURN){ const c=CREW_RETURN; CREW_RETURN=null; openCrew(c); }
-  else if($("modeTiers").classList.contains("hidden")) show("lobby");
-  else openTierHome();
+  else show(TIER_RETURN_SCREEN || "lobby");
 };
 // Skips the board entirely — deliberately does NOT save, so browsing doesn't
 // inflate author_count with empty entries.
@@ -2387,7 +2431,7 @@ async function showTierCompare(){
     return `<div class="card" style="margin-top:10px;background:var(--panel2)"><div style="font-weight:700">${l.author_label}${l.is_you?' <span class="pill" style="padding:1px 7px">you</span>':""}</div><div style="margin-top:4px;font-size:14px">${byTier||'<span class="note">no picks</span>'}</div></div>`;
   }).join("") : `<div class="note">No tier lists yet — be the first.</div>`;
 }
-$("tierCompareBack").onclick=()=>show("lobby");
+$("tierCompareBack").onclick=()=>show(TIER_RETURN_SCREEN || "lobby");
 $("tierCompareRefresh").onclick=showTierCompare;
 $("tierMyEntry").onclick=openTierBoard;
 $("tierBrowseBtn").onclick=openTierBrowse;
@@ -2779,13 +2823,13 @@ function renderPlayerTakeCompare(){
 }
 async function openPlayerTake(token){
   const r=await api("take_open",{ share_token:token, client_id:clientId() });
-  if(!r.ok){ $("lobbyErr").style.color="var(--bad)"; $("lobbyErr").textContent="Take unavailable: "+r.error; return; }
+  if(!r.ok){ showLinkError("Take unavailable: "+r.error); return; }
   PLAYER_TAKE={ topic:r.topic, answers:initPlayerTakeAnswers(r.topic,r.your_answers), compare:r.compare||null };
   renderPlayerTake(); show("playerTake");
 }
-$("takeCreateBtn").onclick=openTakeBuild;
+$("takeCreateBtn") && ($("takeCreateBtn").onclick=openTakeBuild);
 $("takeBuildBack").onclick=()=>goHome();
-$("playerTakeHome").onclick=()=>goHome();
+$("playerTakeHome").onclick=()=>show(LINK_RETURN_SCREEN || "lobby");
 $("playerTakeCopy").onclick=()=>{ $("playerTakeUrl").select(); navigator.clipboard?.writeText($("playerTakeUrl").value); $("playerTakeCopy").textContent="Copied!"; setTimeout(()=>$("playerTakeCopy").textContent="Copy",1200); };
 $("playerTakeShare") && ($("playerTakeShare").onclick=async()=>{
   if(!PLAYER_TAKE.topic) return;
@@ -2963,8 +3007,11 @@ function renderMine(){
   }).join("");
   Array.from(box.children).forEach(el=>el.onclick=()=>{
     const r = rows[+el.dataset.i];
-    if(r.kind==="tier") openTierTopic(r.share_token, r.started ? "compare" : "board");
-    else openListTopic(r.share_token, r.started ? "compare" : "build");
+    LINK_RETURN_SCREEN="mine";
+    if(r.kind==="tier"){
+      TIER_RETURN_SCREEN="mine";
+      openTierTopic(r.share_token, r.started ? "compare" : "board");
+    } else openListTopic(r.share_token, r.started ? "compare" : "build");
   });
 }
 
@@ -2974,6 +3021,7 @@ function renderMine(){
 // while live, quickest on the host device that's propped up as the display.
 let PARTY = null;      // {session, member_id, member_token, host_token, is_host, sinceId, seen:Map}
 let PARTY_TIMER = null;
+let PARTY_TIER_T = null;
 let PARTY_RECAP = null;
 
 // Never ensureName() here: it opens a blocking native prompt(), and on the ?p=
@@ -3481,9 +3529,9 @@ function partyBuildSyncOptions(){
   fill("pfConf", FILTER_OPTS.conferences||[]);
   fill("pfCollege", FILTER_OPTS.colleges||[]);
 }
-$("partyHostBack").onclick = ()=>{ partyLeave(); show("lobby"); };
-$("partyPlayBack").onclick = ()=>{ partyLeave(); show("lobby"); };
-$("partyRecapBack").onclick = ()=>{ partyLeave(); show("lobby"); };
+$("partyHostBack").onclick = ()=>{ partyLeave(); show("multiplayerHome"); };
+$("partyPlayBack").onclick = ()=>{ partyLeave(); show("multiplayerHome"); };
+$("partyRecapBack").onclick = ()=>{ partyLeave(); show("multiplayerHome"); };
 function partyLeave(){ clearTimeout(PARTY_TIMER); PARTY_TIMER=null; clearTimeout(PARTY_TIER_T);
   PARTY=null; PARTY_RECAP=null; syncModePill(); }
 
@@ -3831,7 +3879,7 @@ $("partyRecapShare").onclick = ()=>{
 const REACTIONS = ["🔥","💀","🧢","👑","😂"];
 
 $("crewBtn").onclick = openCrewHome;
-$("crewHomeBack").onclick = ()=>show("lobby");
+$("crewHomeBack").onclick = ()=>show("multiplayerHome");
 $("crewRoomBack").onclick = ()=>{ CURRENT_CREW=null; openCrewHome(); };
 
 async function openCrewHome(){
@@ -3977,9 +4025,11 @@ const urlDay = new URLSearchParams(location.search).get("day");
 window.FROM_SHARE = !!(urlTier || urlList || urlTake || urlCourt);
 track("landing", { from: urlParty ? "party" : (window.FROM_SHARE ? "share" : "direct") });
 if(urlParty){ $("playerName").value = store.get("mp_name",""); partyJoinByCode(urlParty); }
-else if(urlTake){ $("playerName").value = store.get("mp_name",""); openPlayerTake(urlTake); }
+else if(urlTake){ LINK_RETURN_SCREEN="lobby"; $("playerName").value = store.get("mp_name",""); openPlayerTake(urlTake); }
 else if(urlCourt){ $("playerName").value = store.get("mp_name",""); openDaily(urlDay); }
 else if(urlTier){
+  LINK_RETURN_SCREEN="lobby";
+  TIER_RETURN_SCREEN="lobby";
   $("playerName").value = store.get("mp_name","");
   // Legacy tier daily links: still open read/play path; Daily Court is Play Now.
   if(String(urlTier).startsWith("daily_")){
@@ -3988,22 +4038,10 @@ else if(urlTier){
   }
   openTierTopic(urlTier,"board");
 }
-else if(urlList){ $("playerName").value = store.get("mp_name",""); openListTopic(urlList,"build"); }
-else if(urlToken){ $("playerName").value = store.get("mp_name",""); openChallenge(urlToken); }
+else if(urlList){ LINK_RETURN_SCREEN="lobby"; $("playerName").value = store.get("mp_name",""); openListTopic(urlList,"build"); }
+else if(urlToken){ LINK_RETURN_SCREEN="lobby"; CHALLENGE_RETURN_SCREEN="lobby"; $("playerName").value = store.get("mp_name",""); openChallenge(urlToken); }
 $("playerName").addEventListener("change",e=>store.set("mp_name",e.target.value));
 $("playerName").value = store.get("mp_name","");
-
-// ------------------------------------------------------------------ first run
-(function(){
-  // A party joiner is standing in a room waiting on their friends — never put
-  // an onboarding overlay in front of them.
-  const hasShare = urlToken || urlList || urlTier || urlParty || urlTake || urlCourt;
-  if(hasShare || store.get("tc_seen","")) return;
-  const w = $("welcome"); w.classList.add("show");
-  const done = go => { w.classList.remove("show"); store.set("tc_seen","1"); if(go) $("dailyBtn").click(); };
-  $("welcomePlay").onclick = ()=>done(true);
-  $("welcomeSkip").onclick = ()=>done(false);
-})();
 
 // ------------------------------------------------------------------ service worker
 if("serviceWorker" in navigator){
