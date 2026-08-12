@@ -1,5 +1,6 @@
 import { actionGuess, actionStart } from "./games.ts";
-import { db, ok, err, json, authedUserId, ownerFilter, safeClientId, computeStreak, loadRosterPool } from "./shared.ts";
+import { db, ok, err, json, authedUserId, ownerFilter, safeClientId, computeStreak, loadRosterPool, rosterReveal } from "./shared.ts";
+import type { PoolEntry } from "./shared.ts";
 import { courtDate, courtShareSummary, courtToken, dailyChallengeForDate, houseTakeForDate, normalizeTakeAnswers, takeConsensus, takeCourtBeats, takeItemLockPlan, takeProgress, validateDailyChallenge, validateTakeItems } from "./court_contract.js";
 
 type CourtDay = {
@@ -185,6 +186,24 @@ async function courtChallengeAttempt(courtDay: CourtDay, userId: string | null, 
   return (data ?? []).find((a: any) => (userId && a.player_user_id === userId) || (clientId && a.player_client_id === clientId)) ?? null;
 }
 
+// The pool the Daily Challenge drew from, but only once the caller's own
+// attempt is closed. A finished board routes to the recap now (#18), so the
+// "players you could have named" list has to live there too — and it has to
+// survive a reload, which the finishing guess response cannot do. Gated on the
+// attempt, never on the day: an in-progress or unstarted player must not be
+// able to read the answers out of a daily payload.
+async function courtReveal(courtDay: CourtDay, attempt: any) {
+  if (!attempt || attempt.status === "in_progress") return null;
+  const challengeId = courtDay.challenge_definition?.challenge_id;
+  if (!challengeId) return null;
+  const { data } = await db.from("mp_challenges")
+    .select("answers_snapshot")
+    .eq("id", challengeId)
+    .maybeSingle();
+  const snapshot = data?.answers_snapshot;
+  return Array.isArray(snapshot) ? rosterReveal(snapshot as PoolEntry[]) : null;
+}
+
 async function courtState(req: Request, body: any, courtDay: CourtDay) {
   const userId = authedUserId(req);
   const clientId = safeClientId(body.client_id);
@@ -249,6 +268,7 @@ export async function actionCourtDaily(req: Request, body: any) {
       strikes: state.challengeAttempt.strikes ?? 0,
       filled_slots: state.challengeAttempt.filled_slots ?? {},
     } : null,
+    revealed_answers: await courtReveal(courtDay, state.challengeAttempt),
     consensus: state.mine ? takeConsensus(items.filter((item: any) => answered.has(item.id)), state.locks as any[]) : null,
     consensus_gate: state.consensus_gate,
     streak: state.streak,

@@ -465,6 +465,10 @@
       <div class="note" id="courtShareText" style="white-space:pre-line;margin-top:4px"></div>
       <button class="sky" id="courtShareBtn" style="margin-top:10px;width:100%">Share Court</button>
     </div>
+    <div id="courtRevealBlock" class="hidden">
+      <div style="font-weight:700;margin-top:16px" id="courtRevealHdr">Notable players you could have named</div>
+      <div class="slots" id="courtRevealList"></div>
+    </div>
     <div style="font-weight:700;margin-top:16px">Room consensus</div>
     <div class="note" id="courtConsensusNote" style="margin-top:2px"></div>
     <div id="courtConsensusRows" style="margin-top:10px"></div>
@@ -2849,7 +2853,7 @@ async function refreshLobbyCourt(){
 $("dailyBtn").onclick=()=>openDaily();
 $("pickupBtn") && ($("pickupBtn").onclick = ()=>openPartyHome());
 $("freeplayBtn") && ($("freeplayBtn").onclick = ()=>{ const p=$("freeplayPanel"); if(p) p.open = true; p?.scrollIntoView({behavior:"smooth",block:"nearest"}); });
-let COURT = { date:null, day:null, take:null, challenge:null, answers:{}, take_progress:null, takeFeedback:null, consensus:null, gate:null, beats:{}, share:null, challenge_attempt:null };
+let COURT = { date:null, day:null, take:null, challenge:null, answers:{}, take_progress:null, takeFeedback:null, consensus:null, gate:null, beats:{}, share:null, challenge_attempt:null, reveal:null };
 let courtAutoTimer=null;
 let CREW_RETURN = null;   // set when Court is launched from a crew room
 let CURRENT_CREW = null;
@@ -2993,8 +2997,25 @@ function renderCourtShare(prefix, summary){
   $(prefix+"Title").textContent="Send today's Court";
   $(prefix+"Text").textContent=courtShareText(summary);
 }
+// The reveal the results card used to carry. A full-stack Daily lands here
+// instead of on results (#18), so the pool comes with it — same rarity badges,
+// same ordering, from the same rosterReveal the results card reads.
+function renderCourtReveal(){
+  const block=$("courtRevealBlock"); if(!block) return;
+  const rows=COURT.reveal||[];
+  block.classList.toggle("hidden", !rows.length);
+  if(!rows.length){ $("courtRevealList").innerHTML=""; return; }
+  const tierByLabel={"Common":"common","Uncommon":"uncommon","Rare":"rare","Deep cut":"deep_cut"};
+  $("courtRevealList").innerHTML=rows.map(a=>{
+    const ctx=tierByLabel[a.context_label]
+      ? rarBadge({rarity_tier:tierByLabel[a.context_label], rarity_label:a.context_label})
+      : `<span class="ctx">${esc(a.context_label||"")}</span>`;
+    return `<div class="slot revealed"><div class="n">${a.slot}</div><div class="name">${esc(a.display_name)}</div>${ctx}</div>`;
+  }).join("");
+}
 function renderCourtConsensus(){
   const take=COURT.take; if(!take) return;
+  renderCourtReveal();
   $("courtConsensusTitle").textContent=take.title||"Today's Take";
   const s=getStreak();
   const full=COURT.beats&&COURT.beats.full_stack;
@@ -3030,7 +3051,7 @@ async function openDaily(dayOpt){
   setStreak(r.streak);   // reconcile the cached number against the server's
   const rawAnswers=r.your_answers||{};
   const fallbackProgress={ answered_item_ids:(r.take.items||[]).filter(i=>Object.prototype.hasOwnProperty.call(rawAnswers,i.id)).map(i=>i.id), next_item_id:(r.take.items||[]).find(i=>!Object.prototype.hasOwnProperty.call(rawAnswers,i.id))?.id||null, completed:!!r.take_done };
-  COURT={ date:r.date, day:r.day, take:r.take, challenge:r.challenge, answers:initCourtAnswers(r.take,rawAnswers), take_progress:r.take_progress||fallbackProgress, takeFeedback:null, consensus:r.consensus, gate:r.consensus_gate, beats:r.beats||{}, share:r.share||null, challenge_attempt:r.challenge_attempt||null };
+  COURT={ date:r.date, day:r.day, take:r.take, challenge:r.challenge, answers:initCourtAnswers(r.take,rawAnswers), take_progress:r.take_progress||fallbackProgress, takeFeedback:null, consensus:r.consensus, gate:r.consensus_gate, beats:r.beats||{}, share:r.share||null, challenge_attempt:r.challenge_attempt||null, reveal:r.revealed_answers||null };
   // Keep in lockstep with courtContinueRoute in court_contract.js (#3 resume / stack order).
   const route = courtContinueRoute({
     takeDone: r.take_done,

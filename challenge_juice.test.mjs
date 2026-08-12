@@ -123,6 +123,27 @@ test("reopening a board takes the hush back down", () => {
   }
 });
 
+test("the recap carries the reveal the results card used to, and only to a closed attempt", () => {
+  const court = readFileSync(new URL("./supabase/functions/mp/court.ts", import.meta.url), "utf8");
+  // Gated on the caller's own attempt, never on the day.
+  assert.match(court, /async function courtReveal\(courtDay: CourtDay, attempt: any\) \{\s*\n\s*if \(!attempt \|\| attempt\.status === "in_progress"\) return null;/);
+  assert.match(court, /revealed_answers: await courtReveal\(courtDay, state\.challengeAttempt\)/);
+  // Same builder the results card reads, so the two lists cannot diverge.
+  assert.match(court, /rosterReveal\(snapshot as PoolEntry\[\]\)/);
+  const shared = readFileSync(new URL("./supabase/functions/mp/shared.ts", import.meta.url), "utf8");
+  assert.match(shared, /export function rosterReveal\(pool: PoolEntry\[\], limit = 24\)/);
+  // Client mounts it on the recap with the same rarity badges and ordering.
+  assert.match(html, /reveal:r\.revealed_answers\|\|null/);
+  assert.match(html, /function renderCourtConsensus\(\)\{[\s\S]*?renderCourtReveal\(\);/);
+  const render = html.match(/function renderCourtReveal\(\)\{[\s\S]*?\n\}/)[0];
+  assert.match(render, /block\.classList\.toggle\("hidden", !rows\.length\)/);
+  assert.match(render, /rarBadge\(\{rarity_tier:tierByLabel\[a\.context_label\], rarity_label:a\.context_label\}\)/);
+  assert.match(render, /class="slot revealed"/);
+  // Names come from the server, so they are escaped like every other such list.
+  assert.match(render, /esc\(a\.display_name\)/);
+  assert.match(html, /<div id="courtRevealBlock" class="hidden">[\s\S]*Notable players you could have named/);
+});
+
 test("server grading, strike counts and timer authority are untouched", () => {
   // The client still takes strikes, fill and elapsed time from the response.
   assert.match(html, /ST\.filled=r\.filled_slots\|\|ST\.filled; ST\.strikes=r\.strikes; ST\.correct=r\.correct_count/);
