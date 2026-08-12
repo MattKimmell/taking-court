@@ -59,6 +59,13 @@
   .strikes{display:flex;gap:8px;align-items:center}
   .strike{width:22px;height:22px;border-radius:50%;border:2px solid var(--line);display:grid;place-items:center;font-size:13px;font-weight:800}
   .strike.on{border-color:var(--bad);color:var(--bad);background:rgba(239,68,68,.12)}
+  /* A miss escalates with what it costs you: the first of three strikes is not
+     the last of three, and a sheet with no strike limit is pure time pressure,
+     where an alarm-red line overstates a miss that costs seconds (#18). Each
+     lit pip keeps its own rung, so the ladder stays visible at a glance. */
+  .strike.on.t-yellow{border-color:var(--gold);color:var(--gold);background:rgba(251,191,36,.14)}
+  .strike.on.t-orange{border-color:var(--accent);color:var(--accent);background:rgba(249,115,22,.14)}
+  .strike.on.t-red{border-color:var(--bad);color:var(--bad);background:rgba(239,68,68,.14)}
   .slots{display:grid;grid-template-columns:1fr;gap:8px;margin-top:14px}
   .slot{display:flex;align-items:center;gap:12px;background:var(--panel2);border:1px solid var(--line);
     border-radius:10px;padding:11px 12px;min-height:48px}
@@ -68,6 +75,13 @@
   .slot.filled .n{background:var(--good);color:#04210f}
   .slot .name{font-weight:600}
   .slot .ctx{margin-left:auto;color:var(--muted);font-size:13px}
+  /* A correct name lands rather than appears: the reels tumble left-to-right
+     and lock. Scrambled glyphs, never other players' names — the roster
+     autocomplete pool is deliberately wider than the answer pool, but the Top 8
+     pool is not, and a reel that flashed a real answer would leak one (#18). */
+  .slot .name.rolling{color:var(--muted);opacity:.8}
+  .slot.landed{animation:slotLand .34s ease-out}
+  @keyframes slotLand{0%{transform:scale(1)}35%{transform:scale(1.022)}100%{transform:scale(1)}}
   .slot.revealed{border-color:var(--accent);background:rgba(249,115,102,.08);opacity:.9}
   .slot.revealed .n{background:var(--accent);color:#2a1200}
   /* One row that answers "where do I stand" in a glance: strikes, fill, clock,
@@ -85,9 +99,26 @@
      top. One line meant the guess before last was already gone; an unbounded
      log pushed the input off a phone screen. The older line is faded so the
      stack reads as history rather than as two equally live verdicts (#15). */
+  /* The board answers, then hushes: a full-width strip states the score and the
+     clock, holds, and only then moves you on. Landing straight on results made
+     the last guess and the verdict the same instant (#18). */
+  .closed{margin-top:12px;padding:11px 12px;border-radius:10px;text-align:center;
+    border:1px solid var(--line);background:var(--panel2);animation:closedIn .26s ease-out}
+  .closed .ttl{font-size:10.5px;font-weight:800;letter-spacing:1.4px;text-transform:uppercase;color:var(--muted)}
+  .closed .sum{font-size:17px;font-weight:800;margin-top:3px}
+  .closed.win{border-color:var(--good);background:rgba(34,197,94,.12)} .closed.win .sum{color:var(--good)}
+  .closed.out{border-color:var(--bad);background:rgba(239,68,68,.10)} .closed.out .sum{color:var(--bad)}
+  @keyframes closedIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
   .feed{margin-top:10px;font-size:13px;color:var(--muted);min-height:20px}
   .feed .feedline + .feedline{margin-top:3px;opacity:.45}
   .feed .c{color:var(--good)} .feed .x{color:var(--bad)} .feed .d{color:var(--gold)}
+  .feed .m-gray{color:var(--muted)} .feed .m-yellow{color:var(--gold)}
+  .feed .m-orange{color:var(--accent)} .feed .m-red{color:var(--bad)}
+  /* Reduced motion keeps every state change — colour, fill, the strip — and
+     drops only the travel. Nothing here is the sole carrier of a state. */
+  @media (prefers-reduced-motion: reduce){
+    .closed{animation:none} .slot.landed{animation:none}
+  }
   .acdrop{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:30;background:var(--panel2);
     border:1px solid var(--line);border-radius:10px;overflow:hidden;max-height:244px;overflow-y:auto;
     box-shadow:0 12px 30px rgba(0,0,0,.4)}
@@ -675,6 +706,7 @@
       <div class="stat"><span class="lbl">Time</span><div class="val timer" id="timer">0:00.0</div></div>
     </div>
     <div class="slots" id="slots"></div>
+    <div id="boardClosed" class="closed hidden" role="status" aria-live="polite"></div>
     <div class="linkbox" style="margin-top:14px">
       <div style="position:relative;flex:1">
         <input id="guessInput" placeholder="Start typing a name…" autocomplete="off" />
@@ -1745,6 +1777,7 @@ function buildBoard(){
   }
   const sr=$("strikeRow"); sr.innerHTML="";
   for(let i=0;i<ST.strike_limit;i++){ const s=document.createElement("div"); s.className="strike"; s.id="strk"+i; s.textContent="✕"; sr.appendChild(s); }
+  openBoardInput();   // every entry to a live board comes through here
 }
 function renderPlay(){
   Object.entries(ST.filled).forEach(([slot,info])=>{
@@ -1757,21 +1790,75 @@ function renderPlay(){
   });
   renderStatus();
 }
+// How loud a miss should be, given what it cost. No strike limit means the
+// only currency is time, so a miss is grey rather than an alarm; otherwise the
+// nth strike is placed on a yellow → orange → red ladder scaled to the limit,
+// with the last strike always red. Pure — every rung is a fixture in
+// challenge_juice.test.mjs, including the limits no mode ships today.
+const MISS_TONES={gray:"m-gray",yellow:"m-yellow",orange:"m-orange",red:"m-red"};
+function missTone(strikes, limit){
+  const n=Math.max(0,Math.trunc(Number(strikes))||0);
+  const lim=Math.max(0,Math.trunc(Number(limit))||0);
+  if(lim<=0) return "gray";
+  if(n>=lim) return "red";
+  const spent=n/lim;                       // thirds of the limit, not of three
+  return spent<=1/3 ? "yellow" : spent<=2/3 ? "orange" : "red";
+}
+function missClass(strikes){ return MISS_TONES[missTone(strikes, ST.strike_limit)]; }
+
 // Strikes and fill are one row now, so they get one writer — a resume and a
 // graded guess must not be able to disagree about how full the board is.
 function renderStatus(){
-  for(let i=0;i<ST.strike_limit;i++) $("strk"+i)?.classList.toggle("on", i<ST.strikes);
+  for(let i=0;i<ST.strike_limit;i++){
+    const el=$("strk"+i); if(!el) continue;
+    const lit=i<ST.strikes;
+    el.classList.toggle("on", lit);
+    el.classList.remove("t-yellow","t-orange","t-red");
+    // Each pip keeps the rung it was earned on, so the ladder is readable.
+    if(lit) el.classList.add("t-"+missTone(i+1, ST.strike_limit));
+  }
   const filled = Number.isFinite(ST.correct) ? ST.correct : Object.keys(ST.filled||{}).length;
   const el=$("playFill"); if(el) el.textContent=`${filled}/${ST.answer_target}`;
 }
 
+const reduceMotion = () => !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+// The reels: glyphs tumble and lock left to right, ~330ms end to end, then the
+// real markup lands (the rarity badge is HTML, so it can only be written once).
+// Scrambling the name's own shape rather than cycling other names is what keeps
+// this leak-free on Top 8, where the suggest pool is the answer pool.
+const REEL_TICKS=8, REEL_MS=42, REEL_GLYPHS="ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+function revealSlotName(el, finalText, land){
+  const name=el.querySelector(".name");
+  if(!name || reduceMotion() || !finalText){ land(); return; }
+  const chars=[...String(finalText)];
+  name.classList.add("rolling");
+  let tick=0;
+  const int=setInterval(()=>{
+    tick++;
+    if(tick>=REEL_TICKS){
+      clearInterval(int);
+      name.classList.remove("rolling");
+      land();
+      el.classList.add("landed");
+      setTimeout(()=>el.classList.remove("landed"),360);
+      return;
+    }
+    const locked=Math.floor(chars.length*tick/REEL_TICKS);
+    name.textContent=chars.map((c,i)=>
+      (i<locked||!/[A-Za-z]/.test(c)) ? c : REEL_GLYPHS[Math.floor(Math.random()*REEL_GLYPHS.length)]
+    ).join("");
+  },REEL_MS);
+}
 function applyGuessToBoard(r){
   ST.filled=r.filled_slots||ST.filled; ST.strikes=r.strikes; ST.correct=r.correct_count;
   if(r.result==="correct"){
     const el=$("slot"+r.slot); if(el){
       el.classList.add("filled");
-      if(r.rarity){ el.querySelector(".name").innerHTML=r.display_name+rarBadge(r.rarity); el.querySelector(".ctx").textContent=""; }
-      else { el.querySelector(".name").textContent=r.display_name; el.querySelector(".ctx").textContent=r.context_label||""; }
+      const land=()=>{
+        if(r.rarity){ el.querySelector(".name").innerHTML=r.display_name+rarBadge(r.rarity); el.querySelector(".ctx").textContent=""; }
+        else { el.querySelector(".name").textContent=r.display_name; el.querySelector(".ctx").textContent=r.context_label||""; }
+      };
+      revealSlotName(el, r.display_name, land);
     }
   }
   renderStatus();
@@ -1783,7 +1870,7 @@ function renderRosterChallengeInline(r){
   const context=esc(f.explanation||fallback);
   feed(good
     ? `<span class="c">✔ ${context}</span> ${r.rarity?rarBadge(r.rarity):""}`
-    : `<span class="x">✕ ${context} · strike ${r.strikes}/${ST.strike_limit}</span>`);
+    : `<span class="${missClass(r.strikes)}">✕ ${context} · strike ${r.strikes}/${ST.strike_limit}</span>`);
   track("challenge_feedback_view",{surface:ST.isCourtDaily?"daily":"freeplay",presentation:"inline",result:f.result||r.result,context_type:f.context_type||"unknown",finished:!!r.finished});
 }
 async function submitGuess(){
@@ -1809,10 +1896,7 @@ async function submitGuess(){
 
   if(ST.isRoster && r.feedback && (r.result==="correct"||r.result==="strike")){
     renderRosterChallengeInline(r);
-    if(r.finished){
-      ST.finished=true; clearInterval(timerInt); $("timer").textContent=fmt(r.elapsed_ms);
-      clearTimeout(courtAutoTimer); courtAutoTimer=setTimeout(showResults,ST.isCourtDaily?1800:900);
-    } else $("guessInput").focus();
+    if(r.finished) closeBoard(r); else $("guessInput").focus();
     return;
   }
 
@@ -1822,13 +1906,50 @@ async function submitGuess(){
   } else {
     let ctx="";
     if(r.guess_info){ const gi=r.guess_info; const val=gi.unit==="PPG"?Number(gi.value).toFixed(1):Number(gi.value).toLocaleString(); ctx=` — ${val} ${gi.unit}, #${gi.rank} all-time`; }
-    feed(`<span class="x">✕ ${esc(g)}${ctx} · strike ${r.strikes}/${ST.strike_limit}</span>`);
+    feed(`<span class="${missClass(r.strikes)}">✕ ${esc(g)}${ctx} · strike ${r.strikes}/${ST.strike_limit}</span>`);
   }
-  if(r.finished){ ST.finished=true; clearInterval(timerInt); $("timer").textContent=fmt(r.elapsed_ms);
+  if(r.finished){
     const win=ST.isRoster?`🏆 Named all ${ST.answer_target} in ${fmt(r.elapsed_ms)}!`:`🏆 Perfect sheet in ${fmt(r.elapsed_ms)}!`;
     feed(r.status==="completed"?`<span class="c">${win}</span>`:`<span class="x">Eliminated — ${r.correct_count}/${ST.answer_target} in ${fmt(r.ranking_time_ms)}</span>`);
-    setTimeout(showResults,900);
+    closeBoard(r);
   } else $("guessInput").focus();
+}
+// Where a closed board goes. Pure, so both Daily exits are fixtures rather than
+// something you can only see by finishing a real board — and so #20 can repoint
+// the recap without reopening the hush.
+function boardCloseRoute({ isCourtDaily=false, beats=null }={}){
+  return (isCourtDaily && beats && beats.full_stack) ? "daily_recap" : "results";
+}
+// The hush: freeze the clock, take the input away, state the score, hold, then
+// move. Every finish goes through here — the roster path used to sit on a bare
+// board for 1.8s with a live-looking input, and Top 8 jumped to results in 0.9s.
+const BOARD_CLOSE_MS=1200;
+function closeBoard(r){
+  ST.finished=true;
+  clearInterval(timerInt); timerInt=null;
+  if(Number.isFinite(r.elapsed_ms)) $("timer").textContent=fmt(r.elapsed_ms);
+  acHide();
+  $("guessInput").value=""; $("guessInput").disabled=true; $("guessInput").blur();
+  $("guessBtn").disabled=true;
+  const done=r.status==="completed";
+  const n=Number.isFinite(r.correct_count)?r.correct_count:ST.correct;
+  const ms=Number.isFinite(r.elapsed_ms)?r.elapsed_ms:r.ranking_time_ms;
+  const strip=$("boardClosed");
+  if(strip){
+    strip.className="closed "+(done?"win":"out");
+    strip.innerHTML=`<div class="ttl">Board closed</div><div class="sum">${n} of ${ST.answer_target} named · ${fmt(ms)}</div>`;
+  }
+  const route=boardCloseRoute({isCourtDaily:ST.isCourtDaily, beats:COURT.beats});
+  clearTimeout(courtAutoTimer);
+  courtAutoTimer=setTimeout(()=>{
+    if(route==="daily_recap") openDaily(ST.courtDate||COURT.date); else showResults();
+  }, BOARD_CLOSE_MS);
+}
+// A board that reopens has to take the hush back down with it.
+function openBoardInput(){
+  $("guessInput").disabled=false; $("guessBtn").disabled=false;
+  $("boardClosed").className="closed hidden";
+  $("boardClosed").innerHTML="";
 }
 function rarBadge(rar){
   if(!rar) return "";
