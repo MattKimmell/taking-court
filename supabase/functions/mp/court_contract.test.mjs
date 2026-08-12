@@ -1,10 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  challengeShareAsk,
   courtContinueRoute,
+  courtShareDate,
   courtToken,
+  COURT_SHARE_CTA,
   dailyChallengeForDate,
   courtShareSummary,
+  questionize,
+  takeShareQuestion,
   crewCanRevealTakes,
   crewChallengeOnlySocialNote,
   crewDayMatchesSolo,
@@ -206,7 +211,7 @@ test("court share summaries prefer the right completion state", () => {
   assert.equal(courtShareSummary({ ...base, beats: { take: false, challenge: true } }).kind, "challenge_only");
   const full = courtShareSummary({ ...base, beats: { take: true, challenge: true } });
   assert.equal(full.kind, "full_stack");
-  assert.match(full.text, /Daily Court full stack/);
+  assert.match(full.text, /^Taking Court · Aug 10\n🔥 4\n\n/);
   assert.equal(full.challenge_score.correct_count, 5);
   assert.equal(full.path, "?court=1&day=2026-08-10");
   assert.equal(courtShareSummary({ ...base, beats: { take: false, challenge: false } }), null);
@@ -226,8 +231,9 @@ test("share card facts come from server beats and challenge attempt, not client 
   });
   assert.equal(takeOnly.kind, "take_only");
   assert.equal(takeOnly.challenge_score, null);
-  assert.match(takeOnly.text, /Take locked/);
-  assert.ok(!/Challenge:/.test(takeOnly.text));
+  assert.equal(takeOnly.take_question, takeShareQuestion(take));
+  assert.equal(takeOnly.challenge_ask, null);
+  assert.ok(!takeOnly.text.includes(challenge.prompt));
 
   const challengeOnly = courtShareSummary({
     date: "2026-08-10",
@@ -254,6 +260,148 @@ test("share card facts come from server beats and challenge attempt, not client 
   });
   assert.equal(both.kind, "full_stack");
   assert.equal(both.beats.full_stack, true);
+});
+
+test("the Daily share card is text-only questions, brand, date, streak, then the CTA", () => {
+  const take = houseTakeForDate("2026-08-10");
+  const challenge = dailyChallengeForDate("2026-08-10");
+  const full = courtShareSummary({
+    date: "2026-08-10",
+    take,
+    challenge,
+    beats: { take: true, challenge: true },
+    streak: { current: 3 },
+    consensusGate: { have: 5 },
+    challengeAttempt: { status: "completed", correct_count: challenge.target, strikes: 1 },
+  });
+  assert.equal(full.text, [
+    "Taking Court · Aug 10",
+    "🔥 3",
+    "",
+    takeShareQuestion(take),
+    `${challengeShareAsk(challenge)} ✓`,
+    "",
+    "Enter the Court of Public Opinion",
+  ].join("\n"));
+  // The CTA is exact, and nothing follows it — the caller appends the link.
+  assert.equal(full.cta, COURT_SHARE_CTA);
+  assert.ok(full.text.endsWith(`\n${COURT_SHARE_CTA}`));
+  assert.equal(full.path, "?court=1&day=2026-08-10");
+});
+
+test("the share card previews questions and never the player's answers", () => {
+  const take = houseTakeForDate("2026-08-10");
+  const challenge = dailyChallengeForDate("2026-08-10");
+  const full = courtShareSummary({
+    date: "2026-08-10",
+    take,
+    challenge,
+    beats: { take: true, challenge: true },
+    streak: { current: 1 },
+    consensusGate: { have: 5 },
+    challengeAttempt: { status: "completed", correct_count: challenge.target, strikes: 0 },
+  });
+  // Exactly one line from the Take, not all three prompts.
+  for (const item of take.items.slice(1)) assert.ok(!full.text.includes(item.prompt));
+  // No option label — the player's locked choices are answers, not the ask.
+  for (const item of take.items) {
+    for (const option of item.options) assert.ok(!full.text.includes(option.label));
+  }
+  // No score line: a count of the board is a fact about the answers.
+  assert.doesNotMatch(full.text, /\d+\s*\/\s*\d+/);
+  assert.match(full.text, /^Can you name \d+ (guards|forwards|centers) who /m);
+});
+
+test("the success mark is a claim about the board, so it needs a filled board", () => {
+  const take = houseTakeForDate("2026-08-10");
+  const challenge = dailyChallengeForDate("2026-08-10");
+  const share = (challengeAttempt) => courtShareSummary({
+    date: "2026-08-10", take, challenge, beats: { take: true, challenge: true },
+    streak: { current: 0 }, consensusGate: { have: 1 }, challengeAttempt,
+  });
+
+  const cleared = share({ status: "completed", correct_count: challenge.target, strikes: 1 });
+  assert.equal(cleared.challenge_cleared, true);
+  assert.ok(cleared.text.includes(`${challengeShareAsk(challenge)} ✓`));
+
+  const short = share({ status: "completed", correct_count: challenge.target - 1, strikes: 3 });
+  assert.equal(short.challenge_cleared, false);
+  assert.ok(short.text.includes(challengeShareAsk(challenge)));
+  assert.ok(!short.text.includes("✓"));
+});
+
+test("kinded share cards carry only the beats the player earned", () => {
+  const take = houseTakeForDate("2026-08-10");
+  const challenge = dailyChallengeForDate("2026-08-10");
+  const base = {
+    date: "2026-08-10", take, challenge, streak: { current: 0 }, consensusGate: { have: 1 },
+    challengeAttempt: { status: "completed", correct_count: challenge.target, strikes: 0 },
+  };
+
+  const takeOnly = courtShareSummary({ ...base, beats: { take: true, challenge: false } });
+  assert.equal(takeOnly.text, [
+    "Taking Court · Aug 10", "", takeShareQuestion(take), "", COURT_SHARE_CTA,
+  ].join("\n"));
+
+  const challengeOnly = courtShareSummary({ ...base, beats: { take: false, challenge: true } });
+  assert.equal(challengeOnly.text, [
+    "Taking Court · Aug 10", "", `${challengeShareAsk(challenge)} ✓`, "", COURT_SHARE_CTA,
+  ].join("\n"));
+
+  // Streak is a signal, not decoration: it appears only when there is one.
+  assert.ok(!takeOnly.text.includes("🔥"));
+  assert.match(
+    courtShareSummary({ ...base, beats: { take: true, challenge: false }, streak: { current: 7 } }).text,
+    /^Taking Court · Aug 10\n🔥 7\n/,
+  );
+});
+
+test("share dates read by field so the line cannot drift a day", () => {
+  assert.equal(courtShareDate("2026-08-12"), "Aug 12");
+  assert.equal(courtShareDate("2026-01-01"), "Jan 1");
+  assert.equal(courtShareDate("2026-12-31"), "Dec 31");
+  assert.equal(courtShareDate("not-a-day"), null);
+  assert.equal(courtShareDate(undefined), null);
+});
+
+test("questionize poses an ask without inventing words", () => {
+  assert.equal(questionize("Who is the worst matchup?"), "Who is the worst matchup?");
+  assert.equal(questionize("Name 5 guards who played for the Lakers."), "Can you name 5 guards who played for the Lakers?");
+  assert.equal(questionize("  Rank these players  "), "Can you rank these players?");
+  assert.equal(questionize(""), null);
+  assert.equal(questionize(null), null);
+});
+
+test("the Take question prefers authored copy and falls back to the first item", () => {
+  const authored = houseTakeForDate("2026-08-10");
+  assert.ok(authored.share_question, "rotation takes carry a share question");
+  assert.equal(takeShareQuestion(authored), authored.share_question);
+
+  // A day snapshotted before share_question existed still poses a question.
+  const legacy = { title: "Legacy court", items: authored.items };
+  assert.equal(takeShareQuestion(legacy), questionize(authored.items[0].prompt));
+  assert.ok(takeShareQuestion(legacy).endsWith("?"));
+
+  // Nothing usable at all falls back to the title rather than inventing a question.
+  assert.equal(takeShareQuestion({ title: "Barbershop ballot", items: [] }), "Barbershop ballot");
+  assert.equal(takeShareQuestion({}), null);
+});
+
+test("the Challenge ask is built from the definition, matching the played prompt", () => {
+  assert.equal(
+    challengeShareAsk({ axis: "team", value: "LAL", position: "G", target: 5 }),
+    "Can you name 5 guards who played for the Lakers?",
+  );
+  assert.equal(
+    challengeShareAsk({ axis: "college", value: "Duke", position: "F", target: 4 }),
+    "Can you name 4 forwards who went to Duke?",
+  );
+  // Filter-built or older definitions carry only a prompt.
+  assert.equal(
+    challengeShareAsk({ prompt: "Name 3 centers who played for the Bulls." }),
+    "Can you name 3 centers who played for the Bulls?",
+  );
+  assert.equal(challengeShareAsk({}), null);
 });
 
 test("player-authored take uses the same three-item lock and compare contract", () => {

@@ -2819,8 +2819,10 @@ function renderCourtShare(prefix, summary){
   if(!card) return;
   card.classList.toggle("hidden", !summary);
   if(!summary) return;
-  $(prefix+"Title").textContent=summary.title;
-  $(prefix+"Text").textContent=summary.text;
+  // The preview is the outbound text, link included (#14) — rendering summary.text
+  // alone showed a card ending on the CTA with nothing to enter.
+  $(prefix+"Title").textContent="Send today's Court";
+  $(prefix+"Text").textContent=courtShareText(summary);
 }
 function renderCourtConsensus(){
   const take=COURT.take; if(!take) return;

@@ -1,6 +1,8 @@
 export const HOUSE_TAKE_ROTATION = [
   {
     title: "Opening night arguments",
+    // One question for the share card (#14) — the invite, not the three prompts.
+    share_question: "Who do you trust to build around for the next five years?",
     items: [
       {
         id: "franchise-cornerstone",
@@ -39,6 +41,7 @@ export const HOUSE_TAKE_ROTATION = [
   },
   {
     title: "Legacy court",
+    share_question: "Which 2000s star do you take for one prime season?",
     items: [
       {
         id: "aughts-first-pick",
@@ -77,6 +80,7 @@ export const HOUSE_TAKE_ROTATION = [
   },
   {
     title: "Barbershop ballot",
+    share_question: "Who makes you stop scrolling first?",
     items: [
       {
         id: "must-watch",
@@ -177,6 +181,9 @@ export function houseTakeForDate(date) {
   return {
     id: `house_take_${date}`,
     title: take.title,
+    // Snapshotted into mp_court_days with the rest of the take, so a day keeps the
+    // share line it shipped with even if the rotation is re-authored later.
+    ...(take.share_question ? { share_question: take.share_question } : {}),
     items: take.items.map((item) => ({
       ...item,
       options: item.options.map((option) => ({ ...option })),
@@ -355,6 +362,67 @@ export function takeHotScore(items, answers, consensusRows) {
   return n ? sum / n : 0;
 }
 
+/** Exact wording, and it sits immediately above the link (#14). */
+export const COURT_SHARE_CTA = "Enter the Court of Public Opinion";
+export const COURT_SHARE_BRAND = "Taking Court";
+
+const SHARE_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** "2026-08-12" -> "Aug 12". Parsed by field, never by Date, so the share line
+ *  cannot drift a day between a UTC server and a reader's timezone. */
+export function courtShareDate(date) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(date ?? ""));
+  if (!m) return null;
+  const month = SHARE_MONTHS[Number(m[2]) - 1];
+  return month ? `${month} ${Number(m[3])}` : null;
+}
+
+/** Pose an authored ask as a question without inventing words: an existing
+ *  question is left alone, an imperative ("Name 5 guards …") becomes
+ *  "Can you name 5 guards …?". Both share lines run through this, so the Take
+ *  and the Challenge read in one voice. */
+export function questionize(text) {
+  const s = String(text ?? "").trim().replace(/\s+/g, " ");
+  if (!s) return null;
+  if (s.endsWith("?")) return s;
+  const body = s.replace(/[.!\s]+$/, "");
+  if (!body) return null;
+  return `Can you ${body.charAt(0).toLowerCase()}${body.slice(1)}?`;
+}
+
+/** The Take previewed as ONE question — never the three prompts, never what the
+ *  player locked. A day's take is snapshotted into mp_court_days at creation, so
+ *  days built before share_question existed fall back to their first item. */
+export function takeShareQuestion(take) {
+  const authored = String(take?.share_question ?? "").trim();
+  if (authored) return authored;
+  const first = (take?.items ?? [])[0];
+  return questionize(first?.prompt) ?? (take?.title ? String(take.title) : null);
+}
+
+/** The Challenge previewed as its ask. Built from the structured fields where
+ *  they exist so the wording matches challengePrompt by construction; the stored
+ *  prompt is the fallback for filter-built or older definitions. */
+export function challengeShareAsk(challenge) {
+  const noun = POSITION_NOUN[challenge?.position];
+  const target = challenge?.target;
+  if (noun && Number.isInteger(target)) {
+    if (challenge.axis === "team") {
+      return `Can you name ${target} ${noun} who played for the ${TEAM_NAMES[challenge.value] ?? challenge.value}?`;
+    }
+    if (challenge.axis === "college") return `Can you name ${target} ${noun} who went to ${challenge.value}?`;
+  }
+  return questionize(challenge?.prompt);
+}
+
+/**
+ * Text-only Daily share card (#14): brand + date, streak, a question per beat
+ * the player actually earned, then the CTA. The link is appended by the caller,
+ * which is why the CTA is the last line here.
+ *
+ * It previews the QUESTIONS, never the answers — no locked choices, no named
+ * players — so a recipient can be sent today's card and still play it cold.
+ */
 export function courtShareSummary({ date, take, challenge, beats, streak, challengeAttempt, consensusGate }) {
   const safeBeats = takeCourtBeats({
     takeDone: beats?.take,
@@ -374,25 +442,41 @@ export function courtShareSummary({ date, take, challenge, beats, streak, challe
     strikes: Number(challengeAttempt?.strikes ?? 0),
     status: challengeAttempt?.status ?? "completed",
   } : null;
-  const lines = [
-    title,
-    date ? `Court ${date}` : null,
-    safeBeats.take ? `Take locked: ${take?.title ?? "Today's Take"}` : null,
-    safeBeats.challenge ? `Challenge: ${challengeScore.correct_count}/${challengeScore.target || "?"}` : null,
-    streak?.current ? `Streak ${streak.current}` : null,
+  // A mark is a claim about the board, so it needs the board filled — a beat that
+  // ended any other way shows the ask alone rather than implying a clear sheet.
+  const challengeCleared = !!challengeScore
+    && challengeScore.status === "completed"
+    && challengeScore.target > 0
+    && challengeScore.correct_count >= challengeScore.target;
+  const takeQuestion = safeBeats.take ? takeShareQuestion(take) : null;
+  const challengeAsk = safeBeats.challenge ? challengeShareAsk(challenge) : null;
+  const day = courtShareDate(date);
+  const streakCount = Number(streak?.current ?? 0);
+  const head = [
+    day ? `${COURT_SHARE_BRAND} · ${day}` : COURT_SHARE_BRAND,
+    streakCount > 0 ? `🔥 ${streakCount}` : null,
   ].filter(Boolean);
+  const body = [
+    takeQuestion,
+    challengeAsk ? `${challengeAsk}${challengeCleared ? " ✓" : ""}` : null,
+  ].filter(Boolean);
+  const blocks = [head.join("\n"), body.join("\n"), COURT_SHARE_CTA].filter(Boolean);
   return {
     kind,
     title,
     prompt,
     date,
     beats: safeBeats,
-    streak: streak?.current ?? 0,
+    streak: streakCount,
     consensus_count: Number(consensusGate?.have ?? 0),
     challenge_score: challengeScore,
+    take_question: takeQuestion,
+    challenge_ask: challengeAsk,
+    challenge_cleared: challengeCleared,
+    cta: COURT_SHARE_CTA,
     // Recipients open Play Now via ?court=1 (client boot).
     path: date ? `?court=1&day=${encodeURIComponent(date)}` : "?court=1",
-    text: `${lines.join("\n")}\nPlay today's Court`,
+    text: blocks.join("\n\n"),
   };
 }
 
