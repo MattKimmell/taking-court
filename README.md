@@ -1,6 +1,6 @@
 # Taking Court
 
-**Rank it. Defend it. Settle it with the group.**
+**Welcome to the Sport Court of Public Opinion.**
 
 Taking Court is a mobile-first web app for NBA "talking ball" debates. Draw a set of
 players, teams, or coaches, sort them into tiers (S → F), and see how your take stacks up

@@ -14,7 +14,7 @@
 <meta name="apple-mobile-web-app-title" content="Taking Court" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta property="og:title" content="Taking Court" />
-<meta property="og:description" content="Rank it, defend it. The daily hoops debate." />
+<meta property="og:description" content="Welcome to the Sport Court of Public Opinion — the daily hoops debate." />
 <meta property="og:type" content="website" />
 <meta property="og:image" content="icons/og.png" />
 <meta name="twitter:card" content="summary_large_image" />
@@ -279,7 +279,7 @@
   <div class="head">
     <div>
       <h1>Taking <span class="b">Court</span></h1>
-      <div class="sub">Rank it. Defend it. Settle it with the group.</div>
+      <div class="sub">Welcome to the Sport Court of Public Opinion</div>
     </div>
     <div class="pill hidden" id="modePill">duel</div>
   </div>
@@ -288,9 +288,8 @@
   <div id="lobby" class="card">
     <div class="home-hero">
       <div class="section-kicker">Daily Court</div>
-      <div class="home-hero-title">Play Now</div>
-      <div class="note" id="lobbyCourtNote">Lock today's three-item Take, then the Challenge. One streak.</div>
-      <div id="lobbyDoneLine" class="banner win hidden" style="margin-top:12px"></div>
+      <div class="home-hero-title" id="lobbyCourtTitle">Play Now</div>
+      <div class="note" id="lobbyCourtNote">Think You Know Ball?</div>
       <button id="dailyBtn" style="width:100%;font-size:16px;padding:14px;margin-top:14px;background:linear-gradient(90deg,var(--accent),var(--gold))">Play Now <span id="dailyStreak"></span></button>
     </div>
     <nav class="home-nav" aria-label="Taking Court sections">
@@ -2645,29 +2644,38 @@ function goHome(){
   if(CREW_RETURN){ const c=CREW_RETURN; CREW_RETURN=null; openCrew(c); return; }
   show("lobby"); refreshLobbyCourt();
 }
+// Home glossary (#13). One state in, one product language out: the CTA says where
+// the button goes and the note says why. Pure, so every beat state is exercisable
+// as a fixture (home_glossary.test.mjs) rather than only by playing the day.
+// Order matters and mirrors courtContinueRoute: a live attempt is resumed before
+// anything else, so the button must promise the board, not the Take.
+function courtHomeCopy({ beats, takeAnswered=0, attemptStatus=null }={}){
+  const b=beats||{};
+  if(b.full_stack) return { state:"full_stack", cta:"Review Your Daily", note:"See your recap and share card." };
+  if(attemptStatus==="in_progress") return { state:"challenge_in_progress", cta:"Resume Challenge", note:"Your board is waiting." };
+  if(b.take) return { state:"challenge_open", cta:"Continue", note:"Your Take is recorded. Your Challenge Awaits." };
+  if(b.challenge) return { state:"take_open", cta:"Continue", note:"Your Challenge is recorded. Your Take is still open." };
+  const n=Math.max(0,Math.min(3,Math.trunc(Number(takeAnswered))||0));
+  if(n>0) return { state:"take_in_progress", cta:"Continue", note:`Take ${n} of 3 locked. Finish when you're back.` };
+  return { state:"fresh", cta:"Play Now", note:"Think You Know Ball?" };
+}
 async function refreshLobbyCourt(){
-  const done=$("lobbyDoneLine"), note=$("lobbyCourtNote"), btn=$("dailyBtn");
-  if(!done || !btn) return;
+  const title=$("lobbyCourtTitle"), note=$("lobbyCourtNote"), btn=$("dailyBtn");
+  if(!btn) return;
   try{
     const r=await api("court_daily",{client_id:clientId()});
-    if(!r.ok){ done.classList.add("hidden"); return; }
+    if(!r.ok) return;
     setStreak(r.streak);
-    const beats=r.beats||{};
-    if(beats.full_stack){
-      done.classList.add("hidden");
-      if(note) note.textContent="You finished Take and Challenge. Come back tomorrow.";
-    } else if(beats.take || beats.challenge){
-      done.classList.remove("hidden"); done.className="banner win";
-      done.textContent=(beats.take?"Take locked":"Challenge done")+(beats.take&&!beats.challenge?" · Challenge still open":"");
-      if(note) note.textContent=beats.take&&!beats.challenge?"Bonus Challenge still available today.":"Take still available if you want the full stack.";
-    } else {
-      done.classList.add("hidden");
-      if(note) note.textContent="Lock today's three-item Take, then the Challenge. One streak.";
-    }
-    const label = beats.full_stack ? "Review Your Daily" : ((beats.take || beats.challenge) ? "Continue Court" : "Play Now");
-    btn.innerHTML = label + ' <span id="dailyStreak"></span>';
+    const copy=courtHomeCopy({
+      beats:r.beats||{},
+      takeAnswered:(r.take_progress&&r.take_progress.answered_item_ids||[]).length,
+      attemptStatus:r.challenge_attempt&&r.challenge_attempt.status,
+    });
+    if(title) title.textContent=copy.cta;
+    if(note) note.textContent=copy.note;
+    btn.innerHTML = copy.cta + ' <span id="dailyStreak"></span>';
     renderStreak();
-  }catch(e){ done.classList.add("hidden"); }
+  }catch(e){}
 }
 $("dailyBtn").onclick=()=>openDaily();
 $("pickupBtn") && ($("pickupBtn").onclick = ()=>openPartyHome());
