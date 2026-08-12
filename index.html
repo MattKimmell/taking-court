@@ -51,7 +51,11 @@
     border-radius:999px;padding:5px 12px;font-size:12px;color:var(--muted);flex:0 0 auto}
   .hidden{display:none !important}
   .head{display:flex;justify-content:space-between;align-items:center;gap:10px}
-  .timer{font-variant-numeric:tabular-nums;font-size:30px;font-weight:700;letter-spacing:1px}
+  /* The timer was a 30px number in the top-right of the play head, which made
+     "how long have I taken" the loudest thing on the surface and the ask the
+     second loudest. It is still exact and still ticking every 100ms — it just
+     reads at the same weight as strikes and fill now (#15). */
+  .timer{font-variant-numeric:tabular-nums;font-size:16px;font-weight:700;letter-spacing:.5px}
   .strikes{display:flex;gap:8px;align-items:center}
   .strike{width:22px;height:22px;border-radius:50%;border:2px solid var(--line);display:grid;place-items:center;font-size:13px;font-weight:800}
   .strike.on{border-color:var(--bad);color:var(--bad);background:rgba(239,68,68,.12)}
@@ -66,7 +70,23 @@
   .slot .ctx{margin-left:auto;color:var(--muted);font-size:13px}
   .slot.revealed{border-color:var(--accent);background:rgba(249,115,102,.08);opacity:.9}
   .slot.revealed .n{background:var(--accent);color:#2a1200}
+  /* One row that answers "where do I stand" in a glance: strikes, fill, clock,
+     all at the same size, none of them shouting over the ask above. */
+  .statusrow{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-top:10px;
+    padding:9px 12px;border-radius:10px;background:var(--panel2);border:1px solid var(--line)}
+  .statusrow .stat{display:flex;flex-direction:column;gap:6px;align-items:center}
+  .statusrow .stat:first-child{align-items:flex-start} .statusrow .stat:last-child{align-items:flex-end}
+  /* The three labels are what the eye lands on, so they share a baseline; the
+     strike pips are sized down to keep the values roughly level under them. */
+  .statusrow .lbl{font-size:10px;font-weight:800;letter-spacing:1px;color:var(--muted);text-transform:uppercase;line-height:1}
+  .statusrow .val{font-size:16px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1}
+  .statusrow .strike{width:18px;height:18px;font-size:11px}
+  /* The feed keeps short memory: the two most recent graded lines, newest on
+     top. One line meant the guess before last was already gone; an unbounded
+     log pushed the input off a phone screen. The older line is faded so the
+     stack reads as history rather than as two equally live verdicts (#15). */
   .feed{margin-top:10px;font-size:13px;color:var(--muted);min-height:20px}
+  .feed .feedline + .feedline{margin-top:3px;opacity:.45}
   .feed .c{color:var(--good)} .feed .x{color:var(--bad)} .feed .d{color:var(--gold)}
   .acdrop{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:30;background:var(--panel2);
     border:1px solid var(--line);border-radius:10px;overflow:hidden;max-height:244px;overflow-y:auto;
@@ -135,6 +155,12 @@
     background:rgba(249,115,22,.09);border:1px solid var(--accent)}
   .askbox .eb{font-size:10.5px;font-weight:800;letter-spacing:1.2px;color:var(--accent)}
   .askbox .aq{font-size:15px;font-weight:700;line-height:1.35;margin-top:2px}
+  /* The rules of the sheet, quietly. The status row underneath says where you
+     stand; this says what the sheet asks for, which does not change. */
+  .askbox .am{font-size:11.5px;color:var(--muted);margin-top:5px}
+  /* Challenge play has no competing headline, so its ask carries the largest
+     type on the screen — that is the whole point of #15. */
+  #play .askbox .aq{font-size:17px}
   /* Round 2 puts five names in a 1-5 order. The tier BOARD (.tierrow) is right
      for 8-12 chips across six tiers, but here it spends most of a phone screen
      on an "Unranked" gutter — so this round is a list, one row per name, every
@@ -638,15 +664,15 @@
       <button class="ghost" id="playBack">← Back</button>
       <button class="ghost challenge-restart" id="playRestart" aria-label="Restart Challenge" title="Restart Challenge">↻</button>
     </div>
-    <div class="head">
-      <div>
-        <div class="pill" id="playCat">…</div>
-        <div style="font-weight:700;font-size:16px;margin-top:8px" id="playPrompt"></div>
-      </div>
-      <div style="text-align:right">
-        <div class="timer" id="timer">0:00.0</div>
-        <div class="strikes" id="strikeRow" style="justify-content:flex-end;margin-top:6px"></div>
-      </div>
+    <div class="askbox">
+      <div class="eb" id="playCat">…</div>
+      <div class="aq" id="playPrompt"></div>
+      <div class="am" id="playMeta"></div>
+    </div>
+    <div class="statusrow">
+      <div class="stat"><span class="lbl">Strikes</span><div class="strikes" id="strikeRow"></div></div>
+      <div class="stat"><span class="lbl">Filled</span><div class="val" id="playFill">0/0</div></div>
+      <div class="stat"><span class="lbl">Time</span><div class="val timer" id="timer">0:00.0</div></div>
     </div>
     <div class="slots" id="slots"></div>
     <div class="linkbox" style="margin-top:14px">
@@ -1704,8 +1730,13 @@ function startTimer(){ clearInterval(timerInt); timerInt=setInterval(()=>{
 
 const RARITY_LABELS={common:"Common",uncommon:"Uncommon",rare:"Rare",deep_cut:"Deep cut"};
 function buildBoard(){
-  $("playCat").textContent = ST.vsBot ? ("vs Computer"+(ST.botLabel?` (${ST.botLabel})`:"")) : (ST.isRoster ? "Roster" : (ST.mode==="duel"?"1v1 Duel":"Competition"));
+  // The Daily says so: it used to land here labelled "Roster", which is the
+  // shape of the sheet, not the thing the player thinks they opened.
+  $("playCat").textContent = ST.isCourtDaily ? "Daily Challenge"
+    : ST.vsBot ? ("vs Computer"+(ST.botLabel?` (${ST.botLabel})`:""))
+    : (ST.isRoster ? "Roster" : (ST.mode==="duel"?"1v1 Duel":"Competition"));
   $("playPrompt").textContent = ST.prompt;
+  $("playMeta").textContent = `Name ${ST.answer_target} · ${ST.strike_limit} strikes`;
   const slots=$("slots"); slots.innerHTML="";
   for(let i=1;i<=ST.answer_target;i++){
     const d=document.createElement("div"); d.className="slot"; d.id="slot"+i;
@@ -1724,7 +1755,14 @@ function renderPlay(){
       el.querySelector(".name").textContent=info.name;
     }
   });
-  for(let i=0;i<ST.strike_limit;i++) $("strk"+i).classList.toggle("on", i<ST.strikes);
+  renderStatus();
+}
+// Strikes and fill are one row now, so they get one writer — a resume and a
+// graded guess must not be able to disagree about how full the board is.
+function renderStatus(){
+  for(let i=0;i<ST.strike_limit;i++) $("strk"+i)?.classList.toggle("on", i<ST.strikes);
+  const filled = Number.isFinite(ST.correct) ? ST.correct : Object.keys(ST.filled||{}).length;
+  const el=$("playFill"); if(el) el.textContent=`${filled}/${ST.answer_target}`;
 }
 
 function applyGuessToBoard(r){
@@ -1736,7 +1774,7 @@ function applyGuessToBoard(r){
       else { el.querySelector(".name").textContent=r.display_name; el.querySelector(".ctx").textContent=r.context_label||""; }
     }
   }
-  for(let i=0;i<ST.strike_limit;i++) $("strk"+i)?.classList.toggle("on",i<ST.strikes);
+  renderStatus();
 }
 function renderRosterChallengeInline(r){
   const f=r.feedback||{};
@@ -1798,7 +1836,16 @@ function rarBadge(rar){
   const pct = (rar.pick_pct!=null)?` · ${rar.pick_pct}%`:"";
   return `<span class="rar ${rar.rarity_tier}">${emoji}${rar.rarity_label}${pct}</span>`;
 }
-function feed(html){ $("feed").innerHTML = html; }
+// Newest first, two deep, and an empty string wipes the memory (a restart or a
+// fresh board must not inherit the last board's verdicts). Pure so the drop
+// rule is exercisable as a fixture — see challenge_play.test.mjs.
+const FEED_DEPTH=2;
+function feedPush(lines, html){ return html ? [html, ...lines].slice(0,FEED_DEPTH) : []; }
+let FEED=[];
+function feed(html){
+  FEED = feedPush(FEED, html);
+  $("feed").innerHTML = FEED.map(line=>`<div class="feedline">${line}</div>`).join("");
+}
 
 // ------------------------------------------------------------------ autocomplete
 let POOL=[];        // [{v, label, key}]  key = normalized search string
@@ -1876,6 +1923,7 @@ async function restartChallenge(){
   }
   buildBoard(); renderPlay();
   $("guessInput").value=""; acHide();
+  feed("");   // the cleared board must not keep the old board's verdicts
   feed(`<span class="d">↻ Challenge restarted.</span>`);
   track("challenge_restart",{surface:ST.isCourtDaily?"daily":"freeplay",kind:ST.isRoster?"roster":"top8"});
   $("guessInput").focus(); startTimer();
