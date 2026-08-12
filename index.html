@@ -116,8 +116,19 @@
   .feed .m-orange{color:var(--accent)} .feed .m-red{color:var(--bad)}
   /* Reduced motion keeps every state change — colour, fill, the strip — and
      drops only the travel. Nothing here is the sole carrier of a state. */
+  /* The streak is the one number on Home that changes because of something you
+     just did, so it says so when it goes up (#16). */
+  #dailyStreak{display:inline-block}
+  #dailyStreak.streak-bump{animation:streakBump .5s ease-out}
+  @keyframes streakBump{0%{transform:scale(1)}30%{transform:scale(1.32)}62%{transform:scale(.97)}100%{transform:scale(1)}}
+  /* Reduced motion keeps every state change — colour, fill, the strip, the bar
+     widths, the new streak number — and drops only the travel. Nothing here is
+     the sole carrier of a state. */
   @media (prefers-reduced-motion: reduce){
     .closed{animation:none} .slot.landed{animation:none}
+    .take-rank.moved{animation:none} .daily-primary.ready{animation:none}
+    .settle-in{animation:none} #dailyStreak.streak-bump{animation:none}
+    .distribution-bar span{transition:none}
   }
   .acdrop{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:30;background:var(--panel2);
     border:1px solid var(--line);border-radius:10px;overflow:hidden;max-height:244px;overflow-y:auto;
@@ -278,6 +289,26 @@
   .question-panel{margin-top:16px;padding:18px;border-radius:14px;background:var(--panel2);border:1px solid var(--line)}
   .question-type{color:var(--accent);font-size:11px;font-weight:900;letter-spacing:.9px;text-transform:uppercase}
   .question-prompt{font-size:20px;font-weight:850;line-height:1.3;margin-top:7px}
+  /* Picking has to look like committing. Every option used to sit at the same
+     weight with only a radio dot to separate them, so a chosen answer read the
+     same as an un-chosen one at a glance (#16). */
+  .take-choice{transition:border-color .16s ease,background .16s ease,opacity .16s ease}
+  .take-choice.chosen{border-color:var(--accent);background:rgba(249,115,22,.10)}
+  .take-choice.chosen .name{font-weight:800}
+  .take-choice.dim{opacity:.55}
+  /* Rank has no single "chosen" row, but it does have a #1 — which is the
+     answer the room is compared on, so that is the row that gets the weight. */
+  .take-rank.top{border-color:var(--accent);background:rgba(249,115,22,.08)}
+  .take-rank.top .n{background:var(--accent);color:#2a1200}
+  .take-rank.moved{animation:rankMoved .42s ease-out}
+  @keyframes rankMoved{0%{background:rgba(56,189,248,.20)}100%{background:var(--panel2)}}
+  /* A valid answer makes the button look ready once, rather than silently
+     un-disabling. */
+  .daily-primary.ready{animation:lockReady .45s ease-out}
+  .daily-primary.committing{opacity:.75;transform:scale(.985)}
+  @keyframes lockReady{0%{transform:scale(1)}45%{transform:scale(1.02)}100%{transform:scale(1)}}
+  .settle-in{animation:settleIn .28s ease-out}
+  @keyframes settleIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
   .feedback-hero{margin-top:16px;padding:18px;border-radius:14px;border:1px solid var(--line);background:var(--panel2)}
   .feedback-hero.good{border-color:var(--good);background:rgba(34,197,94,.08)}
   .feedback-hero.bad{border-color:var(--bad);background:rgba(239,68,68,.08)}
@@ -288,7 +319,10 @@
   .distribution-row{padding:10px 12px;border-radius:10px;background:#0e1730;border:1px solid var(--line)}
   .distribution-head{display:flex;justify-content:space-between;gap:10px;font-size:13px}
   .distribution-bar{height:5px;border-radius:99px;background:var(--line);overflow:hidden;margin-top:7px}
-  .distribution-bar span{display:block;height:100%;background:var(--accent2);border-radius:inherit}
+  /* Bars grow to the room's numbers instead of arriving pre-formed: the width
+     is the whole content of the row, so watching it move is the payoff (#16). */
+  .distribution-bar span{display:block;height:100%;width:0;background:var(--accent2);border-radius:inherit;
+    transition:width .52s cubic-bezier(.22,.9,.3,1)}
   .distribution-row.mine{border-color:var(--accent)}
   .distribution-row.mine .distribution-bar span{background:var(--accent)}
   .daily-primary{width:100%;min-height:48px;margin-top:16px}
@@ -2806,9 +2840,39 @@ async function openTierBrowse(){
 // last server value is kept in localStorage purely so the lobby can render a
 // number before the first `daily` call returns.
 function getStreak(){ try{return JSON.parse(localStorage.getItem("mp_streak")||"{}")}catch{return {}} }
-function renderStreak(){ const s=getStreak(); const el=$("dailyStreak"); if(el) el.textContent=(s.streak>0?" · 🔥 "+s.streak:""); }
+function streakLabel(n){ return n>0 ? " · 🔥 "+n : ""; }
+// A streak goes up on the Take lock, which happens two screens away from the
+// only place the number is shown. So the increase is *held* until Home is
+// actually on screen and spent there — otherwise the celebration plays to an
+// empty room and the player returns to a number that silently changed (#16).
+let STREAK_TICK=null;
+const STREAK_TICK_MS=150;
+function homeVisible(){ return !$("lobby").classList.contains("hidden"); }
+function renderStreak(){
+  const el=$("dailyStreak"); if(!el) return;
+  const to=getStreak().streak||0;
+  const tick=STREAK_TICK;
+  if(!tick || !homeVisible() || reduceMotion() || tick.to!==to){
+    if(tick && homeVisible()) STREAK_TICK=null;   // spent, even if not animated
+    el.textContent=streakLabel(to);
+    return;
+  }
+  STREAK_TICK=null;
+  let v=Math.max(0,tick.from);
+  el.textContent=streakLabel(v)||" · 🔥";
+  const step=()=>{
+    v++;
+    el.textContent=streakLabel(v);
+    el.classList.remove("streak-bump"); void el.offsetWidth; el.classList.add("streak-bump");
+    if(v<tick.to) setTimeout(step, STREAK_TICK_MS);
+    else setTimeout(()=>el.classList.remove("streak-bump"), 520);
+  };
+  setTimeout(step, STREAK_TICK_MS);
+}
 function setStreak(srv){
   if(!srv || typeof srv.current!=="number") return;
+  const prev=getStreak().streak||0;
+  if(srv.current>prev) STREAK_TICK={from:prev,to:srv.current};
   localStorage.setItem("mp_streak", JSON.stringify({ streak:srv.current, last:srv.last_played||null }));
   renderStreak();
 }
@@ -2838,7 +2902,6 @@ async function refreshLobbyCourt(){
   try{
     const r=await api("court_daily",{client_id:clientId()});
     if(!r.ok) return;
-    setStreak(r.streak);
     const copy=courtHomeCopy({
       beats:r.beats||{},
       takeAnswered:(r.take_progress&&r.take_progress.answered_item_ids||[]).length,
@@ -2847,7 +2910,9 @@ async function refreshLobbyCourt(){
     if(title) title.textContent=copy.cta;
     if(note) note.textContent=copy.note;
     btn.innerHTML = copy.cta + ' <span id="dailyStreak"></span>';
-    renderStreak();
+    // The streak paints once, and only after the button has its fresh span —
+    // painting first meant the tick animated on an element about to be replaced.
+    if(r.streak) setStreak(r.streak); else renderStreak();
   }catch(e){}
 }
 $("dailyBtn").onclick=()=>openDaily();
@@ -2904,7 +2969,7 @@ function renderCourtTake(){
     $("courtTakeItems").innerHTML=`<div class="question-panel">
       <div class="question-type">Rank in your order</div>
       <div class="question-prompt">${esc(item.prompt)}</div>
-      <div style="margin-top:14px">${keys.map((key,pos)=>`<div class="slot" style="align-items:center">
+      <div style="margin-top:14px">${keys.map((key,pos)=>`<div class="slot take-rank${pos===0?" top":""}${key===COURT.takeMoved?" moved":""}" style="align-items:center">
         <div class="n">${pos+1}</div><div class="name">${esc((byKey[key]||{}).label||key)}</div>
         <div class="row" style="flex:0 0 auto;gap:6px">
           <button class="ghost court-rank" data-id="${esc(item.id)}" data-dir="-1" data-pos="${pos}" ${pos===0?"disabled":""} style="padding:5px 9px;min-height:44px" aria-label="Move ${esc((byKey[key]||{}).label||key)} up">↑</button>
@@ -2912,29 +2977,66 @@ function renderCourtTake(){
         </div>
       </div>`).join("")}</div>
     </div>`;
-    $("courtTakeLock").disabled=false;
+    COURT.takeMoved=null;   // the flash is for the move that just happened, once
+    setLockReady(true);
   } else {
     $("courtTakeItems").innerHTML=`<div class="question-panel">
       <div class="question-type">Pick one</div>
       <div class="question-prompt">${esc(item.prompt)}</div>
-      <div class="slots" style="margin-top:14px">${(item.options||[]).map(o=>`<label class="slot" style="cursor:pointer;min-height:52px">
+      <div class="slots" style="margin-top:14px">${(item.options||[]).map(o=>`<label class="slot take-choice" data-key="${esc(o.key)}" style="cursor:pointer;min-height:52px">
         <input type="radio" name="court_${esc(item.id)}" value="${esc(o.key)}" ${answer===o.key?"checked":""} style="flex:0 0 auto;width:auto;min-height:0" />
         <div class="name">${esc(o.label)}</div>
       </label>`).join("")}</div>
     </div>`;
-    $("courtTakeLock").disabled=!answer;
+    paintTakeChoice(answer);
+    setLockReady(!!answer);
   }
   Array.from(document.querySelectorAll(".court-rank")).forEach(btn=>btn.onclick=()=>{
     const id=btn.dataset.id, pos=parseInt(btn.dataset.pos), dir=parseInt(btn.dataset.dir);
     const arr=(COURT.answers[id]||[]).slice(), next=pos+dir;
     if(next<0 || next>=arr.length) return;
-    [arr[pos],arr[next]]=[arr[next],arr[pos]]; COURT.answers[id]=arr; renderCourtTake();
+    [arr[pos],arr[next]]=[arr[next],arr[pos]]; COURT.answers[id]=arr;
+    COURT.takeMoved=arr[next];   // follow the name, not the row it left
+    renderCourtTake();
   });
   if(item.type==="multiple_choice") Array.from(document.querySelectorAll(`input[name="court_${CSS.escape(item.id)}"]`)).forEach(el=>el.onchange=()=>{
-    COURT.answers[item.id]=el.value; $("courtTakeLock").disabled=false;
+    COURT.answers[item.id]=el.value;
+    paintTakeChoice(el.value);
+    setLockReady(true);
   });
 }
+// One chosen row, the rest stood down. Painted rather than re-rendered, because
+// re-rendering the panel on every tap would drop focus mid-decision.
+function paintTakeChoice(key){
+  const rows=Array.from(document.querySelectorAll("#courtTakeItems .take-choice"));
+  rows.forEach(row=>{
+    const chosen=!!key && row.dataset.key===key;
+    row.classList.toggle("chosen", chosen);
+    row.classList.toggle("dim", !!key && !chosen);
+  });
+}
+// Enabling in silence is the thing this fixes: the button says it is ready once,
+// on the transition, and never re-fires while you change your mind.
+function setLockReady(ready){
+  const btn=$("courtTakeLock"); if(!btn) return;
+  const was=!btn.disabled;
+  btn.disabled=!ready;
+  if(ready && !was && !reduceMotion()){
+    btn.classList.remove("ready"); void btn.offsetWidth; btn.classList.add("ready");
+  }
+  if(!ready) btn.classList.remove("ready");
+}
 function responseN(n){ return `${n} response${n===1?"":"s"}`; }
+// Two frames: one where the bars are empty, one where they are told their real
+// width. Under reduced motion the transition is off, so this lands the same
+// numbers in a single jump rather than skipping them.
+function growDistributionBars(scope){
+  const bars=Array.from((scope||document).querySelectorAll(".distribution-bar span[data-pct]"));
+  if(!bars.length) return;
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    bars.forEach(bar=>{ bar.style.width=`${Math.max(0,Math.min(100,Number(bar.dataset.pct)||0))}%`; });
+  }));
+}
 function renderCourtTakeFeedback(){
   const f=COURT.takeFeedback; if(!f) return;
   const item=f.item, row=f.consensus||{}, total=Number(row.total)||0;
@@ -2943,9 +3045,12 @@ function renderCourtTakeFeedback(){
   if(item.type==="multiple_choice"){
     const mine=(row.choices||[]).find(c=>c.key===f.answer) || {label:(item.options||[]).find(o=>o.key===f.answer)?.label||f.answer,count:0,pct:0};
     title=`${mine.pct||0}% picked ${mine.label} too · ${mine.count||0} of ${responseN(total)}`;
-    distribution=(row.choices||[]).map(c=>`<div class="distribution-row ${c.key===f.answer?"mine":""}">
+    // The width is carried as data and applied after paint, so the bar has an
+    // empty state to grow from. CSS alone cannot animate from a width it was
+    // born with.
+    distribution=(row.choices||[]).map((c,i)=>`<div class="distribution-row ${c.key===f.answer?"mine":""}">
       <div class="distribution-head"><span>${esc(c.label)}</span><strong>${c.pct||0}% · ${c.count} of ${total}</strong></div>
-      <div class="distribution-bar"><span style="width:${Math.max(0,Math.min(100,c.pct||0))}%"></span></div>
+      <div class="distribution-bar"><span data-pct="${Math.max(0,Math.min(100,c.pct||0))}" style="transition-delay:${i*70}ms"></span></div>
     </div>`).join("");
   } else {
     const top=Array.isArray(f.answer)?f.answer[0]:null;
@@ -2956,14 +3061,17 @@ function renderCourtTakeFeedback(){
       <div class="note" style="margin-top:4px">${r.top_pct||0}% ranked first · ${r.top_count||0} of ${total}</div>
     </div>`).join("");
   }
-  $("courtTakeFeedbackBody").innerHTML=`<div class="feedback-hero">
-    <div class="feedback-kicker">Your answer is locked</div>
+  const body=$("courtTakeFeedbackBody");
+  body.innerHTML=`<div class="feedback-hero">
+    <div class="feedback-kicker">Locked In</div>
     <div class="feedback-title" tabindex="-1">${esc(title)}</div>
     <div class="feedback-copy">${total?`${responseN(total)} in the room so far.`:"No room responses yet."} ${total===1?"You’re the first data point — the percentage is still real.":""}</div>
   </div><div class="distribution">${distribution}</div>`;
+  body.classList.remove("settle-in"); void body.offsetWidth; body.classList.add("settle-in");
+  growDistributionBars(body);
   $("courtTakeContinue").textContent=f.take_complete ? (COURT.beats?.challenge?"See Daily recap":"Continue to Challenge") : "Continue";
   track("court_feedback_view",{phase:"take",item_index:f.item_index,item_type:item.type,sample_size:total});
-  requestAnimationFrame(()=>$("courtTakeFeedbackBody").querySelector(".feedback-title")?.focus());
+  requestAnimationFrame(()=>body.querySelector(".feedback-title")?.focus());
 }
 function courtShareLink(summary){
   const base=location.origin+location.pathname;
@@ -3085,10 +3193,11 @@ $("courtTakeLock").onclick=async()=>{
   if(!item) return;
   const answer=COURT.answers[item.id];
   if(item.type==="multiple_choice"&&!answer){ $("courtTakeErr").textContent="Pick an answer before locking it."; return; }
-  $("courtTakeLock").disabled=true; $("courtTakeLock").textContent="Locking…";
+  const lock=$("courtTakeLock");
+  lock.disabled=true; lock.classList.remove("ready"); lock.classList.add("committing"); lock.textContent="Locking…";
   const r=await api("court_take_item_lock",{ day:COURT.date, item_id:item.id, answer, client_id:clientId(), label:ensureName() });
-  $("courtTakeLock").textContent="Lock Answer";
-  if(!r.ok){ $("courtTakeLock").disabled=false; $("courtTakeErr").textContent="Error: "+r.error; return; }
+  lock.classList.remove("committing"); lock.textContent="Lock Answer";
+  if(!r.ok){ lock.disabled=false; $("courtTakeErr").textContent="Error: "+r.error; return; }
   setStreak(r.streak);
   COURT.answers={...COURT.answers,...(r.your_answers||{})};
   COURT.take_progress=r.take_progress;
