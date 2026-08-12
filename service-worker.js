@@ -1,7 +1,7 @@
 /* Taking Court — app-shell service worker.
    Bump CACHE to force clients onto a new build. API calls (POST / cross-origin
    to Supabase) are never cached; they pass straight through to the network. */
-const CACHE = "tc-v37";
+const CACHE = "tc-v38";
 const SHELL = [
   "./",
   "./index.html",

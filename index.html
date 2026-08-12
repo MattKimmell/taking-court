@@ -128,7 +128,7 @@
     .closed{animation:none} .slot.landed{animation:none}
     .take-rank.moved{animation:none} .daily-primary.ready{animation:none}
     .settle-in{animation:none} #dailyStreak.streak-bump{animation:none}
-    .distribution-bar span{transition:none}
+    .distribution-bar span{transition:none} .take-block.flash{animation:none}
   }
   .acdrop{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:30;background:var(--panel2);
     border:1px solid var(--line);border-radius:10px;overflow:hidden;max-height:244px;overflow-y:auto;
@@ -335,6 +335,23 @@
   .you-chip{display:inline-flex;align-items:center;gap:6px;margin-top:8px;padding:4px 10px;border-radius:999px;
     font-size:12px;font-weight:700;border:1px solid var(--accent);background:rgba(249,115,22,.10)}
   .you-chip b{font-weight:900}
+  /* The story reads the day in one line before the cards state it in full
+     (#19). Orange is "you" everywhere else on this surface, so an outlier pip
+     is orange and an aligned one is the room's sky. */
+  .room-story{margin-top:16px;padding:14px;border-radius:12px;border:1px solid var(--line);background:var(--panel2)}
+  .rs-title{font-size:10.5px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted)}
+  .rs-summary{font-size:16px;font-weight:800;line-height:1.35;margin-top:5px}
+  .rs-pips{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .pip{display:flex;align-items:center;gap:7px;min-height:36px;padding:6px 12px;border-radius:999px;
+    font-size:12px;font-weight:700;background:transparent;color:var(--ink);border:1px solid var(--line)}
+  .pip .pip-n{font-weight:900;color:var(--muted)}
+  .pip.is-with{border-color:var(--accent2);background:rgba(56,189,248,.12)} .pip.is-with .pip-n{color:var(--accent2)}
+  .pip.is-against{border-color:var(--accent);background:rgba(249,115,22,.12)} .pip.is-against .pip-n{color:var(--accent)}
+  .pip.is-early{color:var(--muted)}
+  /* Tapping a pip lands you on the card that says it in full. The highlight is
+     a border, not an animation, so it survives reduced motion. */
+  .take-block.flash{border-color:var(--accent2);animation:blockFlash .9s ease-out}
+  @keyframes blockFlash{0%{background:rgba(56,189,248,.16)}100%{background:var(--panel2)}}
   .daily-primary{width:100%;min-height:48px;margin-top:16px}
   .challenge-toolbar{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}
   .challenge-toolbar button{min-height:44px}
@@ -513,8 +530,12 @@
       <div style="font-weight:700;margin-top:16px" id="courtRevealHdr">Notable players you could have named</div>
       <div class="slots" id="courtRevealList"></div>
     </div>
-    <div style="font-weight:700;margin-top:16px">Room consensus</div>
-    <div class="note" id="courtConsensusNote" style="margin-top:2px"></div>
+    <div class="room-story" id="courtRoomStory">
+      <div class="rs-title">Today's room</div>
+      <div class="rs-summary" id="courtRoomSummary"></div>
+      <div class="rs-pips" id="courtRoomPips"></div>
+      <div class="note" id="courtConsensusNote" style="margin-top:8px"></div>
+    </div>
     <div id="courtConsensusRows" style="margin-top:10px"></div>
     <div class="row" style="margin-top:14px">
       <button id="courtChallengeStart">Start Challenge</button>
@@ -3096,11 +3117,67 @@ function distributionHtml(dist){
     <div class="distribution-bar"><span data-pct="${r.pct}" style="transition-delay:${i*70}ms"></span></div>
   </div>`).join("")}</div>`;
 }
+// Three states, not two (#19). A room of two has no opinion to be with or
+// against, and calling that an outlier is the same overclaim as calling it a
+// consensus — so a thin room reads "early" and says so.
+const ROOM_READ_MIN=3;
+function takeAlignment(dist){
+  if(!dist || !dist.rows.length || dist.total<ROOM_READ_MIN || !dist.mine) return "early";
+  const lead=dist.rows[0];
+  // The room's answer is the top row as displayed — plurality for a pick, the
+  // consensus order's first place for a rank. A tie counts as with: the same
+  // share of the room said each, so there is no outlier in it.
+  return (dist.mine===lead || dist.mine.pct===lead.pct) ? "with" : "against";
+}
+// Never "everyone", and never a verdict on a room too small to have one.
+function roomStory(states, roomSize){
+  const list=Array.isArray(states)?states:[];
+  if(!list.length) return "Nothing locked yet.";
+  const read=list.filter(s=>s!=="early");
+  const early=list.length-read.length;
+  const withN=read.filter(s=>s==="with").length;
+  const n=Math.max(0,Math.trunc(Number(roomSize))||0);
+  if(!read.length) return n<=1
+    ? "You are first in. There is no room to read yet — it fills in as more people lock."
+    : "Too early to read the room. Check back once a few more have locked.";
+  const tail=early?` ${early} still too early to call.`:"";
+  if(withN===read.length) return (read.length===1 ? "You are with the room."
+    : `You are with the room on all ${read.length}.`)+tail;
+  if(!withN) return (read.length===1 ? "You are out on your own."
+    : `Outlier day — you are out on your own on all ${read.length}.`)+tail;
+  return `You are with the room on ${withN} of ${read.length}.`+tail;
+}
+const PIP_LABEL={ with:"with the room", against:"out on your own", early:"too early to call" };
+function renderRoomStory(rows){
+  const story=$("courtRoomStory"); if(!story) return;
+  const dists=(rows||[]).map(row=>takeDistribution(row, COURT.answers[row.item_id]));
+  const states=dists.map(takeAlignment);
+  story.classList.toggle("hidden", !dists.length);
+  const size=Math.max((COURT.gate&&COURT.gate.have)||0, ...dists.map(d=>d.total), 0);
+  $("courtRoomSummary").textContent=roomStory(states, size);
+  $("courtRoomPips").innerHTML=dists.map((d,i)=>`<button type="button" class="pip is-${states[i]}" data-item="${esc(rows[i].item_id)}"
+    aria-label="Take ${i+1}: ${PIP_LABEL[states[i]]}"><span class="pip-n">${i+1}</span>${PIP_LABEL[states[i]]}</button>`).join("");
+  Array.from($("courtRoomPips").querySelectorAll(".pip")).forEach(pip=>{
+    pip.onclick=()=>jumpToTakeBlock(pip.dataset.item);
+  });
+}
+// The cards from #17 stay the source of truth, so a pip takes you to one
+// rather than restating it.
+let takeFlashTimer=null;
+function jumpToTakeBlock(itemId){
+  const el=$("courtConsensusRows").querySelector(`.take-block[data-item-id="${CSS.escape(itemId)}"]`);
+  if(!el) return;
+  el.scrollIntoView({behavior:reduceMotion()?"auto":"smooth", block:"center"});
+  clearTimeout(takeFlashTimer);
+  Array.from($("courtConsensusRows").querySelectorAll(".take-block.flash")).forEach(b=>b.classList.remove("flash"));
+  void el.offsetWidth; el.classList.add("flash");
+  takeFlashTimer=setTimeout(()=>el.classList.remove("flash"),1400);
+}
 const TAKE_TYPE_LABEL={ rank:"Rank", multiple_choice:"Pick" };
 function takeBlockHtml(row, mine){
   const dist=takeDistribution(row, mine);
   const you=takeMineSummary(dist);
-  return `<div class="take-block">
+  return `<div class="take-block" data-item-id="${esc(row.item_id||"")}">
     <div class="tb-type">${TAKE_TYPE_LABEL[dist.type]||"Pick"}</div>
     <div class="tb-prompt">${esc(row.prompt||"")}</div>
     ${you?`<div class="you-chip">You <b>${esc(you)}</b></div>`:""}
@@ -3199,13 +3276,16 @@ function renderCourtConsensus(){
   $("courtStreakLine").textContent=`${full?"Full stack complete":"Daily Court complete"}${s.streak>0?` · streak ${s.streak}`:""}`;
   renderCourtShare("courtShare", COURT.share);
   const have=(COURT.gate&&COURT.gate.have)||0;
-  $("courtConsensusNote").textContent=have<=1 ? "You are early. The room will fill in as more people lock." : `${have} players locked so far.`;
+  // The story above owns the "you are early" reading now (#19); this states the
+  // day's size and nothing else.
+  $("courtConsensusNote").textContent=have ? `${have} ${have===1?"player has":"players have"} locked today.` : "";
   const att=COURT.challenge_attempt;
   const chDone=COURT.beats&&COURT.beats.challenge;
   if(chDone || (att && att.status && att.status!=="in_progress")) $("courtChallengeStart").textContent="Review Challenge";
   else if(att && att.status==="in_progress") $("courtChallengeStart").textContent="Resume Challenge";
   else $("courtChallengeStart").textContent="Start Challenge";
   const rows=COURT.consensus||[];
+  renderRoomStory(rows);
   const box=$("courtConsensusRows");
   // Same module the per-item feedback uses, so the day surface cannot drift
   // into a second way of reading the same rows (#17).
