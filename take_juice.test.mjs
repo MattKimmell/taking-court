@@ -64,13 +64,15 @@ test("the feedback kicker reads Locked In", () => {
 test("distribution bars grow to their percentages instead of arriving formed", () => {
   // Born empty in CSS, told their width after paint.
   assert.match(html, /\.distribution-bar span\{display:block;height:100%;width:0;[\s\S]*transition:width \.52s/);
-  assert.match(html, /<span data-pct="\$\{Math\.max\(0,Math\.min\(100,c\.pct\|\|0\)\)\}" style="transition-delay:\$\{i\*70\}ms">/);
+  // The markup now lives in the shared distribution module (#17); the stagger
+  // and the data-carried width are what this test is actually about.
+  assert.match(html, /<span data-pct="\$\{r\.pct\}" style="transition-delay:\$\{i\*70\}ms">/);
   const grow = fn("growDistributionBars");
   assert.match(grow, /requestAnimationFrame\(\(\)=>requestAnimationFrame\(\(\)=>\{/);
   assert.match(grow, /bar\.style\.width=`\$\{Math\.max\(0,Math\.min\(100,Number\(bar\.dataset\.pct\)\|\|0\)\)\}%`/);
   assert.match(html, /growDistributionBars\(body\)/);
   // The rendered numbers are still the server's, unrounded by the animation.
-  assert.match(html, /<strong>\$\{c\.pct\|\|0\}% · \$\{c\.count\} of \$\{total\}<\/strong>/);
+  assert.match(html, /stat:total\?`\$\{Number\(c\.pct\)\|\|0\}% · \$\{Number\(c\.count\)\|\|0\} of \$\{total\}`/);
 });
 
 test("a streak increase is held until Home is on screen, then spent there", () => {

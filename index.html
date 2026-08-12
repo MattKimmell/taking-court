@@ -325,6 +325,16 @@
     transition:width .52s cubic-bezier(.22,.9,.3,1)}
   .distribution-row.mine{border-color:var(--accent)}
   .distribution-row.mine .distribution-bar span{background:var(--accent)}
+  .distribution-meta{font-size:12px;color:var(--muted);margin-top:3px}
+  /* The day surface repeats one Take item per block, in the same visual
+     language the per-item feedback uses (#17). */
+  .take-block{margin-top:12px;padding:14px;border-radius:12px;border:1px solid var(--line);background:var(--panel2)}
+  .take-block .tb-type{font-size:10.5px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:var(--accent)}
+  .take-block .tb-prompt{font-weight:800;font-size:15px;line-height:1.35;margin-top:4px}
+  .take-block .distribution{margin-top:10px}
+  .you-chip{display:inline-flex;align-items:center;gap:6px;margin-top:8px;padding:4px 10px;border-radius:999px;
+    font-size:12px;font-weight:700;border:1px solid var(--accent);background:rgba(249,115,22,.10)}
+  .you-chip b{font-weight:900}
   .daily-primary{width:100%;min-height:48px;margin-top:16px}
   .challenge-toolbar{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}
   .challenge-toolbar button{min-height:44px}
@@ -3027,6 +3037,77 @@ function setLockReady(ready){
   if(!ready) btn.classList.remove("ready");
 }
 function responseN(n){ return `${n} response${n===1?"":"s"}`; }
+// One distribution module, two surfaces (#17). Per-item feedback and the day
+// consensus read the SAME consensus rows from the server, so the only thing
+// that used to differ was the markup — and the day surface was the poorer of
+// the two. Shape both item types into one row list here so neither renderer
+// gets to invent its own reading of the numbers.
+//   pct is what the bar shows. For a pick that is the share who chose it; for a
+//   rank it is the share who put it FIRST, which is the only rank number that
+//   is a share of the room at all (avg_rank is a position, not a percentage).
+function takeDistribution(row, mine){
+  const total=Math.max(0,Math.trunc(Number(row&&row.total))||0);
+  const out={ type:(row&&row.type)||"multiple_choice", total, rows:[], mine:null };
+  if(!row) return out;
+  if(row.type==="rank"){
+    const top=Array.isArray(mine)?mine[0]:null;
+    out.rows=(row.ranking||[]).map((r,i)=>({
+      key:r.key, label:r.label, pos:i+1,
+      pct:Math.max(0,Math.min(100,Number(r.top_pct)||0)),
+      count:Number(r.top_count)||0, total,
+      stat:total?`${Number(r.top_pct)||0}% first · ${Number(r.top_count)||0} of ${total}`:"—",
+      meta:r.avg_rank==null?"No ranks yet":`avg rank ${r.avg_rank}`,
+      mine:!!top && r.key===top,
+    }));
+  } else {
+    out.rows=(row.choices||[]).map(c=>({
+      key:c.key, label:c.label, pos:null,
+      pct:Math.max(0,Math.min(100,Number(c.pct)||0)),
+      count:Number(c.count)||0, total,
+      stat:total?`${Number(c.pct)||0}% · ${Number(c.count)||0} of ${total}`:"—",
+      meta:null,
+      mine:typeof mine==="string" && !!mine && c.key===mine,
+    }));
+  }
+  out.mine=out.rows.find(r=>r.mine)||null;
+  return out;
+}
+// The room is small and saying so is the honest move; a bare percentage over
+// two people reads like a finding.
+function takeSampleCopy(total){
+  const n=Math.max(0,Math.trunc(Number(total))||0);
+  if(!n) return "No room responses yet.";
+  if(n===1) return "1 response so far — you’re the first data point, and the percentage is still real.";
+  if(n<5) return `${responseN(n)} so far — early, but real.`;
+  return `${responseN(n)} in the room so far.`;
+}
+function takeMineSummary(dist){
+  if(!dist || !dist.mine) return "";
+  return dist.type==="rank" ? `${dist.mine.label} first` : dist.mine.label;
+}
+function distributionHtml(dist){
+  if(!dist || !dist.rows.length) return "";
+  // The width is carried as data and applied after paint, so the bar has an
+  // empty state to grow from. CSS alone cannot animate from a width it was
+  // born with.
+  return `<div class="distribution">${dist.rows.map((r,i)=>`<div class="distribution-row ${r.mine?"mine":""}">
+    <div class="distribution-head"><span>${r.pos?`${r.pos}. `:""}${esc(r.label)}</span><strong>${esc(r.stat)}</strong></div>
+    ${r.meta?`<div class="distribution-meta">${esc(r.meta)}</div>`:""}
+    <div class="distribution-bar"><span data-pct="${r.pct}" style="transition-delay:${i*70}ms"></span></div>
+  </div>`).join("")}</div>`;
+}
+const TAKE_TYPE_LABEL={ rank:"Rank", multiple_choice:"Pick" };
+function takeBlockHtml(row, mine){
+  const dist=takeDistribution(row, mine);
+  const you=takeMineSummary(dist);
+  return `<div class="take-block">
+    <div class="tb-type">${TAKE_TYPE_LABEL[dist.type]||"Pick"}</div>
+    <div class="tb-prompt">${esc(row.prompt||"")}</div>
+    ${you?`<div class="you-chip">You <b>${esc(you)}</b></div>`:""}
+    <div class="note" style="margin-top:6px">${esc(takeSampleCopy(dist.total))}</div>
+    ${distributionHtml(dist)}
+  </div>`;
+}
 // Two frames: one where the bars are empty, one where they are told their real
 // width. Under reduced motion the transition is off, so this lands the same
 // numbers in a single jump rather than skipping them.
@@ -3041,32 +3122,20 @@ function renderCourtTakeFeedback(){
   const f=COURT.takeFeedback; if(!f) return;
   const item=f.item, row=f.consensus||{}, total=Number(row.total)||0;
   $("courtTakeFeedbackProgress").innerHTML=dailyProgressHtml({takeAnswered:f.item_index+1,challengeCorrect:COURT.challenge_attempt?.correct_count||0,challengeTarget:COURT.challenge?.target||3,phase:"take-feedback"});
-  let title="Answer locked"; let distribution="";
-  if(item.type==="multiple_choice"){
-    const mine=(row.choices||[]).find(c=>c.key===f.answer) || {label:(item.options||[]).find(o=>o.key===f.answer)?.label||f.answer,count:0,pct:0};
-    title=`${mine.pct||0}% picked ${mine.label} too · ${mine.count||0} of ${responseN(total)}`;
-    // The width is carried as data and applied after paint, so the bar has an
-    // empty state to grow from. CSS alone cannot animate from a width it was
-    // born with.
-    distribution=(row.choices||[]).map((c,i)=>`<div class="distribution-row ${c.key===f.answer?"mine":""}">
-      <div class="distribution-head"><span>${esc(c.label)}</span><strong>${c.pct||0}% · ${c.count} of ${total}</strong></div>
-      <div class="distribution-bar"><span data-pct="${Math.max(0,Math.min(100,c.pct||0))}" style="transition-delay:${i*70}ms"></span></div>
-    </div>`).join("");
-  } else {
-    const top=Array.isArray(f.answer)?f.answer[0]:null;
-    const mine=(row.ranking||[]).find(r=>r.key===top) || {label:(item.options||[]).find(o=>o.key===top)?.label||top,top_count:0,top_pct:0};
-    title=`${mine.top_pct||0}% also put ${mine.label} first · ${mine.top_count||0} of ${responseN(total)}`;
-    distribution=(row.ranking||[]).map((r,i)=>`<div class="distribution-row ${r.key===top?"mine":""}">
-      <div class="distribution-head"><span>${i+1}. ${esc(r.label)}</span><strong>${r.avg_rank==null?"—":`avg ${r.avg_rank}`}</strong></div>
-      <div class="note" style="margin-top:4px">${r.top_pct||0}% ranked first · ${r.top_count||0} of ${total}</div>
-    </div>`).join("");
-  }
+  const dist=takeDistribution(row, f.answer);
+  const m=dist.mine;
+  // Falls back to the item's own option label when the room has no row for the
+  // answer at all, which only happens if the item changed under a live board.
+  const mineLabel=m ? m.label : (item.options||[]).find(o=>o.key===(Array.isArray(f.answer)?f.answer[0]:f.answer))?.label;
+  const title = !mineLabel ? "Answer locked"
+    : dist.type==="rank" ? `${m?m.pct:0}% also put ${mineLabel} first · ${m?m.count:0} of ${responseN(total)}`
+    : `${m?m.pct:0}% picked ${mineLabel} too · ${m?m.count:0} of ${responseN(total)}`;
   const body=$("courtTakeFeedbackBody");
   body.innerHTML=`<div class="feedback-hero">
     <div class="feedback-kicker">Locked In</div>
     <div class="feedback-title" tabindex="-1">${esc(title)}</div>
-    <div class="feedback-copy">${total?`${responseN(total)} in the room so far.`:"No room responses yet."} ${total===1?"You’re the first data point — the percentage is still real.":""}</div>
-  </div><div class="distribution">${distribution}</div>`;
+    <div class="feedback-copy">${esc(takeSampleCopy(total))}</div>
+  </div>${distributionHtml(dist)}`;
   body.classList.remove("settle-in"); void body.offsetWidth; body.classList.add("settle-in");
   growDistributionBars(body);
   $("courtTakeContinue").textContent=f.take_complete ? (COURT.beats?.challenge?"See Daily recap":"Continue to Challenge") : "Continue";
@@ -3137,18 +3206,12 @@ function renderCourtConsensus(){
   else if(att && att.status==="in_progress") $("courtChallengeStart").textContent="Resume Challenge";
   else $("courtChallengeStart").textContent="Start Challenge";
   const rows=COURT.consensus||[];
-  $("courtConsensusRows").innerHTML=rows.length ? rows.map(row=>{
-    if(row.type==="rank"){
-      return `<div class="card" style="background:var(--panel2);margin-top:10px">
-        <div style="font-weight:800">${esc(row.prompt)}</div>
-        <div style="margin-top:8px">${(row.ranking||[]).map((r,i)=>`<div class="slot"><div class="n">${i+1}</div><div class="name">${esc(r.label)}</div><div class="ctx">${r.avg_rank?`avg ${r.avg_rank}`:"—"}</div></div>`).join("")}</div>
-      </div>`;
-    }
-    return `<div class="card" style="background:var(--panel2);margin-top:10px">
-      <div style="font-weight:800">${esc(row.prompt)}</div>
-      <div style="margin-top:8px">${(row.choices||[]).map(c=>`<div class="slot"><div class="name">${esc(c.label)}</div><div class="ctx">${c.count}</div></div>`).join("")}</div>
-    </div>`;
-  }).join("") : `<div class="note">No consensus yet.</div>`;
+  const box=$("courtConsensusRows");
+  // Same module the per-item feedback uses, so the day surface cannot drift
+  // into a second way of reading the same rows (#17).
+  box.innerHTML=rows.length ? rows.map(row=>takeBlockHtml(row, COURT.answers[row.item_id])).join("")
+    : `<div class="note">No consensus yet.</div>`;
+  growDistributionBars(box);
 }
 async function openDaily(dayOpt){
   clearTimeout(courtAutoTimer); courtAutoTimer=null;
