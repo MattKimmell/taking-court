@@ -543,6 +543,24 @@ export const RARITY_LABEL: Record<string, string> = { common: "Common", uncommon
 
 // Reveal a slice of the pool (most famous first) as {slot, display_name, context_label}
 // so the existing reveal UI renders it. context_label carries the rarity tier.
+// "Players you could have named": three, not two dozen. A list long enough to
+// scroll reads as a data dump; three reads as an argument. Ordered by
+// notability, but deliberately NOT the three most notable — a slot is reserved
+// for a rare and a deep cut wherever the pool has them, because the point of
+// the list is that the board held more than you reached, and three household
+// names do not make that point. Backfills by notability when a tier is empty.
+export function rosterRevealTop(pool: PoolEntry[], limit = 3) {
+  const byFame = pool.slice().sort((a, b) => (b.rarity_score ?? 0) - (a.rarity_score ?? 0));
+  const picked: PoolEntry[] = [];
+  const take = (p?: PoolEntry) => { if (p && !picked.includes(p) && picked.length < limit) picked.push(p); };
+  take(byFame[0]);
+  for (const tier of ["rare", "deep_cut"]) take(byFame.find((p) => p.rarity_tier === tier));
+  for (const p of byFame) take(p);
+  return picked
+    .sort((a, b) => (b.rarity_score ?? 0) - (a.rarity_score ?? 0))
+    .map((p, i) => ({ slot: i + 1, display_name: p.display_name, context_label: RARITY_LABEL[p.rarity_tier] ?? p.rarity_tier }));
+}
+
 export function rosterReveal(pool: PoolEntry[], limit = 24) {
   return pool.slice()
     .sort((a, b) => (b.rarity_score ?? 0) - (a.rarity_score ?? 0))

@@ -333,9 +333,6 @@
   .take-block .tb-type{font-size:10.5px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:var(--accent)}
   .take-block .tb-prompt{font-weight:800;font-size:15px;line-height:1.35;margin-top:4px}
   .take-block .distribution{margin-top:10px}
-  .you-chip{display:inline-flex;align-items:center;gap:6px;margin-top:8px;padding:4px 10px;border-radius:999px;
-    font-size:12px;font-weight:700;border:1px solid var(--accent);background:rgba(249,115,22,.10)}
-  .you-chip b{font-weight:900}
   /* The story reads the day in one line before the cards state it in full
      (#19). Orange is "you" everywhere else on this surface, so an outlier pip
      is orange and an aligned one is the room's sky. */
@@ -554,7 +551,7 @@
       <div class="sec-hdr">Your Challenge</div>
       <div id="courtChallengeSummary"></div>
       <div id="courtRevealBlock" class="hidden">
-        <div style="font-weight:700;margin-top:16px" id="courtRevealHdr">Notable players you could have named</div>
+        <div style="font-weight:700;margin-top:16px" id="courtRevealHdr">Players you could have named</div>
         <div class="slots" id="courtRevealList"></div>
       </div>
     </div>
@@ -573,6 +570,7 @@
     </div>
     <div class="row" style="margin-top:14px">
       <button id="courtChallengeStart">Start Challenge</button>
+      <button id="courtPlayMore" class="hidden">Play More</button>
       <button class="ghost" id="courtConsensusRefresh">Refresh</button>
       <button class="ghost" id="courtSkipChallenge">Leave for now</button>
     </div>
@@ -1971,9 +1969,12 @@ function renderRosterChallengeInline(r){
   const good=r.result==="correct";
   const fallback=good?`${r.display_name||"That player"} is in today’s pool.`:"That name does not qualify for today’s pool.";
   const context=esc(f.explanation||fallback);
+  // The miss line continues into the strike count, so the explanation's own
+  // full stop would read as ". · strike 2/3". The ✔ line ends there and keeps it.
+  const clause=context.replace(/\.\s*$/,"");
   feed(good
     ? `<span class="c">✔ ${context}</span> ${r.rarity?rarBadge(r.rarity):""}`
-    : `<span class="${missClass(r.strikes)}">✕ ${context} · strike ${r.strikes}/${ST.strike_limit}</span>`);
+    : `<span class="${missClass(r.strikes)}">✕ ${clause} · strike ${r.strikes}/${ST.strike_limit}</span>`);
   track("challenge_feedback_view",{surface:ST.isCourtDaily?"daily":"freeplay",presentation:"inline",result:f.result||r.result,context_type:f.context_type||"unknown",finished:!!r.finished});
 }
 async function submitGuess(){
@@ -2221,7 +2222,7 @@ async function showResults(){
 
   // revealed answers
   const roster = (r.kind==="roster") || ST.isRoster;
-  $("revealHdr").textContent = roster ? "Notable players you could have named" : "The full Top 8";
+  $("revealHdr").textContent = roster ? "Players you could have named" : "The full Top 8";
   const tierByLabel = {"Common":"common","Uncommon":"uncommon","Rare":"rare","Deep cut":"deep_cut"};
   const al=$("answerList"); al.innerHTML="";
   (r.revealed_answers||[]).forEach(a=>{
@@ -3132,8 +3133,8 @@ function takeDistribution(row, mine){
 function takeSampleCopy(total){
   const n=Math.max(0,Math.trunc(Number(total))||0);
   if(!n) return "No room responses yet.";
-  if(n===1) return "1 response so far — you’re the first data point, and the percentage is still real.";
-  if(n<5) return `${responseN(n)} so far — early, but real.`;
+  if(n===1) return "1 response so far, check back later to see the average take.";
+  if(n<5) return `${responseN(n)} so far, check back later to see the average take.`;
   return `${responseN(n)} in the room so far.`;
 }
 function takeMineSummary(dist){
@@ -3210,11 +3211,11 @@ function jumpToTakeBlock(itemId){
 const TAKE_TYPE_LABEL={ rank:"Rank", multiple_choice:"Pick" };
 function takeBlockHtml(row, mine){
   const dist=takeDistribution(row, mine);
-  const you=takeMineSummary(dist);
+  // No "You <answer>" chip: your row is already the accent-bordered, orange-barred
+  // one, and naming it again above the list said the same thing twice.
   return `<div class="take-block" data-item-id="${esc(row.item_id||"")}">
     <div class="tb-type">${TAKE_TYPE_LABEL[dist.type]||"Pick"}</div>
     <div class="tb-prompt">${esc(row.prompt||"")}</div>
-    ${you?`<div class="you-chip">You <b>${esc(you)}</b></div>`:""}
     <div class="note" style="margin-top:6px">${esc(takeSampleCopy(dist.total))}</div>
     ${distributionHtml(dist)}
   </div>`;
@@ -3260,7 +3261,9 @@ function courtShareLink(summary){
 }
 function courtShareText(summary){
   if(!summary) return "";
-  return `${summary.text}\n${courtShareLink(summary)}`;
+  // The link is its own last line, not a tail on the signature — chat clients
+  // that linkify a line will not swallow "🔥 4" into the anchor.
+  return `${summary.text}\n\n${courtShareLink(summary)}`;
 }
 async function shareCourt(summary, btn){
   if(!summary) return;
@@ -3387,10 +3390,11 @@ function renderCourtConsensus(){
   const tease=COURT.tomorrow&&COURT.tomorrow.line;
   $("courtSecTomorrow").classList.toggle("hidden", !recap);
   $("courtTomorrowTease").textContent=recap&&tease?tease:"";
-  // A finished stack has no Challenge to start and nothing to leave for later.
-  // The button stays as a way back to the board, demoted to secondary — Share
-  // is the action a recap is for.
-  $("courtChallengeStart").classList.toggle("ghost", recap);
+  // A finished stack has no Challenge to start, nothing to leave for later, and
+  // nothing worth sending you back to a board you already closed. The one thing
+  // it can offer is another game, so that is the button.
+  $("courtChallengeStart").classList.toggle("hidden", recap);
+  $("courtPlayMore").classList.toggle("hidden", !recap);
   $("courtSkipChallenge").classList.toggle("hidden", recap);
   renderCourtShare("courtShare", COURT.share);
   const have=(COURT.gate&&COURT.gate.have)||0;
@@ -3399,6 +3403,9 @@ function renderCourtConsensus(){
   $("courtConsensusNote").textContent=have ? `${have} ${have===1?"player has":"players have"} locked today.` : "";
   const att=COURT.challenge_attempt;
   const chDone=COURT.beats&&COURT.beats.challenge;
+  // Not dead with the recap's Play More: a board that ended without completing
+  // leaves beats.challenge false, so that player is still on the consensus
+  // surface and the button must not offer to start what they already played.
   if(chDone || (att && att.status && att.status!=="in_progress")) $("courtChallengeStart").textContent="Review Challenge";
   else if(att && att.status==="in_progress") $("courtChallengeStart").textContent="Resume Challenge";
   else $("courtChallengeStart").textContent="Start Challenge";
@@ -3448,6 +3455,7 @@ $("courtTakeFeedbackExit").onclick=()=>abandonCourtTake("feedback");
 $("courtConsensusHome").onclick=()=>goHome();
 $("courtConsensusRefresh").onclick=()=>openDaily();
 $("courtChallengeStart").onclick=()=>startCourtChallenge();
+$("courtPlayMore").onclick=()=>{ clearTimeout(courtAutoTimer); courtAutoTimer=null; show("gameModesHome"); };
 $("courtSkipChallenge").onclick=()=>goHome();
 $("courtShareBtn").onclick=()=>shareCourt(COURT.share, $("courtShareBtn"));
 $("courtTakeLock").onclick=async()=>{

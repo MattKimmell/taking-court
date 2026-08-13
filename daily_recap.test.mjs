@@ -64,11 +64,18 @@ test("recap chrome says recap, and mid-flow chrome does not", () => {
 
 test("a finished stack offers no Start Challenge, and mid-flow still does", () => {
   const render = lift("renderCourtConsensus");
-  // The button survives as a way back to the board, demoted; Share is the action.
-  assert.match(render, /\$\("courtChallengeStart"\)\.classList\.toggle\("ghost", recap\)/);
+  // A closed day has nothing to send you back to, so the recap swaps the
+  // Challenge button for the one thing it can still offer: another game.
+  assert.match(render, /\$\("courtChallengeStart"\)\.classList\.toggle\("hidden", recap\)/);
+  assert.match(render, /\$\("courtPlayMore"\)\.classList\.toggle\("hidden", !recap\)/);
   assert.match(render, /\$\("courtSkipChallenge"\)\.classList\.toggle\("hidden", recap\)/);
-  // Its label is already Review Challenge whenever the board is closed.
+  assert.match(html, /<button id="courtPlayMore" class="hidden">Play More<\/button>/);
+  assert.match(html, /\$\("courtPlayMore"\)\.onclick=\(\)=>\{ clearTimeout\(courtAutoTimer\); courtAutoTimer=null; show\("gameModesHome"\); \}/);
+  // Mid-flow keeps every label it had: a board that ended without completing
+  // leaves beats.challenge false, so that player is still on this surface and
+  // must not be offered a start for something they already played.
   assert.match(render, /\$\("courtChallengeStart"\)\.textContent="Review Challenge"/);
+  assert.match(render, /\$\("courtChallengeStart"\)\.textContent="Resume Challenge"/);
   assert.match(render, /\$\("courtChallengeStart"\)\.textContent="Start Challenge"/);
   // Sections that only make sense once there are four of them.
   assert.match(render, /\$\("courtSecTakeHdr"\)\.classList\.toggle\("hidden", !recap\)/);

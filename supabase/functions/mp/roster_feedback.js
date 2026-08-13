@@ -137,10 +137,10 @@ function correctExplanation(name, context, filters, facet) {
 
 function incorrectExplanation(name, context, filters, facet) {
   const value = filters[facet];
-  if (facet === "min_points") return `${name} scored ${(number(context.career_points) ?? 0).toLocaleString("en-US")} career points—not ${Number(value).toLocaleString("en-US")} or more.`;
+  if (facet === "min_points") return `${name} scored ${(number(context.career_points) ?? 0).toLocaleString("en-US")} career points, not ${Number(value).toLocaleString("en-US")} or more.`;
   if (facet === "min_rings") {
     const rings = number(context.rings) ?? 0;
-    return `${name} won ${rings} NBA ${rings === 1 ? "title" : "titles"}—not ${value} or more.`;
+    return `${name} won ${rings} NBA ${rings === 1 ? "title" : "titles"}, not ${value} or more.`;
   }
   if (facet === "team") return `${name} did not complete a full season with the ${teamName(value)}.`;
   if (facet === "college") {
@@ -155,7 +155,7 @@ function incorrectExplanation(name, context, filters, facet) {
   }
   if (facet === "position") {
     const actual = list(context.positions).map((p) => POSITION_NAMES[p] ?? p).join("/") || "another position";
-    return `${name} is classified as ${actual}—not ${POSITION_NAMES[positionCode(value)] ?? value}.`;
+    return `${name} is classified as ${actual}, not ${POSITION_NAMES[positionCode(value)] ?? value}.`;
   }
   if (facet === "decade") {
     const years = careerYears(context);
@@ -167,13 +167,13 @@ function incorrectExplanation(name, context, filters, facet) {
     const draft = context?.draft;
     if (!draft || number(draft.pick) == null) return `${name} went undrafted.`;
     const labels = { first: "first overall pick", top3: "top-3 pick", lottery: "lottery pick", round1: "first-round pick", round2: "second-round pick" };
-    return `${name} was drafted No. ${draft.pick} in round ${draft.round} in ${draft.year}—not a ${labels[value] ?? value}.`;
+    return `${name} was drafted No. ${draft.pick} in round ${draft.round} in ${draft.year}, not a ${labels[value] ?? value}.`;
   }
   if (facet === "award") {
     if (value === "hof") return `${name} is not in the Basketball Hall of Fame.`;
     const award = AWARDS[value];
     const count = awardCount(context, value);
-    if (value === "allstar10") return `${name} earned ${count} All-Star selections—not 10 or more.`;
+    if (value === "allstar10") return `${name} earned ${count} All-Star selections, not 10 or more.`;
     return count === 0
       ? `${name} did not earn ${award.article ?? "a"} ${award.singular}.`
       : `${name} earned ${count} ${count === 1 ? award.singular : award.plural}, but does not meet this honor filter.`;

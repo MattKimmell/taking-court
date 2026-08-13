@@ -211,7 +211,8 @@ test("court share summaries prefer the right completion state", () => {
   assert.equal(courtShareSummary({ ...base, beats: { take: false, challenge: true } }).kind, "challenge_only");
   const full = courtShareSummary({ ...base, beats: { take: true, challenge: true } });
   assert.equal(full.kind, "full_stack");
-  assert.match(full.text, /^Taking Court · Aug 10\n🔥 4\n\n/);
+  assert.match(full.text, /^Enter the Court of Public Opinion\n\n/);
+  assert.ok(full.text.endsWith("Taking Court · Aug 10 · 🔥 4"));
   assert.equal(full.challenge_score.correct_count, 5);
   assert.equal(full.path, "?court=1&day=2026-08-10");
   assert.equal(courtShareSummary({ ...base, beats: { take: false, challenge: false } }), null);
@@ -262,7 +263,7 @@ test("share card facts come from server beats and challenge attempt, not client 
   assert.equal(both.beats.full_stack, true);
 });
 
-test("the Daily share card is text-only questions, brand, date, streak, then the CTA", () => {
+test("the Daily share card leads on the invite, then the questions, then the signature", () => {
   const take = houseTakeForDate("2026-08-10");
   const challenge = dailyChallengeForDate("2026-08-10");
   const full = courtShareSummary({
@@ -275,17 +276,17 @@ test("the Daily share card is text-only questions, brand, date, streak, then the
     challengeAttempt: { status: "completed", correct_count: challenge.target, strikes: 1 },
   });
   assert.equal(full.text, [
-    "Taking Court · Aug 10",
-    "🔥 3",
+    "Enter the Court of Public Opinion",
     "",
     takeShareQuestion(take),
     `${challengeShareAsk(challenge)} ✓`,
     "",
-    "Enter the Court of Public Opinion",
+    "Taking Court · Aug 10 · 🔥 3",
   ].join("\n"));
-  // The CTA is exact, and nothing follows it — the caller appends the link.
+  // The CTA is exact and opens the card; the caller appends the link after the
+  // signature, which is why nothing here ends on it.
   assert.equal(full.cta, COURT_SHARE_CTA);
-  assert.ok(full.text.endsWith(`\n${COURT_SHARE_CTA}`));
+  assert.ok(full.text.startsWith(`${COURT_SHARE_CTA}\n`));
   assert.equal(full.path, "?court=1&day=2026-08-10");
 });
 
@@ -340,19 +341,20 @@ test("kinded share cards carry only the beats the player earned", () => {
 
   const takeOnly = courtShareSummary({ ...base, beats: { take: true, challenge: false } });
   assert.equal(takeOnly.text, [
-    "Taking Court · Aug 10", "", takeShareQuestion(take), "", COURT_SHARE_CTA,
+    COURT_SHARE_CTA, "", takeShareQuestion(take), "", "Taking Court · Aug 10",
   ].join("\n"));
 
   const challengeOnly = courtShareSummary({ ...base, beats: { take: false, challenge: true } });
   assert.equal(challengeOnly.text, [
-    "Taking Court · Aug 10", "", `${challengeShareAsk(challenge)} ✓`, "", COURT_SHARE_CTA,
+    COURT_SHARE_CTA, "", `${challengeShareAsk(challenge)} ✓`, "", "Taking Court · Aug 10",
   ].join("\n"));
 
-  // Streak is a signal, not decoration: it appears only when there is one.
+  // Streak is a signal, not decoration: it appears only when there is one, and
+  // it rides on the signature line rather than taking one of its own.
   assert.ok(!takeOnly.text.includes("🔥"));
-  assert.match(
-    courtShareSummary({ ...base, beats: { take: true, challenge: false }, streak: { current: 7 } }).text,
-    /^Taking Court · Aug 10\n🔥 7\n/,
+  assert.ok(
+    courtShareSummary({ ...base, beats: { take: true, challenge: false }, streak: { current: 7 } }).text
+      .endsWith("Taking Court · Aug 10 · 🔥 7"),
   );
 });
 

@@ -86,10 +86,11 @@ test("every percentage carries its sample size", () => {
 
 test("a small room says it is a small room", () => {
   assert.equal(takeSampleCopy(0), "No room responses yet.");
-  assert.match(takeSampleCopy(1), /first data point/);
-  assert.match(takeSampleCopy(1), /^1 response /);
-  for (const n of [2, 3, 4]) assert.match(takeSampleCopy(n), /early, but real/);
-  assert.equal(takeSampleCopy(4), "4 responses so far — early, but real.");
+  assert.equal(takeSampleCopy(1), "1 response so far, check back later to see the average take.");
+  for (const n of [1, 2, 3, 4]) assert.match(takeSampleCopy(n), /check back later to see the average take/);
+  assert.equal(takeSampleCopy(4), "4 responses so far, check back later to see the average take.");
+  // No em dashes anywhere in the room copy.
+  for (const n of [0, 1, 2, 4, 9]) assert.doesNotMatch(takeSampleCopy(n), /[—–]/);
   // Past the early band it just states the size.
   assert.equal(takeSampleCopy(9), "9 responses in the room so far.");
   // Junk from a half-built response reads as an empty room, not as NaN.
@@ -102,15 +103,20 @@ test("a small room says it is a small room", () => {
   }
 });
 
-test("the You chip states the locked answer, and a rank says what you put first", () => {
+test("the player's own row is the only thing marking it as theirs", () => {
+  // takeMineSummary still resolves the locked answer — the per-item feedback
+  // title is built from it — but the day surface no longer restates it above
+  // the list: that row already carries the accent border and the orange bar.
   assert.equal(takeMineSummary(takeDistribution(pick, "kd")), "Durant");
   assert.equal(takeMineSummary(takeDistribution(rank, ["duncan", "shaq"])), "Duncan first");
   assert.equal(takeMineSummary(takeDistribution(pick, "")), "");
   assert.equal(takeMineSummary(null), "");
   const block = html.match(/function takeBlockHtml\([\s\S]*?\n\}/)[0];
-  assert.match(block, /<div class="you-chip">You <b>\$\{esc\(you\)\}<\/b><\/div>/);
-  assert.match(block, /\$\{you\?/, "no answer, no chip");
-  assert.match(html, /\.you-chip\{/);
+  assert.doesNotMatch(block, /you-chip/);
+  assert.doesNotMatch(html, /class="you-chip"/);
+  assert.equal(takeDistribution(pick, "kd").rows.filter((r) => r.mine).length, 1);
+  assert.match(html, /\.distribution-row\.mine\{border-color:var\(--accent\)\}/);
+  assert.match(html, /\.distribution-row\.mine \.distribution-bar span\{background:var\(--accent\)\}/);
 });
 
 test("the day surface renders each item with type, prompt and the shared distribution", () => {

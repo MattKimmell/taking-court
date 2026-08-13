@@ -1,7 +1,7 @@
 import {
   db, ok, err, authedUserId, safeClientId, normalize, randomToken,
   buildSnapshot, revealedAnswers, strikeContext, rankCompare, leaderboardCompare, isBotClient,
-  ARENA_POOL, TEAM_POOL, insertBot, insertRosterBot, loadRosterPool, rosterReveal, RARITY_LABEL,
+  ARENA_POOL, TEAM_POOL, insertBot, insertRosterBot, loadRosterPool, rosterRevealTop, RARITY_LABEL,
   matchPoolGuess,
 } from "./shared.ts";
 import type { SnapshotSlot, PoolEntry } from "./shared.ts";
@@ -611,7 +611,7 @@ export async function actionGuess(_req: Request, body: any) {
 
   // near-miss context (top8 metric categories only)
   const guessInfo = (!isRoster && result === "strike") ? await strikeContext(challenge, rawGuess) : null;
-  const reveal = finished ? (isRoster ? rosterReveal(snapshot as PoolEntry[]) : revealedAnswers(snapshot as SnapshotSlot[])) : undefined;
+  const reveal = finished ? (isRoster ? rosterRevealTop(snapshot as PoolEntry[]) : revealedAnswers(snapshot as SnapshotSlot[])) : undefined;
   let feedback;
   if (isRoster && (result === "correct" || result === "strike") && challenge.roster_sheet_id) {
     // One player-only lookup supplies every supported roster facet. It never
@@ -721,7 +721,7 @@ export async function actionResults(_req: Request, body: any) {
 
   const snapshot = challenge.answers_snapshot as any[];
   const reveal = challenge.kind === "roster"
-    ? rosterReveal(snapshot as PoolEntry[])
+    ? rosterRevealTop(snapshot as PoolEntry[])
     : revealedAnswers(snapshot as SnapshotSlot[]);
 
   const participants = ranked.map((a) => {

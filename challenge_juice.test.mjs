@@ -45,7 +45,10 @@ test("each lit pip keeps the rung it was earned on", () => {
 
 test("both graded miss lines carry the tone, and the copy inside them is unchanged", () => {
   // Roster explanation and Top 8 near-miss context, verbatim, in a toned span.
-  assert.match(html, /`<span class="\$\{missClass\(r\.strikes\)\}">✕ \$\{context\} · strike \$\{r\.strikes\}\/\$\{ST\.strike_limit\}<\/span>`/);
+  assert.match(html, /`<span class="\$\{missClass\(r\.strikes\)\}">✕ \$\{clause\} · strike \$\{r\.strikes\}\/\$\{ST\.strike_limit\}<\/span>`/);
+  // The line continues into the strike count, so the explanation's own full
+  // stop is dropped — ". · strike 2/3" read as a typo.
+  assert.match(html, /const clause=context\.replace\(\/\\\.\\s\*\$\/,""\)/);
   assert.match(html, /feed\(`<span class="\$\{missClass\(r\.strikes\)\}">✕ \$\{esc\(g\)\}\$\{ctx\} · strike \$\{r\.strikes\}\/\$\{ST\.strike_limit\}<\/span>`\)/);
   assert.match(html, /const context=esc\(f\.explanation\|\|fallback\)/);
   assert.match(html, /ctx=` — \$\{val\} \$\{gi\.unit\}, #\$\{gi\.rank\} all-time`/);
@@ -129,9 +132,11 @@ test("the recap carries the reveal the results card used to, and only to a close
   assert.match(court, /async function courtReveal\(courtDay: CourtDay, attempt: any\) \{\s*\n\s*if \(!attempt \|\| attempt\.status === "in_progress"\) return null;/);
   assert.match(court, /revealed_answers: await courtReveal\(courtDay, state\.challengeAttempt\)/);
   // Same builder the results card reads, so the two lists cannot diverge.
-  assert.match(court, /rosterReveal\(snapshot as PoolEntry\[\]\)/);
+  assert.match(court, /rosterRevealTop\(snapshot as PoolEntry\[\]\)/);
   const shared = readFileSync(new URL("./supabase/functions/mp/shared.ts", import.meta.url), "utf8");
-  assert.match(shared, /export function rosterReveal\(pool: PoolEntry\[\], limit = 24\)/);
+  assert.match(shared, /export function rosterRevealTop\(pool: PoolEntry\[\], limit = 3\)/);
+  const games = readFileSync(new URL("./supabase/functions/mp/games.ts", import.meta.url), "utf8");
+  assert.match(games, /isRoster \? rosterRevealTop\(snapshot as PoolEntry\[\]\)/);
   // Client mounts it on the recap with the same rarity badges and ordering.
   assert.match(html, /reveal:r\.revealed_answers\|\|null/);
   assert.match(html, /function renderCourtConsensus\(\)\{[\s\S]*?renderCourtReveal\(\);/);
@@ -141,7 +146,40 @@ test("the recap carries the reveal the results card used to, and only to a close
   assert.match(render, /class="slot revealed"/);
   // Names come from the server, so they are escaped like every other such list.
   assert.match(render, /esc\(a\.display_name\)/);
-  assert.match(html, /<div id="courtRevealBlock" class="hidden">[\s\S]*Notable players you could have named/);
+  assert.match(html, /<div id="courtRevealBlock" class="hidden">[\s\S]*Players you could have named/);
+});
+
+test("the reveal is three names, and reserves a slot for the ones you did not reach", () => {
+  const shared = readFileSync(new URL("./supabase/functions/mp/shared.ts", import.meta.url), "utf8");
+  const src = shared.match(/export function rosterRevealTop[\s\S]*?\n\}/)[0]
+    .replace("export ", "")
+    .replace(/: PoolEntry\[\]/g, "").replace(/\(p\?: PoolEntry\)/, "(p)").replace(/: PoolEntry/g, "");
+  const rosterRevealTop = new Function(
+    `const RARITY_LABEL={common:"Common",uncommon:"Uncommon",rare:"Rare",deep_cut:"Deep cut"};\n${src}\nreturn rosterRevealTop;`)();
+  const p = (name, tier, score) => ({ player_key: name, display_name: name, accepted: [], rarity_tier: tier, rarity_score: score });
+  const pool = [
+    p("Superstar", "common", 900), p("Starter", "common", 800), p("Rotation", "uncommon", 600),
+    p("Journeyman", "rare", 300), p("Cup Of Coffee", "deep_cut", 40), p("Also Deep", "deep_cut", 30),
+  ];
+  const out = rosterRevealTop(pool);
+  assert.equal(out.length, 3);
+  // The most famous name you missed, plus the two the list exists to show off.
+  assert.deepEqual(out.map((r) => r.display_name), ["Superstar", "Journeyman", "Cup Of Coffee"]);
+  // Ranked by notability, and slot numbers follow that order.
+  assert.deepEqual(out.map((r) => r.slot), [1, 2, 3]);
+  assert.deepEqual(out.map((r) => r.context_label), ["Common", "Rare", "Deep cut"]);
+  // A pool with no rare or deep cut backfills by notability rather than short-changing.
+  const shallow = rosterRevealTop([p("A", "common", 900), p("B", "common", 800), p("C", "uncommon", 700), p("D", "uncommon", 600)]);
+  assert.deepEqual(shallow.map((r) => r.display_name), ["A", "B", "C"]);
+  // The reserved pick cannot be counted twice when it is also the most famous.
+  const rareTop = rosterRevealTop([p("RareStar", "rare", 900), p("B", "common", 800), p("C", "deep_cut", 100)]);
+  assert.deepEqual(rareTop.map((r) => r.display_name), ["RareStar", "B", "C"]);
+  // Smaller pools return what they have.
+  assert.equal(rosterRevealTop([p("A", "common", 5)]).length, 1);
+  assert.equal(rosterRevealTop([]).length, 0);
+  // Pickup keeps the fame-ordered builder it asks for by name.
+  const party = readFileSync(new URL("./supabase/functions/mp/party.ts", import.meta.url), "utf8");
+  assert.match(party, /rosterReveal\(pool\.filter\(\(p\) => !found\.has\(p\.player_key\)\), 5\)/);
 });
 
 test("server grading, strike counts and timer authority are untouched", () => {

@@ -73,5 +73,5 @@ test("Home paints the map and keeps no Continue Court language", () => {
 });
 
 test("copy release bumps the PWA cache", () => {
-  assert.match(worker, /const CACHE = "tc-v39"/);
+  assert.match(worker, /const CACHE = "tc-v40"/);
 });

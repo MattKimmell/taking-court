@@ -88,7 +88,7 @@ test("approved undrafted and no-college special cases stay factual", () => {
 test("Pickup legacy point and title thresholds use factual totals", () => {
   assert.equal(
     feedback("strike", { min_points: 20000 }).explanation,
-    "Grant Hill scored 17,137 career points—not 20,000 or more.",
+    "Grant Hill scored 17,137 career points, not 20,000 or more.",
   );
   const winner = { ...grantHill, player_name: "Stephen Curry", rings: 4 };
   assert.equal(

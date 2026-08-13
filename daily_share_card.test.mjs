@@ -37,23 +37,28 @@ const summary = courtShareSummary({
   challengeAttempt: { status: "completed", correct_count: challenge.target, strikes: 1 },
 });
 
-test("what the player sends is brand, date, streak, the two questions, CTA, link", () => {
+test("what the player sends is the invite, the questions, the signature, the link", () => {
   assert.equal(courtShareText(summary), [
-    "Taking Court · Aug 12",
-    "🔥 3",
+    COURT_SHARE_CTA,
     "",
     takeShareQuestion(take),
     `${challengeShareAsk(challenge)} ✓`,
     "",
-    COURT_SHARE_CTA,
+    "Taking Court · Aug 12 · 🔥 3",
+    "",
     "https://mattkimmell.github.io/taking-court/?court=1&day=2026-08-12",
   ].join("\n"));
 });
 
-test("the CTA sits immediately above the link", () => {
+test("the invite leads and the link closes, each on its own line", () => {
   const lines = courtShareText(summary).split("\n");
+  // A card that opened on branding made the reader get past it to reach
+  // anything they could answer.
+  assert.equal(lines[0], COURT_SHARE_CTA);
   assert.match(lines[lines.length - 1], /^https:\/\//);
-  assert.equal(lines[lines.length - 2], COURT_SHARE_CTA);
+  assert.equal(lines[lines.length - 2], "", "the link stands alone");
+  // Brand, date and streak share one line rather than stacking three.
+  assert.equal(lines[lines.length - 3], "Taking Court · Aug 12 · 🔥 3");
 });
 
 test("the in-app preview renders the outbound text, not a shorter summary", () => {

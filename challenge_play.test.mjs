@@ -83,7 +83,7 @@ test("feedback copy still comes from the existing explanations — presentation 
   assert.match(html, /const context=esc\(f\.explanation\|\|fallback\)/);
   assert.match(html, /feed\(good\s*\n?\s*\? `<span class="c">✔ \$\{context\}<\/span>/);
   // The span's class is the miss tone (#18); the string inside it is untouched.
-  assert.match(html, />✕ \$\{context\} · strike \$\{r\.strikes\}\/\$\{ST\.strike_limit\}<\/span>`/);
+  assert.match(html, />✕ \$\{clause\} · strike \$\{r\.strikes\}\/\$\{ST\.strike_limit\}<\/span>`/);
   // Top 8 near-miss context is untouched.
   assert.match(html, /ctx=` — \$\{val\} \$\{gi\.unit\}, #\$\{gi\.rank\} all-time`/);
 });

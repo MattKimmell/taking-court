@@ -462,15 +462,18 @@ export function courtShareSummary({ date, take, challenge, beats, streak, challe
   const challengeAsk = safeBeats.challenge ? challengeShareAsk(challenge) : null;
   const day = courtShareDate(date);
   const streakCount = Number(streak?.current ?? 0);
-  const head = [
+  // The invite leads, the questions follow, and the signature closes. A card
+  // that opened on branding asked the reader to get past it before reaching
+  // anything they could answer.
+  const sig = [
     day ? `${COURT_SHARE_BRAND} · ${day}` : COURT_SHARE_BRAND,
     streakCount > 0 ? `🔥 ${streakCount}` : null,
-  ].filter(Boolean);
+  ].filter(Boolean).join(" · ");
   const body = [
     takeQuestion,
     challengeAsk ? `${challengeAsk}${challengeCleared ? " ✓" : ""}` : null,
   ].filter(Boolean);
-  const blocks = [head.join("\n"), body.join("\n"), COURT_SHARE_CTA].filter(Boolean);
+  const blocks = [COURT_SHARE_CTA, body.join("\n"), sig].filter(Boolean);
   return {
     kind,
     title,
