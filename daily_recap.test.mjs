@@ -106,7 +106,7 @@ test("section 2 states the board's numbers and claims cleared only on a filled b
   assert.equal(challengeRecapStat({}).score, "0 of 0");
   // Time comes from the server's elapsed_ms through the existing formatter.
   const summary = lift("renderCourtChallengeSummary");
-  assert.match(summary, /Number\.isFinite\(att\.elapsed_ms\)\?fmt\(att\.elapsed_ms\):"—"/);
+  assert.match(summary, /Number\.isFinite\(att\.elapsed_ms\)\?fmt\(att\.elapsed_ms\):"-"/);
   assert.match(summary, /<div class="lbl">Named<\/div>/);
   assert.match(summary, /<div class="lbl">Time<\/div>/);
   assert.match(summary, /<div class="lbl">Strikes<\/div>/);

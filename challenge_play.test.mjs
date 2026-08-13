@@ -85,7 +85,7 @@ test("feedback copy still comes from the existing explanations — presentation 
   // The span's class is the miss tone (#18); the string inside it is untouched.
   assert.match(html, />✕ \$\{clause\} · strike \$\{r\.strikes\}\/\$\{ST\.strike_limit\}<\/span>`/);
   // Top 8 near-miss context is untouched.
-  assert.match(html, /ctx=` — \$\{val\} \$\{gi\.unit\}, #\$\{gi\.rank\} all-time`/);
+  assert.match(html, /ctx=` · \$\{val\} \$\{gi\.unit\}, #\$\{gi\.rank\} all-time`/);
 });
 
 test("Back, restart and Enter survive the relayout", () => {

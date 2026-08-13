@@ -331,7 +331,7 @@ export function crewChallengeOnlySocialNote({ challengeOnlyCount, takeLockCount 
   if (n <= 0) return null;
   const locks = Number(takeLockCount) || 0;
   if (locks === 0) {
-    return `${n} member${n === 1 ? "" : "s"} finished Challenge only — hottest Take waits on locked Takes.`;
+    return `${n} member${n === 1 ? "" : "s"} finished Challenge only. Hottest Take waits on locked Takes.`;
   }
   return `${n} Challenge-only today (streak counts; hottest Take uses locked Takes only).`;
 }

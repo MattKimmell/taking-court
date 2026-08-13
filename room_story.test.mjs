@@ -58,7 +58,7 @@ test("a tie is not an outlier", () => {
 
 test("the story reads the day without overclaiming", () => {
   assert.equal(roomStory(["with", "with", "with"], 8), "You are with the room on all 3.");
-  assert.equal(roomStory(["against", "against"], 8), "Outlier day — you are out on your own on all 2.");
+  assert.equal(roomStory(["against", "against"], 8), "Outlier day: you are out on your own on all 2.");
   assert.equal(roomStory(["with", "against", "with"], 8), "You are with the room on 2 of 3.");
   // One read is one read; it does not get pluralised into a pattern.
   assert.equal(roomStory(["with"], 5), "You are with the room.");

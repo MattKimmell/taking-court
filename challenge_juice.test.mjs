@@ -51,7 +51,7 @@ test("both graded miss lines carry the tone, and the copy inside them is unchang
   assert.match(html, /const clause=context\.replace\(\/\\\.\\s\*\$\/,""\)/);
   assert.match(html, /feed\(`<span class="\$\{missClass\(r\.strikes\)\}">✕ \$\{esc\(g\)\}\$\{ctx\} · strike \$\{r\.strikes\}\/\$\{ST\.strike_limit\}<\/span>`\)/);
   assert.match(html, /const context=esc\(f\.explanation\|\|fallback\)/);
-  assert.match(html, /ctx=` — \$\{val\} \$\{gi\.unit\}, #\$\{gi\.rank\} all-time`/);
+  assert.match(html, /ctx=` · \$\{val\} \$\{gi\.unit\}, #\$\{gi\.rank\} all-time`/);
   // A transport error is not a graded miss, so it stays plain red.
   assert.match(html, /feed\(`<span class="x">\$\{esc\(g\)\} → \$\{esc\(r\.error\)\}<\/span>`\)/);
 });

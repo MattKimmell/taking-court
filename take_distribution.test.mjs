@@ -99,7 +99,7 @@ test("a small room says it is a small room", () => {
   // printing "0% · 0 of 0" under copy that just said there are no responses.
   for (const row of [{ type: "multiple_choice", total: 0, choices: [{ key: "a", label: "A" }] },
                      { type: "rank", total: 0, ranking: [{ key: "a", label: "A", avg_rank: null }] }]) {
-    assert.deepEqual(takeDistribution(row, null).rows.map((r) => r.stat), ["—"]);
+    assert.deepEqual(takeDistribution(row, null).rows.map((r) => r.stat), ["-"]);
   }
 });
 
