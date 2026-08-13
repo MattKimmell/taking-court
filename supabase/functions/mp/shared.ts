@@ -164,12 +164,34 @@ export async function buildSnapshot(sheetId: string): Promise<SnapshotSlot[]> {
 // On a wrong guess, look up the guessed player's value + all-time rank for this
 // category's metric (via the mp_player_metric_rank SQL fn), so the strike can
 // show e.g. "2,137 BLK, #14 all-time". Player categories only; null otherwise.
+// Metric slugs on a ranked roster sheet are scope-agnostic ('points'); the
+// all-time rank function predates them and speaks in career column names.
+const RANKED_METRIC_ALIAS: Record<string, string> = {
+  points: "career_points", assists: "career_assists",
+  rebounds: "career_rebounds", blocks: "career_blocks", games: "games_played",
+};
+
 export async function strikeContext(challenge: any, rawGuess: string) {
   try {
-    const { data: sheet } = await db
-      .from("perfect_sheets").select("source_params")
-      .eq("id", challenge.sheet_id).single();
-    const metric = (sheet?.source_params as Record<string, unknown> | null)?.metric as string | undefined;
+    let metric: string | undefined;
+    if (challenge.roster_sheet_id) {
+      // Ranked roster sheet. mp_player_metric_rank reports an ALL-TIME league
+      // rank, which only describes the same quantity the board ranks by when
+      // the board is unscoped. On "most points for the Bulls", telling someone
+      // LeBron is 1st all-time explains nothing about why he is not an answer,
+      // so a scoped board gets no context rather than misleading context.
+      const { data: rs } = await db
+        .from("mp_roster_sheets").select("source_params")
+        .eq("id", challenge.roster_sheet_id).single();
+      const sp = (rs?.source_params ?? {}) as Record<string, unknown>;
+      if (sp.team != null || sp.decade != null) return null;
+      metric = RANKED_METRIC_ALIAS[String(sp.metric ?? "")];
+    } else {
+      const { data: sheet } = await db
+        .from("perfect_sheets").select("source_params")
+        .eq("id", challenge.sheet_id).single();
+      metric = (sheet?.source_params as Record<string, unknown> | null)?.metric as string | undefined;
+    }
     if (!metric || metric === "arenacapacity") return null;
     const { data, error } = await db.rpc("mp_player_metric_rank", { p_query: rawGuess, p_metric: metric });
     if (error || !data || !data.length) return null;
@@ -538,8 +560,37 @@ export async function insertBot(challengeId: string, mode: string, snapshot: Sna
 // ---------------------------------------------------------------------------
 // Roster-filter game ("name N of a large pool matching a filter").
 // ---------------------------------------------------------------------------
-export type PoolEntry = { player_key: string; display_name: string; accepted: string[]; rarity_tier: string; rarity_score: number | null };
+// `rank` and `metric_value` are present only on a ranked (leader) sheet, where
+// the pool IS the answer set ordered by a metric. Every sheet shipped before
+// 0045 is unranked and leaves both null, which is what `isRankedPool` reads.
+export type PoolEntry = {
+  player_key: string; display_name: string; accepted: string[];
+  rarity_tier: string; rarity_score: number | null;
+  rank?: number | null; metric_value?: number | null;
+};
 export const RARITY_LABEL: Record<string, string> = { common: "Common", uncommon: "Uncommon", rare: "Rare", deep_cut: "Deep cut" };
+
+export const isRankedPool = (pool: PoolEntry[]) =>
+  pool.length > 0 && pool.every((p) => p.rank != null);
+
+// A ranked board reveals in RANK order and in full — every name, with its
+// number. The rarity-mixed three below exist because an open pool holds far
+// more than you reached and a scrolling list reads as a data dump; a leaders
+// board is exactly the ask, so hiding five of eight would hide the answer.
+export function rosterRevealRanked(pool: PoolEntry[]) {
+  return pool.slice()
+    .sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0))
+    .map((p) => ({
+      slot: p.rank ?? 0,
+      display_name: p.display_name,
+      context_label: p.metric_value == null ? null : Math.round(p.metric_value).toLocaleString("en-US"),
+    }));
+}
+
+// The one reveal both kinds go through, so a caller cannot pick the wrong one.
+export function rosterRevealFor(pool: PoolEntry[]) {
+  return isRankedPool(pool) ? rosterRevealRanked(pool) : rosterRevealTop(pool);
+}
 
 // Reveal a slice of the pool (most famous first) as {slot, display_name, context_label}
 // so the existing reveal UI renders it. context_label carries the rarity tier.
@@ -618,11 +669,14 @@ export function matchPoolGuess(pool: PoolEntry[], norm: string): PoolEntry | nul
 
 export async function loadRosterPool(rosterSheetId: string): Promise<PoolEntry[]> {
   const { data } = await db.from("mp_roster_pool")
-    .select("player_key, display_name, accepted, rarity_tier, rarity_score")
-    .eq("sheet_id", rosterSheetId);
+    .select("player_key, display_name, accepted, rarity_tier, rarity_score, rank, metric_value")
+    .eq("sheet_id", rosterSheetId)
+    .order("rank", { ascending: true, nullsFirst: false });
   return (data ?? []).map((p) => ({
     player_key: p.player_key, display_name: p.display_name,
     accepted: (p.accepted ?? []) as string[], rarity_tier: p.rarity_tier, rarity_score: p.rarity_score,
+    rank: p.rank ?? null,
+    metric_value: p.metric_value == null ? null : Number(p.metric_value),
   }));
 }
 
