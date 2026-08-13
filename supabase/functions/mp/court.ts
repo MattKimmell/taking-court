@@ -1,7 +1,7 @@
 import { actionGuess, actionStart } from "./games.ts";
 import { db, ok, err, json, authedUserId, ownerFilter, safeClientId, computeStreak, loadRosterPool, rosterReveal } from "./shared.ts";
 import type { PoolEntry } from "./shared.ts";
-import { courtDate, courtShareSummary, courtToken, dailyChallengeForDate, houseTakeForDate, normalizeTakeAnswers, takeConsensus, takeCourtBeats, takeItemLockPlan, takeProgress, validateDailyChallenge, validateTakeItems } from "./court_contract.js";
+import { courtDate, courtShareSummary, courtToken, dailyChallengeForDate, hardestCorrectPick, houseTakeForDate, normalizeTakeAnswers, takeConsensus, takeCourtBeats, takeItemLockPlan, takeProgress, tomorrowTease, validateDailyChallenge, validateTakeItems } from "./court_contract.js";
 
 type CourtDay = {
   id: string;
@@ -181,7 +181,7 @@ async function courtChallengeAttempt(courtDay: CourtDay, userId: string | null, 
   const challengeId = courtDay.challenge_definition?.challenge_id;
   if (!challengeId || (!userId && !clientId)) return null;
   const { data } = await db.from("mp_attempts")
-    .select("id, attempt_token, status, started_at, correct_count, strikes, filled_slots, player_client_id, player_user_id")
+    .select("id, attempt_token, status, started_at, finished_at, elapsed_ms, ranking_time_ms, correct_count, strikes, filled_slots, player_client_id, player_user_id")
     .eq("challenge_id", challengeId);
   return (data ?? []).find((a: any) => (userId && a.player_user_id === userId) || (clientId && a.player_client_id === clientId)) ?? null;
 }
@@ -267,7 +267,13 @@ export async function actionCourtDaily(req: Request, body: any) {
       correct_count: state.challengeAttempt.correct_count ?? 0,
       strikes: state.challengeAttempt.strikes ?? 0,
       filled_slots: state.challengeAttempt.filled_slots ?? {},
+      elapsed_ms: state.challengeAttempt.elapsed_ms ?? null,
+      ranking_time_ms: state.challengeAttempt.ranking_time_ms ?? null,
+      // Read off the caller's own fills, so it carries no information they did
+      // not already earn (#20).
+      hardest_pick: hardestCorrectPick(state.challengeAttempt.filled_slots ?? {}),
     } : null,
+    tomorrow: tomorrowTease(courtDay.day),
     revealed_answers: await courtReveal(courtDay, state.challengeAttempt),
     consensus: state.mine ? takeConsensus(items.filter((item: any) => answered.has(item.id)), state.locks as any[]) : null,
     consensus_gate: state.consensus_gate,

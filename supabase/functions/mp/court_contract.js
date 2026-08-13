@@ -175,6 +175,16 @@ export function dayIndexFor(date) {
   return Math.floor(new Date(`${date}T00:00:00Z`).getTime() / 86400000);
 }
 
+/** "2026-08-12" -> "2026-08-13", in UTC, which is the only clock a Court day
+ *  has. Returns null on anything that is not a date, so a caller cannot build a
+ *  tease for a day that does not exist. */
+export function nextCourtDate(date) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date ?? ""))) return null;
+  const t = new Date(`${date}T00:00:00Z`).getTime();
+  if (!Number.isFinite(t)) return null;
+  return new Date(t + 86400000).toISOString().slice(0, 10);
+}
+
 export function houseTakeForDate(date) {
   const dayIndex = dayIndexFor(date);
   const take = HOUSE_TAKE_ROTATION[((dayIndex % HOUSE_TAKE_ROTATION.length) + HOUSE_TAKE_ROTATION.length) % HOUSE_TAKE_ROTATION.length];
@@ -478,6 +488,79 @@ export function courtShareSummary({ date, take, challenge, beats, streak, challe
     path: date ? `?court=1&day=${encodeURIComponent(date)}` : "?court=1",
     text: blocks.join("\n\n"),
   };
+}
+
+const RARITY_RANK = { deep_cut: 4, rare: 3, uncommon: 2, common: 1 };
+
+/**
+ * The recap's Challenge stat (#20): which of the names you actually got was the
+ * hardest to get. Read off filled_slots, which already carries the pool's own
+ * rarity_tier and the at_ms the slot was filled — no new scarcity is invented
+ * and no new data is stored.
+ *
+ * Rarity first, then the longest gap before it landed, so "hardest" means what
+ * it says even on a board where every answer is Common: it is then the one that
+ * took you longest to come to, which is a true statement about the board you
+ * played. Under two fills there is nothing for a pick to be harder THAN, so it
+ * returns null rather than crowning a lone answer.
+ */
+export function hardestCorrectPick(filledSlots) {
+  const rows = Object.entries(filledSlots ?? {})
+    .map(([slot, fill]) => ({
+      slot: Number(slot),
+      name: typeof fill?.name === "string" ? fill.name : null,
+      rarity_tier: fill?.rarity_tier ?? null,
+      at_ms: Number(fill?.at_ms),
+    }))
+    .filter((row) => row.name && Number.isFinite(row.slot));
+  if (rows.length < 2) return null;
+  const gaps = new Map();
+  let prev = 0;
+  for (const row of rows.slice().sort((a, b) => (a.at_ms || 0) - (b.at_ms || 0))) {
+    const at = Number.isFinite(row.at_ms) ? row.at_ms : prev;
+    gaps.set(row.slot, Math.max(0, at - prev));
+    prev = at;
+  }
+  const best = rows.slice().sort((a, b) =>
+    (RARITY_RANK[b.rarity_tier] ?? 0) - (RARITY_RANK[a.rarity_tier] ?? 0)
+    || (gaps.get(b.slot) ?? 0) - (gaps.get(a.slot) ?? 0)
+    || a.slot - b.slot)[0];
+  return { name: best.name, slot: best.slot, rarity_tier: best.rarity_tier, took_ms: gaps.get(best.slot) ?? 0 };
+}
+
+/**
+ * Tomorrow's tease (#20): "Hmm I wonder [X]?" built from the SUBJECT of
+ * tomorrow's content and nothing else — never an option label, never a player
+ * name, never the position or the target. Naming the subject is the invite;
+ * naming the ask would be the board.
+ *
+ * Both content generators are pure functions of the date, so this needs no row
+ * and does not materialise tomorrow's day early — which matters, because
+ * getOrCreateCourtDay snapshots a day at first play and an early row would
+ * freeze content nobody has played yet. The flip side: it reads the rotation as
+ * it stands today, so re-authoring the rotation before tomorrow would leave a
+ * tease pointing at content that never shipped.
+ */
+export function tomorrowTease(date) {
+  const next = nextCourtDate(date);
+  if (!next) return null;
+  const challenge = dailyChallengeForDate(next);
+  const take = houseTakeForDate(next);
+  // Alternates by day index rather than at random: a recap can be reopened, and
+  // a tease that changed on refresh would read as two different tomorrows.
+  const useChallenge = Math.abs(dayIndexFor(next) % 2) === 0;
+  const subject = challenge?.axis === "team"
+    ? (TEAM_NAMES[challenge.value] ?? null)
+    : (challenge?.axis === "college" ? String(challenge.value ?? "") || null : null);
+  const challengeLine = subject
+    ? (challenge.axis === "team"
+      ? `Hmm I wonder how many ${subject} you can name?`
+      : `Hmm I wonder who you remember from ${subject}?`)
+    : null;
+  const title = String(take?.title ?? "").trim();
+  const takeLine = title ? `Hmm I wonder which way you go on tomorrow's ${title.toLowerCase()}?` : null;
+  const line = (useChallenge ? challengeLine : takeLine) ?? challengeLine ?? takeLine;
+  return line ? { date: next, line } : null;
 }
 
 /** Player Take is link-only until review approves public listing (Browse out of this slice). */

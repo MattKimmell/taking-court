@@ -129,6 +129,7 @@
     .take-rank.moved{animation:none} .daily-primary.ready{animation:none}
     .settle-in{animation:none} #dailyStreak.streak-bump{animation:none}
     .distribution-bar span{transition:none} .take-block.flash{animation:none}
+    .staged .recap-sec{animation:none}
   }
   .acdrop{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:30;background:var(--panel2);
     border:1px solid var(--line);border-radius:10px;overflow:hidden;max-height:244px;overflow-y:auto;
@@ -352,6 +353,23 @@
      a border, not an animation, so it survives reduced motion. */
   .take-block.flash{border-color:var(--accent2);animation:blockFlash .9s ease-out}
   @keyframes blockFlash{0%{background:rgba(56,189,248,.16)}100%{background:var(--panel2)}}
+  /* The recap is the consensus surface in another state, not a second screen
+     (#20) — the sections are always in the DOM and the mode decides which of
+     them speak. */
+  .sec-hdr{font-size:10.5px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);margin-top:20px}
+  .recap-stats{display:flex;gap:10px;margin-top:10px}
+  .recap-stat{flex:1;padding:10px 12px;border-radius:10px;background:var(--panel2);border:1px solid var(--line);text-align:center}
+  .recap-stat .lbl{font-size:10px;font-weight:800;letter-spacing:1px;color:var(--muted);text-transform:uppercase}
+  .recap-stat .val{font-size:18px;font-weight:900;font-variant-numeric:tabular-nums;margin-top:3px}
+  .recap-stat.cleared .val{color:var(--good)} .recap-stat.out .val{color:var(--bad)}
+  .hardest{margin-top:10px;padding:11px 12px;border-radius:10px;background:var(--panel2);border:1px solid var(--line);
+    display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:14px}
+  .hardest b{font-weight:900}
+  .tease{margin-top:6px;font-size:16px;font-weight:800;color:var(--accent2);line-height:1.35}
+  /* Staged entrance: one section at a time, once per landing. Nothing here is
+     load-bearing — the sections are visible with the animation removed. */
+  .staged .recap-sec{animation:secIn .34s ease-out both;animation-delay:calc(var(--stage,1) * 110ms)}
+  @keyframes secIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
   .daily-primary{width:100%;min-height:48px;margin-top:16px}
   .challenge-toolbar{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}
   .challenge-toolbar button{min-height:44px}
@@ -515,28 +533,44 @@
   <div id="courtConsensus" class="card hidden">
     <div class="head">
       <div>
-        <div class="pill" style="display:inline-block;margin-bottom:6px">Take locked</div>
+        <div class="pill" id="courtConsensusPill" style="display:inline-block;margin-bottom:6px">Take locked</div>
         <div style="font-weight:800;font-size:18px" id="courtConsensusTitle"></div>
       </div>
       <button class="ghost" id="courtConsensusHome" style="flex:0 0 auto;padding:6px 12px">Home</button>
     </div>
+    <div id="courtRecapRail" class="hidden" style="margin-top:10px"></div>
     <div id="courtStreakLine" class="banner win" style="margin-top:8px"></div>
-    <div id="courtShareCard" class="hidden" style="margin-top:10px;padding:12px;border-radius:8px;background:var(--panel2);border:1px solid var(--line)">
-      <div style="font-weight:800" id="courtShareTitle"></div>
-      <div class="note" id="courtShareText" style="white-space:pre-line;margin-top:4px"></div>
-      <button class="sky" id="courtShareBtn" style="margin-top:10px;width:100%">Share Court</button>
+    <div class="recap-sec" style="--stage:1">
+      <div class="sec-hdr hidden" id="courtSecTakeHdr">Your Take</div>
+      <div class="room-story" id="courtRoomStory">
+        <div class="rs-title">Today's room</div>
+        <div class="rs-summary" id="courtRoomSummary"></div>
+        <div class="rs-pips" id="courtRoomPips"></div>
+        <div class="note" id="courtConsensusNote" style="margin-top:8px"></div>
+      </div>
+      <div id="courtConsensusRows" style="margin-top:10px"></div>
     </div>
-    <div id="courtRevealBlock" class="hidden">
-      <div style="font-weight:700;margin-top:16px" id="courtRevealHdr">Notable players you could have named</div>
-      <div class="slots" id="courtRevealList"></div>
+    <div class="recap-sec hidden" style="--stage:2" id="courtSecChallenge">
+      <div class="sec-hdr">Your Challenge</div>
+      <div id="courtChallengeSummary"></div>
+      <div id="courtRevealBlock" class="hidden">
+        <div style="font-weight:700;margin-top:16px" id="courtRevealHdr">Notable players you could have named</div>
+        <div class="slots" id="courtRevealList"></div>
+      </div>
     </div>
-    <div class="room-story" id="courtRoomStory">
-      <div class="rs-title">Today's room</div>
-      <div class="rs-summary" id="courtRoomSummary"></div>
-      <div class="rs-pips" id="courtRoomPips"></div>
-      <div class="note" id="courtConsensusNote" style="margin-top:8px"></div>
+    <div class="recap-sec" style="--stage:3">
+      <div class="sec-hdr hidden" id="courtSecShareHdr">Share</div>
+      <div id="courtShareCard" class="hidden" style="margin-top:10px;padding:12px;border-radius:8px;background:var(--panel2);border:1px solid var(--line)">
+        <div style="font-weight:800" id="courtShareTitle"></div>
+        <div class="note" id="courtShareText" style="white-space:pre-line;margin-top:4px"></div>
+        <button class="sky" id="courtShareBtn" style="margin-top:10px;width:100%">Share Court</button>
+      </div>
     </div>
-    <div id="courtConsensusRows" style="margin-top:10px"></div>
+    <div class="recap-sec hidden" style="--stage:4" id="courtSecTomorrow">
+      <div class="sec-hdr">Tomorrow</div>
+      <div class="note">New Court drops tomorrow.</div>
+      <div class="tease" id="courtTomorrowTease"></div>
+    </div>
     <div class="row" style="margin-top:14px">
       <button id="courtChallengeStart">Start Challenge</button>
       <button class="ghost" id="courtConsensusRefresh">Refresh</button>
@@ -2949,7 +2983,7 @@ async function refreshLobbyCourt(){
 $("dailyBtn").onclick=()=>openDaily();
 $("pickupBtn") && ($("pickupBtn").onclick = ()=>openPartyHome());
 $("freeplayBtn") && ($("freeplayBtn").onclick = ()=>{ const p=$("freeplayPanel"); if(p) p.open = true; p?.scrollIntoView({behavior:"smooth",block:"nearest"}); });
-let COURT = { date:null, day:null, take:null, challenge:null, answers:{}, take_progress:null, takeFeedback:null, consensus:null, gate:null, beats:{}, share:null, challenge_attempt:null, reveal:null };
+let COURT = { date:null, day:null, take:null, challenge:null, answers:{}, take_progress:null, takeFeedback:null, consensus:null, gate:null, beats:{}, share:null, challenge_attempt:null, reveal:null, tomorrow:null };
 let courtAutoTimer=null;
 let CREW_RETURN = null;   // set when Court is launched from a crew room
 let CURRENT_CREW = null;
@@ -3267,13 +3301,97 @@ function renderCourtReveal(){
     return `<div class="slot revealed"><div class="n">${a.slot}</div><div class="name">${esc(a.display_name)}</div>${ctx}</div>`;
   }).join("");
 }
+// The recap is a STATE of the consensus surface, not a second screen (#20).
+// Mid-flow after the Take only, the same card still has to offer the Challenge,
+// so the mode is the one thing that decides which sections speak.
+function courtSurfaceMode(beats){ return (beats && beats.full_stack) ? "recap" : "consensus"; }
+const SHARE_MONTHS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+// Parsed by field, never by Date, so the recap's own date cannot drift a day
+// between the UTC day the Court runs on and the reader's timezone.
+function courtDayLabel(date){
+  const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(date??""));
+  if(!m) return null;
+  const month=SHARE_MONTHS[Number(m[2])-1];
+  return month?`${month} ${Number(m[3])}`:null;
+}
+// The board is over, so the numbers are stated rather than judged: "cleared" is
+// only claimed on a filled board, and everything else says what happened.
+function challengeRecapStat({correct=0,target=0,strikes=0,status=null}={}){
+  const got=Math.max(0,Math.trunc(Number(correct))||0);
+  const need=Math.max(0,Math.trunc(Number(target))||0);
+  const cleared=status==="completed" && need>0 && got>=need;
+  return {
+    score:`${got} of ${need}`,
+    strikes:Math.max(0,Math.trunc(Number(strikes))||0),
+    cleared,
+    verdict: cleared ? "Cleared"
+      : status==="eliminated" ? "Struck out"
+      : status==="expired" ? "Out of time"
+      : status==="in_progress" ? "In progress" : "Closed",
+  };
+}
+function renderCourtChallengeSummary(){
+  const box=$("courtChallengeSummary"); if(!box) return;
+  const att=COURT.challenge_attempt;
+  if(!att){ box.innerHTML=""; return; }
+  const st=challengeRecapStat({correct:att.correct_count, target:COURT.challenge?.target, strikes:att.strikes, status:att.status});
+  const time=Number.isFinite(att.elapsed_ms)?fmt(att.elapsed_ms):"—";
+  const hp=att.hardest_pick;
+  const label=hp&&RARITY_LABELS[hp.rarity_tier];
+  box.innerHTML=`<div class="recap-stats">
+      <div class="recap-stat ${st.cleared?"cleared":"out"}"><div class="lbl">Named</div><div class="val">${esc(st.score)}</div></div>
+      <div class="recap-stat"><div class="lbl">Time</div><div class="val">${esc(time)}</div></div>
+      <div class="recap-stat"><div class="lbl">Strikes</div><div class="val">${st.strikes}</div></div>
+    </div>
+    <div class="note" style="margin-top:8px">${esc(st.verdict)}</div>`
+    // Only ever the player's own fills, ranked by the pool's own rarity — no
+    // scarcity is invented, and a board with one name has nothing to be harder
+    // than, so the server sends nothing and this stays quiet.
+    + (hp&&hp.name ? `<div class="hardest">The hardest pick to get was <b>${esc(hp.name)}</b>${label?rarBadge({rarity_tier:hp.rarity_tier,rarity_label:label}):""}</div>` : "");
+}
+let recapEntranceTimer=null;
+// Once per landing, not once per render: Refresh re-renders the same day and a
+// replayed entrance would read as a new result arriving.
+function playRecapEntrance(){
+  const card=$("courtConsensus"); if(!card) return;
+  clearTimeout(recapEntranceTimer);
+  card.classList.remove("staged");
+  if(courtSurfaceMode(COURT.beats)!=="recap" || reduceMotion()) return;
+  void card.offsetWidth; card.classList.add("staged");
+  recapEntranceTimer=setTimeout(()=>card.classList.remove("staged"),1200);
+}
 function renderCourtConsensus(){
   const take=COURT.take; if(!take) return;
   renderCourtReveal();
-  $("courtConsensusTitle").textContent=take.title||"Today's Take";
+  renderCourtChallengeSummary();
+  const mode=courtSurfaceMode(COURT.beats);
+  const recap=mode==="recap";
+  const day=courtDayLabel(COURT.date);
+  $("courtConsensusPill").textContent=recap?"Daily recap":"Take locked";
+  $("courtConsensusTitle").textContent=recap
+    ? `${day?day+" · ":""}Full stack`
+    : (take.title||"Today's Take");
   const s=getStreak();
   const full=COURT.beats&&COURT.beats.full_stack;
-  $("courtStreakLine").textContent=`${full?"Full stack complete":"Daily Court complete"}${s.streak>0?` · streak ${s.streak}`:""}`;
+  $("courtStreakLine").textContent=recap
+    ? (s.streak>0?`🔥 ${s.streak} day streak`:"Both beats done.")
+    : `${full?"Full stack complete":"Daily Court complete"}${s.streak>0?` · streak ${s.streak}`:""}`;
+  // Both beats complete, stated the way every other surface states progress.
+  $("courtRecapRail").classList.toggle("hidden", !recap);
+  if(recap) $("courtRecapRail").innerHTML=dailyProgressHtml({takeAnswered:3,challengeCorrect:COURT.challenge_attempt?.correct_count||0,challengeTarget:COURT.challenge?.target||3,phase:"recap"});
+  // Section headers only earn their place once there are four sections to tell
+  // apart; mid-flow the surface is one thing and needs no table of contents.
+  $("courtSecTakeHdr").classList.toggle("hidden", !recap);
+  $("courtSecShareHdr").classList.toggle("hidden", !recap);
+  $("courtSecChallenge").classList.toggle("hidden", !(COURT.beats&&COURT.beats.challenge));
+  const tease=COURT.tomorrow&&COURT.tomorrow.line;
+  $("courtSecTomorrow").classList.toggle("hidden", !recap);
+  $("courtTomorrowTease").textContent=recap&&tease?tease:"";
+  // A finished stack has no Challenge to start and nothing to leave for later.
+  // The button stays as a way back to the board, demoted to secondary — Share
+  // is the action a recap is for.
+  $("courtChallengeStart").classList.toggle("ghost", recap);
+  $("courtSkipChallenge").classList.toggle("hidden", recap);
   renderCourtShare("courtShare", COURT.share);
   const have=(COURT.gate&&COURT.gate.have)||0;
   // The story above owns the "you are early" reading now (#19); this states the
@@ -3302,7 +3420,7 @@ async function openDaily(dayOpt){
   setStreak(r.streak);   // reconcile the cached number against the server's
   const rawAnswers=r.your_answers||{};
   const fallbackProgress={ answered_item_ids:(r.take.items||[]).filter(i=>Object.prototype.hasOwnProperty.call(rawAnswers,i.id)).map(i=>i.id), next_item_id:(r.take.items||[]).find(i=>!Object.prototype.hasOwnProperty.call(rawAnswers,i.id))?.id||null, completed:!!r.take_done };
-  COURT={ date:r.date, day:r.day, take:r.take, challenge:r.challenge, answers:initCourtAnswers(r.take,rawAnswers), take_progress:r.take_progress||fallbackProgress, takeFeedback:null, consensus:r.consensus, gate:r.consensus_gate, beats:r.beats||{}, share:r.share||null, challenge_attempt:r.challenge_attempt||null, reveal:r.revealed_answers||null };
+  COURT={ date:r.date, day:r.day, take:r.take, challenge:r.challenge, answers:initCourtAnswers(r.take,rawAnswers), take_progress:r.take_progress||fallbackProgress, takeFeedback:null, consensus:r.consensus, gate:r.consensus_gate, beats:r.beats||{}, share:r.share||null, challenge_attempt:r.challenge_attempt||null, reveal:r.revealed_answers||null, tomorrow:r.tomorrow||null };
   // Keep in lockstep with courtContinueRoute in court_contract.js (#3 resume / stack order).
   const route = courtContinueRoute({
     takeDone: r.take_done,
@@ -3317,6 +3435,9 @@ async function openDaily(dayOpt){
   }
   if(route==="take"){ renderCourtTake(); show("courtTake"); return; }
   renderCourtConsensus(); show("courtConsensus");
+  // openDaily IS the landing — Review Your Daily and a finished last beat both
+  // come through here, and nothing else does.
+  playRecapEntrance();
 }
 function abandonCourtTake(surface){
   track("court_take_abandon",{surface,answered_count:COURT.take_progress?.answered_item_ids?.length||0,next_item_index:(COURT.take?.items||[]).findIndex(i=>i.id===COURT.take_progress?.next_item_id)});
