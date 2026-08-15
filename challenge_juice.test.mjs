@@ -132,11 +132,14 @@ test("the recap carries the reveal the results card used to, and only to a close
   assert.match(court, /async function courtReveal\(courtDay: CourtDay, attempt: any\) \{\s*\n\s*if \(!attempt \|\| attempt\.status === "in_progress"\) return null;/);
   assert.match(court, /revealed_answers: await courtReveal\(courtDay, state\.challengeAttempt\)/);
   // Same builder the results card reads, so the two lists cannot diverge.
-  assert.match(court, /rosterRevealTop\(snapshot as PoolEntry\[\]\)/);
+  // 0045 routes both kinds through rosterRevealFor, which picks the ranked
+  // reveal for a leaders board and this one for an open pool. The recap still
+  // carries the reveal; only the chooser's name moved.
+  assert.match(court, /rosterRevealFor\(snapshot as PoolEntry\[\]\)/);
   const shared = readFileSync(new URL("./supabase/functions/mp/shared.ts", import.meta.url), "utf8");
   assert.match(shared, /export function rosterRevealTop\(pool: PoolEntry\[\], limit = 3\)/);
   const games = readFileSync(new URL("./supabase/functions/mp/games.ts", import.meta.url), "utf8");
-  assert.match(games, /isRoster \? rosterRevealTop\(snapshot as PoolEntry\[\]\)/);
+  assert.match(games, /isRoster \? rosterRevealFor\(snapshot as PoolEntry\[\]\)/);
   // Client mounts it on the recap with the same rarity badges and ordering.
   assert.match(html, /reveal:r\.revealed_answers\|\|null/);
   assert.match(html, /function renderCourtConsensus\(\)\{[\s\S]*?renderCourtReveal\(\);/);

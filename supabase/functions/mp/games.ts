@@ -1,7 +1,7 @@
 import {
   db, ok, err, authedUserId, safeClientId, normalize, randomToken,
   buildSnapshot, revealedAnswers, strikeContext, rankCompare, leaderboardCompare, isBotClient,
-  ARENA_POOL, TEAM_POOL, insertBot, insertRosterBot, loadRosterPool, rosterRevealTop, RARITY_LABEL,
+  ARENA_POOL, TEAM_POOL, insertBot, insertRosterBot, loadRosterPool, rosterRevealFor, RARITY_LABEL,
   matchPoolGuess,
 } from "./shared.ts";
 import type { SnapshotSlot, PoolEntry } from "./shared.ts";
@@ -611,7 +611,7 @@ export async function actionGuess(_req: Request, body: any) {
 
   // near-miss context (top8 metric categories only)
   const guessInfo = (!isRoster && result === "strike") ? await strikeContext(challenge, rawGuess) : null;
-  const reveal = finished ? (isRoster ? rosterRevealTop(snapshot as PoolEntry[]) : revealedAnswers(snapshot as SnapshotSlot[])) : undefined;
+  const reveal = finished ? (isRoster ? rosterRevealFor(snapshot as PoolEntry[]) : revealedAnswers(snapshot as SnapshotSlot[])) : undefined;
   let feedback;
   if (isRoster && (result === "correct" || result === "strike") && challenge.roster_sheet_id) {
     // One player-only lookup supplies every supported roster facet. It never
@@ -721,7 +721,7 @@ export async function actionResults(_req: Request, body: any) {
 
   const snapshot = challenge.answers_snapshot as any[];
   const reveal = challenge.kind === "roster"
-    ? rosterRevealTop(snapshot as PoolEntry[])
+    ? rosterRevealFor(snapshot as PoolEntry[])
     : revealedAnswers(snapshot as SnapshotSlot[]);
 
   const participants = ranked.map((a) => {
@@ -976,6 +976,9 @@ export async function actionChallengeCatalog() {
 // from a genuinely empty combination.
 const PREVIEW_AWARDS = new Set(["mvp","dpoy","roy","smoy","mip","allnba","alldef","allstar","allstar10","hof","ring"]);
 const PREVIEW_DRAFT  = new Set(["first","top3","lottery","round1","round2"]);
+// Must stay in step with mp_is_metric() in SQL. ppg is deliberately absent: it
+// needs a min-games eligibility rule, which is a different shape.
+const PREVIEW_METRICS = new Set(["points","assists","rebounds","blocks","games"]);
 const PREVIEW_DECADES = new Set([1940,1950,1960,1970,1980,1990,2000,2010,2020]);
 // Conferences are a closed set, so they get enumerated like every other
 // controlled vocabulary here. Colleges are not — there are 554 of them and the
@@ -1017,6 +1020,14 @@ export function buildChallengeFilters(body: any): { filters: Record<string, unkn
     const d = String(body.draft);
     if (!PREVIEW_DRAFT.has(d)) return { error: "bad_draft" };
     f.draft = d;
+  }
+  // A metric turns the sheet from "name any N of the pool" into "name the top
+  // N". It ranks, it does not filter — which is why mp_facet_match never sees
+  // it and no existing pool could shift when it was added.
+  if (body.metric != null && body.metric !== "") {
+    const m = String(body.metric);
+    if (!PREVIEW_METRICS.has(m)) return { error: "bad_metric" };
+    f.metric = m;
   }
   if (body.college != null && body.college !== "") {
     const c = String(body.college).trim();
@@ -1135,7 +1146,44 @@ function filterPhrase(f: Record<string, any>): string {
   return s;
 }
 
+const METRIC_NOUN: Record<string, string> = {
+  points: "points", assists: "assists", rebounds: "rebounds",
+  blocks: "blocks", games: "games played",
+};
+
+// "Name the 8 guards with the most points for the Chicago Bulls."
+//
+// ⚠️ The scope in the sentence is not decoration, it is the claim. The totals
+// behind a ranked board are per (player, team, decade), so a board filtered to
+// the Bulls ranks Bulls points, and saying "the most career points" over it
+// would be a different and false question. "career" appears ONLY when nothing
+// scopes the metric.
+function rankedPhrase(f: Record<string, any>, target: number): string {
+  // A season award keeps its own team and decade, because "won MVP with the
+  // Lakers" is a real extra constraint. Everything else drops them from the
+  // subject: the metric scope both states and implies them, since you cannot
+  // score a point for the Bulls without having played for the Bulls.
+  const seasonal = !!f.award && SEASON_AWARDS.has(f.award);
+  const subjectF = { ...f };
+  if (!seasonal) { delete subjectF.team; delete subjectF.decade; }
+  const subject = filterPhrase(subjectF);
+
+  const scope: string[] = [];
+  if (f.team) scope.push(`for the ${TEAM_NAMES[f.team] ?? f.team}`);
+  if (f.decade) scope.push(`in the ${f.decade}s`);
+  const noun = METRIC_NOUN[f.metric] ?? f.metric;
+  const clause = scope.length
+    ? `the most ${noun} ${scope.join(" ")}`
+    : `the most career ${noun}`;
+
+  // A subject that already carries a relative clause needs the comma, or the
+  // two "with"s run together and the sentence stops parsing on first read.
+  const sep = subject.includes(" who ") ? ", with " : " with ";
+  return `Name the ${target} ${subject}${sep}${clause}.`;
+}
+
 export function composeFilterPrompt(f: Record<string, any>, target: number): string {
+  if (f.metric) return rankedPhrase(f, target);
   return `Name ${target} ${filterPhrase(f)}.`;
 }
 
